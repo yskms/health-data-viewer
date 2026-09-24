@@ -385,6 +385,8 @@ MVPは次の質問に明快に答えられること。
 | 領域 | 採用 | 状態 |
 |---|---|---|
 | プラットフォーム | Android専用（iOSは対象外） | 確定 |
+| Android package（applicationId） | `com.yskms.healthconnectviewer` | 確定 |
+| 表示名 | Health Connect Viewer | 仮 |
 | 言語・UI | Kotlin / Jetpack Compose / Material 3 | 確定 |
 | Health Connect | `androidx.health.connect:connect-client`（Google公式のJetpackライブラリ） | 確定 |
 | minSdk | 28（Android 9） | 第一候補 |
