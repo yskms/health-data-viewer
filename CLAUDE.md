@@ -3,10 +3,10 @@
 Health Connectに保存済みのデータを読み取り専用で可視化・検証するAndroidアプリ。
 現在は企画・PoC前の段階。
 
--   要件: [docs/health-connect-viewer-research-requirements.md](docs/health-connect-viewer-research-requirements.md)
--   技術方針（確定事項とPoCで確定する候補の区別）: [docs/tech-stack.md](docs/tech-stack.md)
--   `docs/` の画像はイメージ用のモックアップとアイコン案。細部（日付・文言など）は仕様ではない
--   リポジトリは公開。`docs/` は競合分析・収益化方針を含むため `.gitignore` で除外し、ローカルのみで管理している。コミットに含めないこと（GitHub上では上記リンクは切れる）
+-   要件・技術方針: [docs/requirements.md](docs/requirements.md)（第II部は「確定」と「PoCで確定する候補」を区別している）
+-   WBS・決定ログ: [docs/wbs.md](docs/wbs.md)。タスクの完了時に状態を更新し、方針を変えたら決定ログに追記する
+-   リポジトリは公開。`docs/private/`（競合分析・差別化・ストア戦略、モックアップ画像）は `.gitignore` で除外し、ローカルのみで管理している。公開ドキュメントに競合アプリ名や戦略を書き写さないこと
+-   `docs/private/` の画像はイメージ用のモックアップとアイコン案。細部（日付・文言など）は仕様ではない
 
 ## 変えてはいけない原則
 
@@ -15,7 +15,7 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   **Health Connectの健康データは広告・Analytics・ログに一切流さない。** Google Playのポリシー違反になる。広告のコードから健康データ層を参照させない
 -   **1Y（年）とALL（全期間）はMVP必須。** 簡略化のために削らない
 -   AdMobを入れているため、ストア文言などで「No cloud」「No network」は使わない。「健康データを外部送信しない」と表現する
--   広告は画面下部のバナーのみ。表示してはいけない画面の一覧は要件 §17
+-   広告は画面下部のバナーのみ。表示してはいけない画面の一覧は要件 §15
 -   Android専用。iOS対応やクロスプラットフォーム化を提案しない
 
 ## Health Connectで誤解しやすい点
