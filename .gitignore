@@ -1,0 +1,25 @@
+# 企画・要件ドキュメントは非公開（ローカルのみで管理）
+/docs/
+
+# macOS
+.DS_Store
+
+# Android / Gradle
+.gradle/
+build/
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 署名・秘密情報
+*.jks
+*.keystore
+keystore.properties
