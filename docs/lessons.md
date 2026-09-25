@@ -28,7 +28,7 @@
 
 -   **知見**: Google Playで公開するすべてのデベロッパーが対象で、クローズド・オープンテストを含むすべてのトラックに適用される（例外はシステムサービスとprivate appのみ）
 -   **Viewerへの適用**: WBS 8.3で提出する。読み取るデータ型ごとに用途の説明が必要になる
--   **根拠**: 公式（https://support.google.com/googleplay/android-developer/answer/14738291 ）
+-   **根拠**: [Google Play「Health apps declaration」](https://support.google.com/googleplay/android-developer/answer/14738291)（公式）
 -   **確認日**: 2026-09-24
 
 ### 1.3 ストア掲載情報はテキストも画像も審査される
@@ -86,9 +86,9 @@
 
 ### 3.3 Android 9〜13 と 14以降は別物としてテストする
 
--   **知見**: Android 13以前はHealth ConnectがPlayから入れる別アプリ、14以降はOSに統合されている。同じAPIでもエラーの出方が違うケースがあった（存在しないレコードへの操作が、14以降では成功し、12ではエラーになった）
--   **Viewerへの適用**: 両方の環境で実機テストする（手元の端末: Pixel 11 / Android 14以降、Pixel 3 / Android 12）。Android 13以前では「Health Connect未インストール」「要アップデート」の案内をテストする
--   **根拠**: 実機確認（Pixel 3 / Android 12、Health Connect v2026.08.06.00）
+-   **知見**: Android 13以前はHealth ConnectがPlayから入れる別アプリ、14以降はOSに統合されており、内部の経路が異なる。既存アプリの**書き込み操作**では、エラーの出方の差を実機で確認した（存在しないレコードの削除が、14以降では成功し、Android 12ではエラーになった）
+-   **Viewerへの適用**: 読み取り・権限・ページング・Aggregateでも差が出る可能性があるため、両方の環境で実機検証する（手元の端末: Pixel 11 / Android 14以降、Pixel 3 / Android 12）。Android 13以前では「Health Connect未インストール」「要アップデート」の案内もテストする
+-   **根拠**: 公式（[提供形態の違い](https://developer.android.com/health-and-fitness/health-connect/availability)）／実機確認（書き込み操作。Pixel 3 / Android 12、Health Connect v2026.08.06.00）／要検証（Viewerの読み取り）
 -   **確認日**: 2026-09-21
 
 ------------------------------------------------------------------------

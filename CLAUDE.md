@@ -6,7 +6,7 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   要件・技術方針: [docs/requirements.md](docs/requirements.md)（第II部は「確定」と「PoCで確定する候補」を区別している）
 -   WBS・決定ログ: [docs/wbs.md](docs/wbs.md)。タスクの完了時に状態を更新し、方針を変えたら決定ログに追記する
 -   実装知見・テスト観点: [docs/lessons.md](docs/lessons.md)。項目ごとに根拠の区分（公式／実機確認／要検証）を付け、既存アプリでの実機確認をHealth Connect全体の仕様として扱わない
--   既存の自作アプリ（Expo製、Health Connectへの書き込みあり）を知見の参照元にしている（D-017）。場所と扱いは `docs/private/reference-projects.md`。**そのコードを移植したり、名前・内容を公開ドキュメントやコメントに書いたりしない**
+-   既存の自作アプリ（Expo製、Health Connectへの書き込みあり）を知見の参照元にしている（D-017）。場所と扱いは `docs/private/reference-projects.md`。**その実装コードの直接移植を前提にせず、名前・内容を公開ドキュメントやコメントに書かない**
 -   リポジトリは公開。`docs/private/`（競合分析・差別化・ストア戦略、モックアップ画像）は `.gitignore` で除外し、ローカルのみで管理している。公開ドキュメントに競合アプリ名や戦略を書き写さないこと
 -   `docs/private/` の画像はイメージ用のモックアップとアイコン案。細部（日付・文言など）は仕様ではない
 
