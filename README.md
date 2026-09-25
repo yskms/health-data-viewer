@@ -1,4 +1,4 @@
-# Health Connect Viewer
+# Health Data Viewer
 
 Health Connectに保存されている健康データを、読み取り専用で閲覧・可視化するAndroidアプリ（開発中）。
 

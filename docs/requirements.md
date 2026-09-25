@@ -1,4 +1,4 @@
-# Health Connect Viewer 要件定義・技術方針
+# Health Data Viewer 要件定義・技術方針
 
 -   作成日: 2026-09-16
 -   更新日: 2026-09-24
@@ -64,7 +64,7 @@ Health Connectには複数アプリ由来のレコードが共存し得る。
 ### 3.1 立ち位置
 
 健康管理アプリでも、データ入力アプリでも、Health Connect同期アプリでもない。
-**Health Connect Viewer / Explorer / Inspector** である。
+**Health Connectのデータを見るためのViewer / Explorer / Inspector** である。
 
 ### 3.2 基本思想
 
@@ -75,6 +75,20 @@ Health Connectには複数アプリ由来のレコードが共存し得る。
 -   Transparent
 -   Long-term
 -   Bilingual
+
+### 3.3 名称
+
+| 項目 | 名称 |
+|---|---|
+| 表示名（英語） | Health Data Viewer |
+| 表示名（日本語） | 健康データビューア |
+| applicationId | `com.yskms.healthdataviewer` |
+| リポジトリ・ローカルフォルダ | `health-data-viewer` |
+
+-   **アプリ名・ストアのタイトルに「Health Connect」を含めない。** Googleの商標ガイドラインは、Googleのブランドを自社の製品名に組み込むことを禁じている。また公式アプリと誤認させるタイトルはGoogle Playのなりすましポリシーに抵触し得る
+-   Health Connectには、説明文の中で連携対象として触れる（例: 「Health Connectに保存された健康データを、読み取り専用で表示します」）
+-   表記は必ず「Health Data Viewer」とし、「HealthViewer」「Health DataViewer」に縮めない（スペースなしの「HealthViewer」は既存製品が複数ある）
+-   一般的・説明的な名称のため、検索上の独自性や商標としての強さは弱い。アイコン・スクリーンショットなどで独自性を出す
 
 ## 4. ターゲットユーザー
 
@@ -391,8 +405,8 @@ MVPは次の質問に明快に答えられること。
 | 領域 | 採用 | 状態 |
 |---|---|---|
 | プラットフォーム | Android専用（iOSは対象外） | 確定 |
-| Android package（applicationId） | `com.yskms.healthconnectviewer` | 確定 |
-| 表示名 | Health Connect Viewer | 仮 |
+| Android package（applicationId） | `com.yskms.healthdataviewer` | 確定 |
+| 表示名 | 英語: Health Data Viewer／日本語: 健康データビューア（`app_name` を端末言語でローカライズ） | 確定 |
 | 言語・UI | Kotlin / Jetpack Compose / Material 3 | 確定 |
 | Health Connect | `androidx.health.connect:connect-client`（Google公式のJetpackライブラリ） | 確定 |
 | minSdk | 28（Android 9） | 第一候補 |

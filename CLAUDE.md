@@ -1,4 +1,4 @@
-# Health Connect Viewer
+# Health Data Viewer
 
 Health Connectに保存済みのデータを読み取り専用で可視化・検証するAndroidアプリ。
 現在は企画・PoC前の段階。
@@ -19,7 +19,8 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   AdMobを入れているため、ストア文言などで「No cloud」「No network」は使わない。「健康データを外部送信しない」と表現する
 -   広告は画面下部のバナーのみ。表示してはいけない画面の一覧は要件 §15
 -   Android専用。iOS対応やクロスプラットフォーム化を提案しない
--   applicationIdは `com.yskms.healthconnectviewer` で確定（Play公開後は変更不可）。表示名「Health Connect Viewer」は仮なので、表示名が変わってもpackageは変えない
+-   applicationIdは `com.yskms.healthdataviewer` で確定（Play公開後は変更不可）。表示名は英語「Health Data Viewer」／日本語「健康データビューア」（D-019）
+-   **アプリ名・ストアのタイトル・applicationIdに「Health Connect」を含めない**（Googleの商標ガイドラインとPlayのなりすましポリシー）。旧名「Health Connect Viewer」に戻さない。表記を「HealthViewer」などに縮めない（要件 §3.3）
 
 ## Health Connectで誤解しやすい点
 
