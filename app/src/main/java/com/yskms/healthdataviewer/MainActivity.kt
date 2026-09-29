@@ -58,21 +58,28 @@ fun HealthConnectStatusScreen(
     var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
+    // 権限リクエストのActivityから戻ると必ずON_RESUMEが来るため、状態更新は下のLifecycleResumeEffectに
+    // 任せる。ここで結果セットをそのまま反映すると、一部の権限だけをリクエストしたときに、
+    // 今回リクエストしなかった（が実際は許可済みの）権限が一時的に「未許可」に見えてしまう。
     val requestPermissions =
         rememberLauncherForActivityResult(
             contract = healthConnectManager.createPermissionRequestContract(),
-        ) { granted -> grantedPermissions = granted }
+        ) {}
 
     // Health Connectの権限は設定画面などアプリの外から変わり得るため、起動時だけでなく
-    // 画面復帰のたびに問い合わせ直す（lessons.md 3.1）。
+    // 画面復帰のたびに問い合わせ直す（lessons.md 3.1）。問い合わせが失敗した場合はnull
+    // （＝未確認）に戻し、取り消し直後の失敗で古い許可状態を表示し続けないようにする。
     LifecycleResumeEffect(Unit) {
         availability = healthConnectManager.availability
-        if (availability == HealthConnectAvailability.INSTALLED) {
-            coroutineScope.launch {
-                healthConnectManager.getGrantedPermissions()?.let { grantedPermissions = it }
+        val job =
+            if (availability == HealthConnectAvailability.INSTALLED) {
+                coroutineScope.launch {
+                    grantedPermissions = healthConnectManager.getGrantedPermissions()
+                }
+            } else {
+                null
             }
-        }
-        onPauseOrDispose {}
+        onPauseOrDispose { job?.cancel() }
     }
 
     Column(

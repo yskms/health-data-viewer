@@ -91,6 +91,13 @@
 -   **根拠**: 公式（[提供形態の違い](https://developer.android.com/health-and-fitness/health-connect/availability)）／実機確認（書き込み操作。Pixel 3 / Android 12、Health Connect v2026.08.06.00）／要検証（Viewerの読み取り）
 -   **確認日**: 2026-09-21
 
+### 3.4 データ型の読み取り権限と履歴読み取り権限は、別々に許可・拒否できる
+
+-   **知見**: 権限リクエストのダイアログは、まずデータ型ごとの読み取り権限（例: Weight）を選ばせる画面が出て、`READ_HEALTH_DATA_HISTORY`は別画面（"Allow «アプリ名» to access past data?"）で個別にAllow / Don't allowを選ばせる。片方だけ許可・片方だけ拒否という組み合わせが実際に起こり得る
+-   **Viewerへの適用**: データ型の読み取り権限と履歴読み取り権限は、それぞれ別の状態として保持・表示する。`containsAll`のような単一のAND判定でまとめると、片方だけ拒否されたときに誤表示になる（WBS 1.3で実際に指摘・修正）
+-   **根拠**: 実機確認（Viewer、Android 16 / Health Connect Controller、2026-09-29）
+-   **確認日**: 2026-09-29
+
 ------------------------------------------------------------------------
 
 ## 4. エラー処理
