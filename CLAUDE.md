@@ -35,3 +35,8 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   `app/build.gradle.kts` に `org.jetbrains.kotlin.android` プラグインを**適用しない**。抜けているように見えるが意図的（D-020）。AGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、このプラグインを追加するとビルドエラーになる。Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要
 -   Kotlin用の `kotlinOptions { jvmTarget = ... }` DSLも同じ理由で使えない。JVMターゲットは `compileOptions` のJavaVersionで揃える
 -   compileSdk・targetSdkは37（Android 17）。Compose BOM 2026.09.00がcompileSdk 37を要求するため、36には戻せない。ローカルSDKには `build-tools;37.0.0` の追加導入が必要だった
+
+## UI基盤で誤解しやすい点
+
+-   MainActivityは`ComponentActivity`ではなく`AppCompatActivity`を使う。テーマの親も`Theme.AppCompat.DayNight.NoActionBar`（フレームワーク標準の`android:Theme.Material...`ではない）。Composeオンリーだからと`ComponentActivity`に「簡略化」しないこと
+-   理由: 要件§21で確定済みの言語切替方式`AppCompatDelegate.setApplicationLocales()`は、Android 12以前ではAppCompatActivity・AppCompat系テーマが前提（D-021）。DayNightテーマにしているのは、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも同時に防ぐため

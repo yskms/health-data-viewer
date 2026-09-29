@@ -1,6 +1,5 @@
 package com.yskms.healthdataviewer.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +25,9 @@ private val LightColorScheme = lightColorScheme(
 @Composable
 fun HealthDataViewerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = true,
+    // Dynamic Colorの採用は要件§12で未決（PoCで検討）。決定するまではfalseにし、
+    // 独自配色（Purple系）を使う。
+    dynamicColor: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val colorScheme = when {

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+   現時点でアプリ独自の永続データがないため除外ルールは未定義（cloud-backup /
+   device-transferとも対象なし）。将来DataStore（購入状態キャッシュ）やRoom
+   （健康データキャッシュ、PoC 4.3で要否判断）を追加する際は、cloud-backupに
+   除外設定を必ず追加すること。健康データを含み得るファイルをGoogleドライブ等へ
+   自動バックアップしないため（要件§14「健康データを外部送信しない」）。
+-->
 <data-extraction-rules>
     <cloud-backup>
     </cloud-backup>

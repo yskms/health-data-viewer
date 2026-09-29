@@ -409,7 +409,7 @@ MVPは次の質問に明快に答えられること。
 | 表示名 | 英語: Health Data Viewer／日本語: 健康データビューア（`app_name` を端末言語でローカライズ） | 確定 |
 | 言語・UI | Kotlin / Jetpack Compose / Material 3 | 確定 |
 | Health Connect | `androidx.health.connect:connect-client`（Google公式のJetpackライブラリ） | 確定 |
-| minSdk | 28（Android 9） | 第一候補 |
+| minSdk | 28（Android 9） | 確定 |
 | 非同期処理 | Coroutines / Flow | 確定 |
 | 設定の保存 | DataStore（テーマ・言語・表示指標・購入状態のキャッシュ） | 確定 |
 | 言語切替 | `AppCompatDelegate.setApplicationLocales()`（Android 13以降のアプリ別言語設定と連動） | 確定 |

@@ -27,7 +27,7 @@
 | ID | タスク | 状態 | 完了日 | 関連 | メモ |
 |---|---|---|---|---|---|
 | 1.1 | Androidプロジェクト作成（Kotlin / Compose / minSdk 28） | ✅ | 2026-09-29 | D-020 | Compose Empty Activity相当の最小構成。エミュレータで起動確認済み |
-| 1.2 | ビルド設定（arm64-v8a、Gradleのworker数制限など） | ✅ | 2026-09-29 | D-020 | Gradle worker数制限は`~/.gradle/gradle.properties`の既存設定を利用。abiFilters/AABの全アーキテクチャ設定はネイティブ依存が発生するまで不要と判断（要すれば1.3以降で追加） |
+| 1.2 | ビルド設定（Gradleのworker数制限など） | ✅ | 2026-09-29 | D-020 | Gradle worker数制限は`~/.gradle/gradle.properties`の既存設定を利用。arm64-v8a限定のabiFilters/AABの全アーキテクチャ設定は、現状ネイティブ依存がなく不要と判断し未着手。ネイティブライブラリ（AdMob SDK等）を追加する時点で改めて要否を確認する |
 | 1.3 | Health Connectクライアント導入・権限まわりの土台 | ⬜ | | | |
 | 1.4 | CI（ビルド・Lint） | ⬜ | | | 任意 |
 | 1.5 | 既存Androidアプリから知見・テスト観点を整理（[lessons.md](lessons.md)） | ✅ | 2026-09-25 | D-017 | 初版作成済み。実装に合わせて随時更新 |
@@ -43,7 +43,7 @@
 | 3.1 | PoC 2: Steps（RawとAggregateの差、複数Source、公式の重複処理） | ⬜ | | | |
 | 4.1 | PoC 3: Heart Rate（大量Record、bucket集約、描画性能） | ⬜ | | | |
 | 4.2 | PoC 3: ソース別件数の取得コスト・APIレート制限の確認 | ⬜ | | | |
-| 4.3 | PoC 3: ローカルキャッシュ（Room）の要否を決定 | ⬜ | | | |
+| 4.3 | PoC 3: ローカルキャッシュ（Room）の要否を決定 | ⬜ | | | 導入する場合は`data_extraction_rules.xml`（cloud-backup）にRoom DB・DataStoreの除外設定を追加する。健康データが自動バックアップされることを防ぐため（要件§14） |
 | 5.1 | PoC 4: Sleep（Session / Stage、Source priority、日付境界） | ⬜ | | | |
 | 5.2 | PoC結果を要件・技術方針に反映 | ⬜ | | | 未決事項（requirements.md §27）を解消する |
 
@@ -117,3 +117,4 @@
 | D-018 | 2026-09-25 | スクリーンショットと画面録画は既定で禁止しない。Recent Appsのプレビュー保護や任意のスクリーンショット防止は、必要性を確認して将来検討する | 健康グラフを利用者自身が保存・共有する用途が想定されるため。共有機能をMVPに入れることとは別の判断 |
 | D-019 | 2026-09-25 | D-016を変更。名称を「Health Data Viewer」（日本語: 健康データビューア）とし、applicationIdは `com.yskms.healthdataviewer`、リポジトリ・ローカルフォルダは `health-data-viewer` に変更する。アプリ名・ストアのタイトル・applicationIdに「Health Connect」を含めない | Googleの商標ガイドラインが自社の製品名へのGoogleブランドの組み込みを禁じており、公式アプリと誤認させる名前はPlayのなりすましポリシーにも抵触し得る。近い立ち位置の他社アプリもタイトルに「Health Connect」を入れていない。Androidプロジェクト作成前なので変更コストがかからない。同名の著名アプリ・登録商標は公開検索では見つからなかった（正式な商標調査ではないため、公開直前に再確認する: WBS 8.7） |
 | D-020 | 2026-09-29 | AGP 9.4.1 / Kotlin 2.4.20 / Compose BOM 2026.09.00を採用し、compileSdk・targetSdkは37（Android 17、2026年6月に安定版リリース済み）とする。`org.jetbrains.kotlin.android` プラグインは適用しない | Compose BOM 2026.09.00がcompileSdk 37を要求する。またAGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、`org.jetbrains.kotlin.android` を適用するとビルドエラーになる仕様変更があった（Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要） |
+| D-021 | 2026-09-29 | minSdk 28（§21）を「第一候補」から「確定」に変更する。あわせてMainActivityを`AppCompatActivity`にし、テーマの親を`Theme.AppCompat.DayNight.NoActionBar`にする（`androidx.appcompat` を依存に追加） | minSdk 28でプロジェクトが作成・動作確認済みのため確定に格上げ。`AppCompatDelegate.setApplicationLocales()`（言語切替、§21で確定済み）はAndroid 12以前ではAppCompatActivity・AppCompat系テーマを前提とするため、後からの変更で手戻りが出る前に先行対応した。副次効果として、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも解消する |

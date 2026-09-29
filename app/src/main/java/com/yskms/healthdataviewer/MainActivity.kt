@@ -1,9 +1,9 @@
 package com.yskms.healthdataviewer
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -16,7 +16,9 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
 
-class MainActivity : ComponentActivity() {
+// AppCompatDelegate.setApplicationLocales()（アプリ内言語切替、要件§21）は
+// AppCompatActivityを前提とする（D-021）。
+class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
