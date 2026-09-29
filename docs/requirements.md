@@ -217,9 +217,10 @@ Raw画面では3件とも表示するが、グラフに何をプロットする�
 
 -   **グラフの集計方法はデータ型・表示期間ごとに定義する**
 -   Health Connectが公式のAggregate Metricを提供する場合は原則として利用する
--   短期間はRawの全点、長期間は自動集約とする設計を基本候補とする
+-   短期間はRawの全点、長期間は自動集約とする設計を基本候補としていたが、Weightについては1M（1か月）もPoC 1でbucket集計（日平均）を採用した。より短い期間（1Wなど）でRawの全点を使うかどうかはWBS 6.2で改めて決める
 -   グラフには集計方法（例: 「月平均」）を画面上に明示する
 -   具体的なルールはPoCで検証して確定する（§22）
+-   **Weight（PoC 1で決定、D-027）**: 同日複数レコードはアプリ独自に平均／最新値を判定せず、公式のWeight Aggregate Metric（平均・最小・最大）を`aggregateGroupByPeriod()`でbucket集計して使う。グラフには平均を主系列、最小・最大を補助系列として表示する。ただしWEIGHT_AVGはCLAUDE.mdの「Health Connectで誤解しやすい点」通り複数ソースの同一測定をそのまま含む重複排除なしの平均であり、「日平均」という表示だけでは実態（例: 同じ値を記録した2ソースが2倍の重みを持つ）が伝わりにくい。注記を画面に出すかはWBS 6.2で検討する
 
 ## 9. 重複の扱い
 
@@ -240,11 +241,11 @@ Raw画面では3件とも表示するが、グラフに何をプロットする�
 
 PoCで検証する論点:
 
--   体重の同日複数レコードを平均にするか、最新値にするか
+-   ~~体重の同日複数レコードを平均にするか、最新値にするか~~ → PoC 1で決定（D-027、§8）
 -   月・年bucketで値がない期間の表示
 -   タイムゾーン変更・夏時間の扱い
 -   Sleep Sessionが日付境界をまたぐ場合の扱い
--   ALLの期間開始日（最古のレコード）を効率的に特定する方法
+-   ~~ALLの期間開始日（最古のレコード）を効率的に特定する方法~~ → PoC 1で確認済み（§22.4）
 
 ## 11. 横画面
 
@@ -413,7 +414,7 @@ MVPは次の質問に明快に答えられること。
 | 非同期処理 | Coroutines / Flow | 確定 |
 | 設定の保存 | DataStore（テーマ・言語・表示指標・購入状態のキャッシュ） | 確定 |
 | 言語切替 | `AppCompatDelegate.setApplicationLocales()`（Android 13以降のアプリ別言語設定と連動） | 確定 |
-| グラフ | Vico。全期間グラフの表現や操作に不足があればCompose Canvasで自作 | PoCで評価 |
+| グラフ | Vico 3.x（`compose` + `compose-m3`）。全期間グラフの表現や操作に不足があればCompose Canvasで自作 | 確定（D-028。Pixel 11実機（数年分・千件規模の実データ）で横スクロール・複数系列描画・period切替を確認済み。10年規模・大量bucketでの操作感とピンチズームは未確認、§27） |
 | 広告 | Google Mobile Ads SDK（AdMob）＋ UMP SDK | 確定 |
 | 課金 | Google Play Billing Library | 確定 |
 | DI | 当面はコンストラクタインジェクション。依存が増えたらHiltを導入 | 確定 |
@@ -442,7 +443,7 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 
 | データ型 | Aggregate Metric | 公式の重複処理 | 備考 |
 |---|---|---|---|
-| Weight | 平均・最小・最大 | なし | 同日複数レコードを平均にするか最新値にするかはPoC 1で決定 |
+| Weight | 平均・最小・最大 | なし | 同日複数レコードは独自判定せず、公式Aggregate Metric（平均・最小・最大）をbucket集計して使う（PoC 1で決定、D-027） |
 | Steps | 合計 | あり（Activity） | |
 | Distance | 合計 | あり（Activity） | |
 | Calories | 合計 | あり（Activity） | Total / Activeの区別あり |
@@ -455,7 +456,7 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 
 グラフの基本候補:
 
--   短期間（1W〜1M程度）はRawの全点
+-   短期間（1W〜1M程度）はRawの全点、という基本候補だったが、PoC 1ではWeightの1Mも含めてbucket集計（日平均、D-027）を採用した。1Wなど、より短い期間でRawの全点を使うかどうかはWBS 6.2で確定する（§8にも同旨を記載）
 -   長期間（1Y・ALL）は日・週・月・年bucketに自動集約する
 -   どの集計方法で描いているか（例: 「月平均」）を必ず画面に表示する
 
@@ -467,7 +468,7 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 
 ### 22.4 全期間（ALL）の開始日
 
-`readRecords()` を昇順・`pageSize = 1`・開始時刻を十分過去にして呼べば、最古のレコードを1件だけ取得できる見込み（PoC 1で確認）。
+`readRecords()` を昇順（`ascendingOrder = true`）・`pageSize = 1`で呼べば、全件ページングせずに最古のレコードを1件だけ取得できる（`HealthConnectManager.findOldestWeightRecordTime()`として実装済み）。PoC 1ではエミュレータ（レコード0件）とPixel 11実機（実データ、複数年分）の両方でクラッシュなく動作し、実機では実際の最古レコードを正しく取得できることを確認した。取得した時刻はALLグラフの開始日（bucket集計の起点）としても実際に使っている（§8、D-027）。
 
 ### 22.5 その他の注意点
 
@@ -522,9 +523,9 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 
 ## 27. 未決事項
 
--   グラフ集計ルールの詳細（データ型×期間）
+-   グラフ集計ルールの詳細（データ型×期間。Weightのbucket集計方針はPoC 1で決定済み、§8/§22.2）
 -   ソース別件数の表示仕様
--   Vicoで要件を満たせるか
+-   Vico採用後の残課題: 10年規模・大量bucketでの操作感（Pixel 11実機で数年分・千件規模までは確認済み）、ピンチズーム、`aggregateGroupByPeriod()`が値のないbucketを実際にどう返すか（lessons.md 7.2〜7.3）
 -   Roomを導入するか
 -   3Y / 5Y期間を追加するか
 -   Body Fat / Blood Glucose / SpO2 / HRV のAggregate対応状況

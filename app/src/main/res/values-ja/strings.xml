@@ -12,6 +12,15 @@
     <string name="health_connect_request_permission">権限をリクエスト</string>
     <string name="poc_weight_open_button">PoC: 体重の生データを表示</string>
     <string name="poc_weight_title">体重 生データ（PoC）</string>
+    <string name="poc_weight_graph_open_button">PoC: 体重のグラフを表示</string>
+    <string name="poc_weight_graph_title">体重 グラフ（PoC）</string>
+    <string name="poc_weight_graph_period_1m">1ヶ月</string>
+    <string name="poc_weight_graph_period_1y">1年</string>
+    <string name="poc_weight_graph_period_all">全期間</string>
+    <string name="poc_weight_graph_aggregation_daily">集計方法: 日平均・最小・最大（Health Connect公式Aggregate API）</string>
+    <string name="poc_weight_graph_aggregation_monthly">集計方法: 月平均・最小・最大（Health Connect公式Aggregate API）</string>
+    <string name="poc_weight_graph_oldest_record">最古のレコード: %1$s</string>
+    <string name="poc_weight_graph_oldest_record_none">読み取れる範囲にレコードがありません。</string>
     <string name="poc_weight_back">戻る</string>
     <string name="poc_weight_loading">読み込み中…</string>
     <string name="poc_weight_error">読み込みに失敗しました。</string>

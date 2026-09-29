@@ -30,6 +30,8 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   Health Connectが動くのはAndroid 9（API 28）以上。SDKのminSdk 26に合わせない
 -   グラフの集計方法はデータ型・期間ごとに決め、画面にも明示する（例: 「月平均」）
 -   `ReadRecordsRequest(recordType = X::class, timeRangeFilter = ..., ...)`という通常の呼び方（公式サンプルと同じ形。内部的には`recordType`を除いた6引数のコンストラクタが呼ばれる）でRawレコードを読む場合、`deduplicateStrategy`は指定しなくても自動的に`DISABLED`（重複排除なし、生データ全件）になる。これは上記「変えてはいけない原則」（重複も含めてすべて表示）と整合するための挙動。`deduplicateStrategy`を実際に指定できるコンストラクタは`@RestrictTo(LIBRARY)`（ライブラリ内部専用）かつ`@ExperimentalDeduplicationApi`（要opt-in）が付いており、通常の呼び方では到達しない・する必要がない。**`@OptIn(ExperimentalDeduplicationApi::class)`でこの制限付きコンストラクタを直接呼ぶような変更はしないこと**（Rawレコードの重複が意図せず消える）（[docs/lessons.md](docs/lessons.md) 6.3）
+-   `aggregateGroupByPeriod()`（bucket幅を`Period`で指定するAggregate API）に渡す`TimeRangeFilter`は`before/after(LocalDateTime)`で構築すること。`before/after(Instant)`で構築したfilterを渡すと`IllegalArgumentException`で即クラッシュする（`readRecords()`や`aggregateGroupByDuration()`はInstantベースの`TimeRangeFilter`が前提で、同じ型でもAPIによって要求が異なる）（[docs/lessons.md](docs/lessons.md) 6.5）
+-   `aggregateGroupByPeriod()`のbucket境界は、渡した`timeRangeFilter`の開始時刻を起点に`Period`単位で機械的に区切るだけで、暦日・暦月の境界に自動整列**しない**。開始時刻に時刻（時・分・秒）が残ったまま渡すと、bucketが「14:23〜翌14:23」のようにずれ、クラッシュせず静かに間違った集計になる。暦日・暦月区切りにするには、呼び出し側で開始時刻を日初／月初に切り捨ててから渡すこと（Pixel 11実機の実データで確認済み、[docs/lessons.md](docs/lessons.md) 7.5）
 
 ## Gradle設定で誤解しやすい点
 

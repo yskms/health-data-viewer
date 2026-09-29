@@ -10,7 +10,8 @@
 | 区分 | 意味 |
 |---|---|
 | **公式** | 公式ドキュメント・ポリシーで定められている仕様 |
-| **実機確認** | 既存アプリで実機確認した挙動。環境やバージョンが変われば変わり得る |
+| **実機確認** | 実機（Pixel 11 / Pixel 3など）で確認した挙動。環境やバージョンが変われば変わり得る |
+| **エミュレータ確認** | Androidエミュレータで確認した挙動。実機のHealth Connect実装と差異があり得るため、実機確認とは区別する（レビュー指摘） |
 | **要検証** | Viewerで改めて確認が必要な仮説 |
 
 ------------------------------------------------------------------------
@@ -180,9 +181,62 @@
 -   **根拠**: 公式（「Data display and attribution」ガイド。QUERY_ALL_PACKAGES等の権限が不要という点）／実機確認（Pixel 11。既存の`<queries>`宣言がある状態ではソースアプリ名が正しく解決され、`<queries>`の該当箇所を一時的に外すと同じソースアプリの名前解決が失敗してpackageNameへフォールバックすること、および権限説明画面は同じ変更の影響を受けず正常に開くことを確認、2026-09-29）
 -   **確認日**: 2026-09-29
 
+### 6.5 `aggregateGroupByPeriod()`にInstantベースの`TimeRangeFilter`を渡すとクラッシュする
+
+-   **知見**: `aggregateGroupByPeriod()`（`AggregateGroupByPeriodRequest`、bucket幅を`Period`で指定するAPI）は、`timeRangeFilter`に`TimeRangeFilter.before(Instant)`/`after(Instant)`のようなInstantベースのfilterを渡すと`IllegalArgumentException: Either use TimeRangeFilter with LocalDateTime or AggregateGroupByDurationRequest`で即クラッシュする。`readRecords()`や`aggregateGroupByDuration()`（bucket幅を`Duration`で指定するAPI）はInstantベースのfilterを前提にしており、同じ`TimeRangeFilter`型でもAPIによって受け付ける生成方法（`before/after(Instant)` vs `before/after(LocalDateTime)`）が違う
+-   **Viewerへの適用**: `HealthConnectManager.readWeightAggregates()`の`timeRangeFilter`は必ず`LocalDateTime`ベースで構築する（呼び出し元の`WeightGraphScreen.GraphPeriod.timeRangeFilter()`で対応済み）。同じ関数内でSecurityException発生時にフォールバックする「直近30日」の範囲も、`readAllWeightRecords()`等が使うInstantベースの`recentRangeFilter()`とは別に、LocalDateTimeベースの`recentRangeFilterLocal()`を用意して使い分けている。今後Aggregate系のAPI（`aggregate()`/`aggregateGroupByDuration()`/`aggregateGroupByPeriod()`）を追加する際は、関数ごとに要求される`TimeRangeFilter`の構築方法（Instant vs LocalDateTime）を毎回確認すること
+-   **根拠**: 実機確認（Pixel 11、Android 17。WBS 2.2〜2.4のPoC実装中にエミュレータ（Pixel API 36）で実際にこの`IllegalArgumentException`でクラッシュすることを確認し、修正後は同じ画面が1M/1Y/ALLの全期間でクラッシュしなくなったことを確認。その後Pixel 11実機（実データ、複数年分）でも1M/1Y/ALLの全期間でクラッシュしないことを確認、2026-09-30）
+-   **確認日**: 2026-09-30
+
 ------------------------------------------------------------------------
 
-## 7. テスト観点チェックリスト
+## 7. グラフ描画（Vico、WBS 2.4）
+
+### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる
+
+-   **知見**: `com.patrykandpatrick.vico:compose-m3`の`rememberM3VicoTheme()`が返す`VicoTheme`を`ProvideVicoTheme(theme) { ... }`でラップするだけで、軸・線などグラフの既定色がアプリのMaterial3カラースキーム（ライト/ダーク）に追従する。線の色などを個別に指定しなくても、要件§12（テーマ System/Light/Dark）に自然に対応できる
+-   **Viewerへの適用**: `WeightGraphScreen`の`WeightAggregateChart`で採用済み。グラフに独自の配色を持たせる場合を除き、今後追加するグラフもこの`ProvideVicoTheme`でラップする方針を基本とする
+-   **根拠**: 実機確認（Pixel 11、ダークモードでの表示を確認。エミュレータ（Pixel API 36）では`cmd uimode night yes/no`でライト/ダーク両方の配色追従をスクリーンショットで確認、2026-09-30）
+-   **確認日**: 2026-09-30
+
+### 7.2 CartesianChartのXは自由な数値でよく、bucket配列の並び・欠落に依存させずに済む
+
+-   **知見**: `LineCartesianLayerModel`の`series(x, y)`のxは、bucket配列のインデックスのような連番である必要はなく、`LocalDate`のepoch day（`toEpochDay()`）や年×12+月のような絶対値をそのまま渡せる。`CartesianValueFormatter`側もx値（Double）から同じ計算を逆算して日付を再構成できるため、bucket配列そのものを参照しなくてよい
+-   **Viewerへの適用**: 当初はbucket配列のインデックスをxに使い、値がないbucketを配列から除外する実装にしていたが、これはHealth Connectの`aggregateGroupByPeriod()`が「値のないbucketも1件として返す」（欠落なく1期間1件）ことに暗黙に依存しており、実際にそうなるかは未検証だった（レビュー指摘）。bucketが欠落して返っても日付がずれないよう、各bucketの`periodStart`から計算した絶対値をxにする設計に変更した（`GraphPeriod.xValue()`/`dateFromXValue()`）。値がないbucket（§10「月・年bucketで値がない期間の表示」）は3系列（平均・最小・最大）とも対象から除外しており、値がない期間は「点を打たない」＝前後の点が線でつながる形になる。この見え方をそのままMVPで採用するかはWBS 6.2で改めて検討する
+-   **根拠**: 公式（`series(x, y)`のシグネチャ自体はxの意味に制約を課しておらず、絶対値を渡すこと自体は問題ない）／実機確認（Pixel 11。実データには記録のない日が複数あったが、1M/1Y/ALLいずれもクラッシュせず、値のない日を飛ばして前後の点が線でつながる形で描画されることを確認、2026-09-30）／要検証（`aggregateGroupByPeriod()`が値のないbucketを実際に1件として返すか、何も返さないか自体はどちらの場合でもViewer側の実装が正しく動くため未確認のまま。実データでの見え方の妥当性はWBS 6.2で改めて評価する）
+-   **確認日**: 2026-09-30
+
+### 7.3 横スクロールは追加実装なしで機能する。ピンチズームと10年規模データでの操作感は未確認
+
+-   **知見**: `CartesianChartHost`は`VicoScrollState`/`VicoZoomState`を持ち、コンテンツが画面幅を超える場合の横スクロールは追加実装なしで有効になる
+-   **Viewerへの適用**: 1M/1Yの日bucket表示で`adb shell input swipe`によるスワイプ操作が効き、期間の先頭から後方へ横スクロールできることをPixel 11実機で確認した。ただし確認できたデータ規模は数年分（ALLで数十bucket程度）にとどまり、要件が想定する10年規模・数百〜数千bucket（Heart RateなどPoC 3以降のデータ型を含む）でのスクロールの滑らかさは未確認。ピンチズームは複数指ジェスチャーが必要でadb経由では未検証（要検証）
+-   **根拠**: 実機確認（Pixel 11。横スクロールの動作自体を確認、2026-09-30）／要検証（10年規模・大量bucketでの操作感、ピンチズーム）
+-   **確認日**: 2026-09-30
+
+### 7.4 `aggregateGroupByPeriod()`の開始日をレコードの有無が確定する前に決めようとすると、別の形でクラッシュする
+
+-   **知見**: WBS 2.3で取得した最古レコード時刻をALLグラフの開始日に使う実装にする際、次の2つの落とし穴があった。(1) 最古レコードの取得（`findOldestWeightRecordTime()`）がまだ完了していない状態でALLのAggregate問い合わせを開始すると、開始日が決まらないまま`TimeRangeFilter.before(now)`（開始無制限）を使うことになり、実データがない期間も含めて古い時刻からbucketを要求してしまう（レビュー指摘、性能・正しさともに要検証のまま）。(2) 読み取れる範囲にレコードが1件もないと分かった場合に、開始日をやむを得ず`now`にして`TimeRangeFilter.between(now, now)`を渡すと、`IllegalArgumentException: end time needs be after start time`でクラッシュする（`between()`は開始・終了が同一時刻だと例外になる）
+-   **Viewerへの適用**: `WeightGraphScreen`で、ALLの問い合わせは最古レコードの取得結果（`oldestResult`）が確定するまで`LaunchedEffect`内で待つようにした。確定した結果が「レコードが1件もない」の場合はAggregate API自体を呼ばず、空の結果を直接組み立てて返す。確定した結果が「取得失敗」の場合のみ、従来通り開始無制限にフォールバックする。`TimeRangeFilter.between(a, b)`を使う箇所では、常に`a`が`b`より厳密に前であることを呼び出し前に保証すること
+-   **根拠**: エミュレータ確認（Pixel API 36。ALLタブを選択した際に実際に`IllegalArgumentException: end time needs be after start time`でクラッシュすることを確認し、上記の対応後は同じ操作でクラッシュしなくなったことを確認、2026-09-30）／実機確認（Pixel 11。実データがあるため(2)の「レコード0件」分岐そのものは再現できないが、(1)の「oldestResult確定を待ってからALLを問い合わせる」経路は実データで正しく動作し、ALLの最初のbucketが実際の最古レコードの月から始まることを確認、2026-09-30）
+-   **確認日**: 2026-09-30
+
+### 7.5 `aggregateGroupByPeriod()`のbucket境界は、渡した開始時刻からの機械的な等間隔区切りで、暦日・暦月に自動整列しない
+
+-   **知見**: `aggregateGroupByPeriod()`は、`timeRangeFilter`の開始時刻を起点に`Period`単位で区切ってbucketを作る。開始時刻に時刻（時・分・秒）が含まれていても、暦日・暦月の境界に自動的に丸めてはくれない。例えば開始時刻が「14:23」なら、日bucketは「14:23〜翌14:23」になる。当初`WeightGraphScreen`は1M/1Yの開始時刻を`LocalDateTime.now().minus(30日)`（時刻を含んだまま）で渡していたため、同じ暦日の朝と夜の記録が別のbucketに分かれてしまい、D-027（同日複数レコードをbucket集計でまとめる）の前提が崩れていた（レビュー指摘。実データがないエミュレータでは表面化しなかった）
+-   **Viewerへの適用**: bucket境界を暦日・暦月に合わせるには、`timeRangeFilter`に渡す開始時刻を呼び出し側で日初（`toLocalDate().atStartOfDay()`）／月初（`withDayOfMonth(1).atStartOfDay()`）に切り捨ててから渡す（`WeightGraphScreen`の`startOfDay()`/`startOfMonth()`）。ALLの開始時刻（WBS 2.3で取得した最古レコード時刻）は端末のタイムゾーンで`LocalDateTime`に変換しているが、Health Connectはレコードごとのタイムゾーンで範囲を判定するため、別のタイムゾーンで記録された最古レコードが範囲の外に出る可能性がある（要検証。今回実機確認したデータは単一タイムゾーンでの記録のみで、この事象は再現していない）。月初への切り捨てはこのずれを吸収する副次効果があるが、根本的な解決ではない。なお`HealthConnectManager.recentRangeFilterLocal()`（履歴権限なしでの`SecurityException`フォールバック）は同じ理由で日初へ切り捨てる（floor）と許可される範囲より古くなり再度例外になり得るため、逆に翌日の0時へ切り上げる（ceiling）ようにしている（レビュー指摘）
+-   **根拠**: 実機確認（Pixel 11、実データ、複数年分。(a) 同一暦日に朝夜2件の記録（近い値の2件）がある日を、Vicoのマーカー（長押し）で1M表示の該当bucketの値を表示させて確認したところ、平均・最小・最大が2件の記録を正しくまとめた値になっており、暦日区切りで正しく1つのbucketにまとまっていることを確認（表示された値は、Raw画面の2件から手計算した値とごくわずかに異なっていたが、2件が両方とも最小・最大に反映されていたことから、1つのbucketにまとまっている証拠としては十分。このわずかな差はHealth Connect内部の値変換またはVicoマーカーの丸め方によるものと推測され、集計ロジック自体の誤りではないとみられる。原因は未特定）。(b) ALL表示の最初のbucketが実際の最古レコードと同じ月から始まることを確認。(c) `pm revoke`で履歴読み取り権限を外した状態で1Mを開き、`recentRangeFilterLocal()`のフォールバックが発生した際も、bucketが暦日境界（`now`の30日前の翌日0時に一致する日）で始まり、再度の`SecurityException`が起きないことを確認、2026-09-30）
+-   **確認日**: 2026-09-30
+
+### 7.6 表示中のperiodと、非同期で取得した結果のperiodが一致するとは限らない
+
+-   **知見**: `LaunchedEffect(period, ...)`でperiodごとの集計結果を非同期に取得し、結果を`WeightAggregatesResult?`のような単純な状態に保持していると、periodを切り替えた直後（`LaunchedEffect`が結果を更新するまでの間、少なくとも1フレーム）は、新しいperiodの状態で古いperiodの結果を描画してしまう。日bucket（1M/1Y）から月bucket（ALL）に切り替えた場合、古い日bucketのデータが月bucket向けのx軸計算・ラベルで描画されることになり、複数の日bucketが同じx値（同じ月）に潰れてVicoの`series()`に渡る（クラッシュするか描画が崩れるだけかは未確認）。ALLが最古レコード時刻の確定を待つ設計（7.4）と組み合わさると、待っている間は結果が更新されないため、この不一致の窓（=前のperiodの結果が表示され続ける時間）がさらに広がる（レビュー指摘。実データがないエミュレータでは表面化しなかった）
+-   **Viewerへの適用**: 非同期の結果には、それを取得したperiod（リクエスト時点の設定）をタグ付けして保持し（`WeightGraphScreen`の`AggregatesLoad(period, result)`）、表示側で「現在選択中のperiodとタグが一致する結果だけを描画する」チェックを必ず入れる。一致しない場合は読み込み中として扱う。WBS 6.2で本実装のDetail画面（期間選択）を作る際も同じパターンで実装すること
+-   **根拠**: 公式（Jetpack Composeの一般的な非同期状態管理の注意点。`LaunchedEffect`のキー変更から状態更新までの間に古い状態でUIが再コンポーズされ得ることは、Health Connect固有ではなくCompose全般の性質）／実機確認（Pixel 11、実データ。1M/1Y/ALLを連続して何度も切り替えてもクラッシュ・描画崩れが起きないことを確認、2026-09-30。修正前の挙動（x値重複時にVicoがクラッシュするか描画が崩れるだけか）はタグ付けの導入により再現条件自体がなくなったため未確認のまま）
+-   **確認日**: 2026-09-30
+
+------------------------------------------------------------------------
+
+## 8. テスト観点チェックリスト
 
 実装・リリース前に確認する。
 
@@ -197,10 +251,15 @@
 -   [ ] リリースビルドのlogcatに健康データの値が出ていないか
 -   [ ] 広告リクエストに健康データ由来の情報が含まれていないか
 -   [ ] 同一日・同一ソースなど複数の重複レコードが、実装変更（`ReadRecordsRequest`の呼び方の変更など）でRaw一覧から消えていないか（6.3）
+-   [x] 実データでのALLグラフの見た目・横スクロール操作感（7.3。Pixel 11、数年分・千件規模で確認。10年規模・大量bucketでの滑らかさとピンチズームは未確認のまま）
+-   [x] エミュレータでのみ確認した挙動（6.5、7.1、7.4）をPixel 11実機でも再確認する（2026-09-30）
+-   [x] 同じ暦日に複数の記録（朝・夜など）がある実データで、グラフのbucketが暦日・暦月の境界で正しく区切られているか（7.5。Pixel 11で確認、2026-09-30）
+-   [x] 1M/1YからALLへ（またはその逆へ）period切り替えを素早く繰り返しても、グラフが崩れず・クラッシュしないか（7.6。Pixel 11で確認、2026-09-30）
+-   [x] `pm revoke`で履歴読み取り権限を外した状態で1Mを開き、`SecurityException`から直近30日へのフォールバック（`recentRangeFilterLocal()`）が実際に発生するか、発生した場合にbucket境界が正しく日初区切りになっているか（7.5。Pixel 11で確認、2026-09-30）
 
 ------------------------------------------------------------------------
 
-## 8. Viewerには適用しない知見
+## 9. Viewerには適用しない知見
 
 既存アプリで得たが、技術スタックやドメインの違いからViewerには関係しないもの。Viewerの方針と混同しないよう明記しておく。
 

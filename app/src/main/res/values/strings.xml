@@ -12,6 +12,15 @@
     <string name="health_connect_request_permission">Request permission</string>
     <string name="poc_weight_open_button">PoC: Show weight raw records</string>
     <string name="poc_weight_title">Weight raw records (PoC)</string>
+    <string name="poc_weight_graph_open_button">PoC: Show weight graph</string>
+    <string name="poc_weight_graph_title">Weight graph (PoC)</string>
+    <string name="poc_weight_graph_period_1m">1M</string>
+    <string name="poc_weight_graph_period_1y">1Y</string>
+    <string name="poc_weight_graph_period_all">ALL</string>
+    <string name="poc_weight_graph_aggregation_daily">Aggregation: daily average / min / max (official Aggregate API)</string>
+    <string name="poc_weight_graph_aggregation_monthly">Aggregation: monthly average / min / max (official Aggregate API)</string>
+    <string name="poc_weight_graph_oldest_record">Oldest record found: %1$s</string>
+    <string name="poc_weight_graph_oldest_record_none">No records found in the readable range.</string>
     <string name="poc_weight_back">Back</string>
     <string name="poc_weight_loading">Loading…</string>
     <string name="poc_weight_error">Failed to load records.</string>

@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
+import com.yskms.healthdataviewer.poc.WeightGraphScreen
 import com.yskms.healthdataviewer.poc.WeightRawRecordsScreen
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
 import kotlinx.coroutines.launch
@@ -50,31 +51,45 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
+private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH }
+
 @Composable
 fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
-    // WBS 2.1（PoC 1）専用の画面切り替え。画面数がまだ少ないPoC段階のため、Navigation Composeは
+    // WBS 2.1〜2.4（PoC 1）専用の画面切り替え。画面数がまだ少ないPoC段階のため、Navigation Composeは
     // 導入せずローカル状態で分岐する（導入は画面が本格的に増えるMVP実装時、WBS 6で検討）。
     // rememberSaveableで保持する: remember だと画面回転（Activity再生成）でどちらも初期値に戻り、
     // 一覧を開いたまま回転するとステータス画面に戻ってしまう（レビュー指摘、実機で再現確認済み）。
-    var showWeightRawRecords by rememberSaveable { mutableStateOf(false) }
+    var screen by rememberSaveable { mutableStateOf(PocScreen.STATUS) }
     var historyPermissionGrantedForWeightScreen by rememberSaveable { mutableStateOf(false) }
 
-    if (showWeightRawRecords) {
-        WeightRawRecordsScreen(
-            healthConnectManager = healthConnectManager,
-            historyPermissionGranted = historyPermissionGrantedForWeightScreen,
-            onBack = { showWeightRawRecords = false },
-            modifier = modifier,
-        )
-    } else {
-        HealthConnectStatusScreen(
-            healthConnectManager = healthConnectManager,
-            onOpenWeightRawRecords = { historyPermissionGranted ->
-                historyPermissionGrantedForWeightScreen = historyPermissionGranted
-                showWeightRawRecords = true
-            },
-            modifier = modifier,
-        )
+    when (screen) {
+        PocScreen.WEIGHT_RAW_RECORDS ->
+            WeightRawRecordsScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedForWeightScreen,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
+        PocScreen.WEIGHT_GRAPH ->
+            WeightGraphScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedForWeightScreen,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
+        PocScreen.STATUS ->
+            HealthConnectStatusScreen(
+                healthConnectManager = healthConnectManager,
+                onOpenWeightRawRecords = { historyPermissionGranted ->
+                    historyPermissionGrantedForWeightScreen = historyPermissionGranted
+                    screen = PocScreen.WEIGHT_RAW_RECORDS
+                },
+                onOpenWeightGraph = { historyPermissionGranted ->
+                    historyPermissionGrantedForWeightScreen = historyPermissionGranted
+                    screen = PocScreen.WEIGHT_GRAPH
+                },
+                modifier = modifier,
+            )
     }
 }
 
@@ -82,6 +97,7 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
 fun HealthConnectStatusScreen(
     healthConnectManager: HealthConnectManager,
     onOpenWeightRawRecords: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenWeightGraph: (historyPermissionGranted: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
@@ -176,6 +192,13 @@ fun HealthConnectStatusScreen(
                         },
                     ) {
                         Text(text = stringResource(id = R.string.poc_weight_open_button))
+                    }
+                    Button(
+                        onClick = {
+                            onOpenWeightGraph(grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ) == true)
+                        },
+                    ) {
+                        Text(text = stringResource(id = R.string.poc_weight_graph_open_button))
                     }
                 }
             }
