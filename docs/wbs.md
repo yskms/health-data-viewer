@@ -36,7 +36,7 @@
 
 | ID | タスク | 状態 | 完了日 | 関連 | メモ |
 |---|---|---|---|---|---|
-| 2.1 | PoC 1: Weight（All time、Raw、DataOrigin、横画面、History permission） | ⬜ | | | History permissionの確認事項: `HealthConnectFeatures.getFeatureStatus(FEATURE_READ_HEALTH_DATA_HISTORY)` でこの端末のHealth Connectが対応しているか確認できるか。未対応の環境では履歴読み取り権限が付与されず「未許可」から抜け出せなくなる可能性があるため、その場合の案内をどうするか決める |
+| 2.1 | PoC 1: Weight（All time、Raw、DataOrigin、横画面、History permission） | ⬜ | | | History permissionの確認事項: `client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)` でこの端末のHealth Connectが対応しているか確認できるか。未対応の環境では履歴読み取り権限が付与されず「未許可」から抜け出せなくなる可能性があるため、その場合の案内をどうするか決める |
 | 2.2 | PoC 1: 同日複数レコードのグラフ上の扱いを決定 | ⬜ | | | |
 | 2.3 | PoC 1: ALLの開始日の特定方法を確認 | ⬜ | | | |
 | 2.4 | PoC 1: Vicoの評価 | ⬜ | | | |
