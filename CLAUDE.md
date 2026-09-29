@@ -29,3 +29,9 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   ソース別の**レコード件数**はAggregateでは取れない（全件走査が必要）
 -   Health Connectが動くのはAndroid 9（API 28）以上。SDKのminSdk 26に合わせない
 -   グラフの集計方法はデータ型・期間ごとに決め、画面にも明示する（例: 「月平均」）
+
+## Gradle設定で誤解しやすい点
+
+-   `app/build.gradle.kts` に `org.jetbrains.kotlin.android` プラグインを**適用しない**。抜けているように見えるが意図的（D-020）。AGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、このプラグインを追加するとビルドエラーになる。Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要
+-   Kotlin用の `kotlinOptions { jvmTarget = ... }` DSLも同じ理由で使えない。JVMターゲットは `compileOptions` のJavaVersionで揃える
+-   compileSdk・targetSdkは37（Android 17）。Compose BOM 2026.09.00がcompileSdk 37を要求するため、36には戻せない。ローカルSDKには `build-tools;37.0.0` の追加導入が必要だった

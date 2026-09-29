@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 仮アイコン。正式なアプリアイコンは別タスクで用意する（docs/private/にモックアップ案あり）。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,29 C54,29 34,45 34,60 C34,71 43,80 54,80 C65,80 74,71 74,60 C74,45 54,29 54,29 Z" />
+</vector>

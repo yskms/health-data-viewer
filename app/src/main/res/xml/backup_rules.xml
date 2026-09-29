@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Health Connectのデータはこのアプリ内に複製しないため、バックアップ対象は
+   設定（テーマ・言語など）のみになる想定。現時点でアプリ独自の永続データが
+   ないため除外ルールは未定義。
+-->
+<full-backup-content>
+</full-backup-content>

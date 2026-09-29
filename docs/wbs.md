@@ -26,8 +26,8 @@
 
 | ID | タスク | 状態 | 完了日 | 関連 | メモ |
 |---|---|---|---|---|---|
-| 1.1 | Androidプロジェクト作成（Kotlin / Compose / minSdk 28） | ⬜ | | | |
-| 1.2 | ビルド設定（arm64-v8a、Gradleのworker数制限など） | ⬜ | | | |
+| 1.1 | Androidプロジェクト作成（Kotlin / Compose / minSdk 28） | ✅ | 2026-09-29 | D-020 | Compose Empty Activity相当の最小構成。エミュレータで起動確認済み |
+| 1.2 | ビルド設定（arm64-v8a、Gradleのworker数制限など） | ✅ | 2026-09-29 | D-020 | Gradle worker数制限は`~/.gradle/gradle.properties`の既存設定を利用。abiFilters/AABの全アーキテクチャ設定はネイティブ依存が発生するまで不要と判断（要すれば1.3以降で追加） |
 | 1.3 | Health Connectクライアント導入・権限まわりの土台 | ⬜ | | | |
 | 1.4 | CI（ビルド・Lint） | ⬜ | | | 任意 |
 | 1.5 | 既存Androidアプリから知見・テスト観点を整理（[lessons.md](lessons.md)） | ✅ | 2026-09-25 | D-017 | 初版作成済み。実装に合わせて随時更新 |
@@ -116,3 +116,4 @@
 | D-017 | 2026-09-25 | Viewerは既存アプリとは独立したKotlin / Composeプロジェクトとして実装する。既存アプリ（Expo / React Native）の実装コードの直接移植は前提とせず、Viewerに適用できる検証知見とテスト観点のみを参照する（[lessons.md](lessons.md)）。現時点では共通パッケージを作成しない | 技術スタック・Health Connectの利用方向（書き込みと読み取り）・データモデルが異なり、流用できるコードはアプリの中心部分ではない。D-003は維持する（一度Expoへの変更を検討したが、外部レビューを経て撤回） |
 | D-018 | 2026-09-25 | スクリーンショットと画面録画は既定で禁止しない。Recent Appsのプレビュー保護や任意のスクリーンショット防止は、必要性を確認して将来検討する | 健康グラフを利用者自身が保存・共有する用途が想定されるため。共有機能をMVPに入れることとは別の判断 |
 | D-019 | 2026-09-25 | D-016を変更。名称を「Health Data Viewer」（日本語: 健康データビューア）とし、applicationIdは `com.yskms.healthdataviewer`、リポジトリ・ローカルフォルダは `health-data-viewer` に変更する。アプリ名・ストアのタイトル・applicationIdに「Health Connect」を含めない | Googleの商標ガイドラインが自社の製品名へのGoogleブランドの組み込みを禁じており、公式アプリと誤認させる名前はPlayのなりすましポリシーにも抵触し得る。近い立ち位置の他社アプリもタイトルに「Health Connect」を入れていない。Androidプロジェクト作成前なので変更コストがかからない。同名の著名アプリ・登録商標は公開検索では見つからなかった（正式な商標調査ではないため、公開直前に再確認する: WBS 8.7） |
+| D-020 | 2026-09-29 | AGP 9.4.1 / Kotlin 2.4.20 / Compose BOM 2026.09.00を採用し、compileSdk・targetSdkは37（Android 17、2026年6月に安定版リリース済み）とする。`org.jetbrains.kotlin.android` プラグインは適用しない | Compose BOM 2026.09.00がcompileSdk 37を要求する。またAGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、`org.jetbrains.kotlin.android` を適用するとビルドエラーになる仕様変更があった（Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要） |
