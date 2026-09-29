@@ -44,13 +44,13 @@
 
 ### 2.1 Android 13以前と14以降で必要な仕組みが違う
 
--   **知見**: Health Connectの権限画面にある「プライバシーポリシー」リンクから起動される画面が必要。
-    -   Android 13以前: `androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE` を処理するActivity
-    -   Android 14以降: `android.intent.action.VIEW_PERMISSION_USAGE`（category `android.intent.category.HEALTH_PERMISSIONS`、`android:permission="android.permission.START_VIEW_PERMISSION_USAGE"`）を処理する `activity-alias`
-    -   両方とも**同じ専用Activity**を指す。MainActivityに同じintent-filterを重ねると解決が曖昧になる
--   **Viewerへの適用**: 専用の `PermissionsRationaleActivity` を1つ作り、intent-filterとactivity-aliasの両方から起動する。両方の経路をテストする
--   **根拠**: 公式（Health Connect Get started）／実機確認
--   **確認日**: 2026-09-21
+-   **知見**: Health Connectの権限画面にある「プライバシーポリシー」リンクから起動される画面が必要。単なるリンク先ではなく、**この画面を処理できるActivityが宣言されていないと、権限リクエスト自体をHealth Connect側が拒否する**（`PermissionsActivity`が"App should support rationale intent, finishing!"のログを出して即終了し、権限ダイアログが表示されない）
+    -   Android 13以前: `androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE` を処理するintent-filter
+    -   Android 14以降: `android.intent.action.VIEW_PERMISSION_USAGE`（category `android.intent.category.HEALTH_PERMISSIONS`）を処理するintent-filter
+    -   公式サンプル（[android/health-samples](https://github.com/android/health-samples)）およびViewerでの実機確認では、どちらもLAUNCHER Activity（MainActivity）にintent-filterを重ねて宣言するだけで機能した。`activity-alias`や`android:permission="android.permission.START_VIEW_PERMISSION_USAGE"`は必須ではない（旧版の本項に記載していたが、公式サンプルには存在せず、実機でも不要だった）
+-   **Viewerへの適用**: 現状（Activityが1つのみ）はMainActivityにintent-filterを追加する形で対応済み（WBS 1.3）。表示内容は土台のステータス画面のままで、実際のプライバシーポリシーの説明文はWBS 8.1でプライバシーポリシーを作成した後に反映する。画面数が増えて専用の説明Activityに分離する場合は、本項を再確認する
+-   **根拠**: 公式（[android/health-samples](https://github.com/android/health-samples)、Health Connect Get started）／実機確認（Viewer、Android 16 / Health Connect Controller、2026-09-29）
+-   **確認日**: 2026-09-29（初出2026-09-21から更新）
 
 ### 2.2 説明文はプライバシーポリシーと一致させる
 

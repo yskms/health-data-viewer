@@ -28,7 +28,7 @@
 |---|---|---|---|---|---|
 | 1.1 | Androidプロジェクト作成（Kotlin / Compose / minSdk 28） | ✅ | 2026-09-29 | D-020 | Compose Empty Activity相当の最小構成。エミュレータで起動確認済み |
 | 1.2 | ビルド設定（Gradleのworker数制限など） | ✅ | 2026-09-29 | D-020 | Gradle worker数制限は`~/.gradle/gradle.properties`の既存設定を利用。arm64-v8a限定のabiFilters/AABの全アーキテクチャ設定は、現状ネイティブ依存がなく不要と判断し未着手。ネイティブライブラリ（AdMob SDK等）を追加する時点で改めて要否を確認する |
-| 1.3 | Health Connectクライアント導入・権限まわりの土台 | ⬜ | | | |
+| 1.3 | Health Connectクライアント導入・権限まわりの土台 | ✅ | 2026-09-29 | D-023 | `androidx.health.connect:connect-client` 1.1.0を導入。可用性チェック・権限確認・権限リクエストの薄いラッパー（`HealthConnectManager`）を作成し、MainActivityの仮UIから起動して実機で権限許可までの一連の流れを確認済み |
 | 1.4 | CI（ビルド・Lint） | ⬜ | | | 任意 |
 | 1.5 | 既存Androidアプリから知見・テスト観点を整理（[lessons.md](lessons.md)） | ✅ | 2026-09-25 | D-017 | 初版作成済み。実装に合わせて随時更新 |
 
@@ -119,3 +119,4 @@
 | D-020 | 2026-09-29 | AGP 9.4.1 / Kotlin 2.4.20 / Compose BOM 2026.09.00を採用し、compileSdk・targetSdkは37（Android 17、2026年6月に安定版リリース済み）とする。`org.jetbrains.kotlin.android` プラグインは適用しない | Compose BOM 2026.09.00がcompileSdk 37を要求する。またAGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、`org.jetbrains.kotlin.android` を適用するとビルドエラーになる仕様変更があった（Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要） |
 | D-021 | 2026-09-29 | D-004を変更。minSdk 28（§21）を「第一候補」から「確定」とする | minSdk 28でプロジェクトが作成・動作確認済みのため確定に格上げ |
 | D-022 | 2026-09-29 | MainActivityを`AppCompatActivity`にし、テーマの親を`Theme.AppCompat.DayNight.NoActionBar`にする（`androidx.appcompat` を依存に追加） | `AppCompatDelegate.setApplicationLocales()`（言語切替、§21で確定済み）はAndroid 12以前ではAppCompatActivity・AppCompat系テーマを前提とするため、後からの変更で手戻りが出る前に先行対応した。副次効果として、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも解消する |
+| D-023 | 2026-09-29 | Health Connectクライアントは`androidx.health.connect:connect-client` 1.1.0（安定版）を採用する。Manifestの権限宣言は、既存の原則（lessons.md 1.1）通り実際に読むデータ型だけとし、現時点ではPoC 1（WBS 2.1）で使う体重の読み取り権限＋履歴読み取り権限のみとする。権限説明画面（rationale intent）はMainActivityにintent-filterを追加する形で対応し、専用Activityやactivity-aliasは導入しない | 実機確認の結果、Health Connectは権限説明画面を処理できるActivityが無いと権限リクエスト自体を拒否する仕様と判明した（lessons.md 2.1を更新）。公式サンプル（android/health-samples）でも専用Activityやactivity-aliasは使っておらず、Viewerも現状Activityが1つのみのためMainActivityに統合した方が単純 |
