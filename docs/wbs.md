@@ -28,7 +28,7 @@
 |---|---|---|---|---|---|
 | 1.1 | Androidプロジェクト作成（Kotlin / Compose / minSdk 28） | ✅ | 2026-09-29 | D-020 | Compose Empty Activity相当の最小構成。エミュレータで起動確認済み |
 | 1.2 | ビルド設定（Gradleのworker数制限など） | ✅ | 2026-09-29 | D-020 | Gradle worker数制限は`~/.gradle/gradle.properties`の既存設定を利用。arm64-v8a限定のabiFilters/AABの全アーキテクチャ設定は、現状ネイティブ依存がなく不要と判断し未着手。ネイティブライブラリ（AdMob SDK等）を追加する時点で改めて要否を確認する |
-| 1.3 | Health Connectクライアント導入・権限まわりの土台 | ✅ | 2026-09-29 | D-023 | `androidx.health.connect:connect-client` 1.1.0を導入。可用性チェック・権限確認・権限リクエストの薄いラッパー（`HealthConnectManager`）を作成し、MainActivityの仮UIから起動して実機で権限許可までの一連の流れを確認済み |
+| 1.3 | Health Connectクライアント導入・権限まわりの土台 | ✅ | 2026-09-29 | D-023 | `androidx.health.connect:connect-client` 1.1.0を導入。可用性チェック・権限確認・権限リクエストの薄いラッパー（`HealthConnectManager`）を作成し、MainActivityの仮UIから起動して実機で権限許可までの一連の流れを確認済み。コードレビューを受け、権限状態を画面復帰のたびに再確認する対応（`LifecycleResumeEffect`）と、体重の読み取り権限・履歴読み取り権限を別々の状態として扱う対応（データ型ごとに個別に拒否され得るため）を追加済み |
 | 1.4 | CI（ビルド・Lint） | ⬜ | | | 任意 |
 | 1.5 | 既存Androidアプリから知見・テスト観点を整理（[lessons.md](lessons.md)） | ✅ | 2026-09-25 | D-017 | 初版作成済み。実装に合わせて随時更新 |
 
@@ -59,7 +59,7 @@
 | 6.6 | 設定（権限、表示指標、テーマ、言語、About） | ⬜ | | | DataStore導入時、健康データを含まないためバックアップ除外は不要（`backup_rules.xml`/`data_extraction_rules.xml`参照） |
 | 6.7 | テーマ（System / Light / Dark） | ⬜ | | | |
 | 6.8 | 多言語（日本語 / English） | ⬜ | | D-022 | `AppCompatDelegate.setApplicationLocales()`にはAppCompatActivity・AppCompat系テーマ（対応済み、D-022）に加え、マニフェストへの`AppLocalesMetadataHolderService`（`autoStoreLocales`、Android 12以前向け）と`android:localeConfig`（Android 13以降向け）の宣言が必要 |
-| 6.9 | Health Connect未対応・権限不足・データなしの案内 | ⬜ | | | |
+| 6.9 | Health Connect未対応・権限不足・データなしの案内 | ⬜ | | | WBS 1.3の仮UI（MainActivityのステータス画面）は未対応・要更新時にメッセージを出すだけで次の操作（Play Storeを開く等）がない。ここで正式な案内UIに置き換える |
 | 6.10 | 優先度Aのデータ型を順次対応 | ⬜ | | | |
 
 ## 7. 収益化
@@ -75,7 +75,7 @@
 
 | ID | タスク | 状態 | 完了日 | 関連 | メモ |
 |---|---|---|---|---|---|
-| 8.1 | プライバシーポリシーの作成・公開 | ⬜ | | | |
+| 8.1 | プライバシーポリシーの作成・公開 | ⬜ | | | 文言確定後、権限説明画面（rationale intent、lessons.md 2.1）に反映する。現状はMainActivityが起動するだけで、プライバシーポリシーの文言も出ず、権限リクエストUIが出てしまう（本来この経路では出すべきでない）。この経路専用の画面に分けるか、MainActivity内で起動元インテントに応じて表示を切り替えるかをここで決める |
 | 8.2 | Data Safetyセクション（広告SDKの収集データを含む） | ⬜ | | | |
 | 8.3 | Health Connect権限の申告（Play Console） | ⬜ | | | 審査に時間がかかる可能性あり |
 | 8.4 | 広告ID（AD_ID）の宣言 | ⬜ | | | |
@@ -119,4 +119,4 @@
 | D-020 | 2026-09-29 | AGP 9.4.1 / Kotlin 2.4.20 / Compose BOM 2026.09.00を採用し、compileSdk・targetSdkは37（Android 17、2026年6月に安定版リリース済み）とする。`org.jetbrains.kotlin.android` プラグインは適用しない | Compose BOM 2026.09.00がcompileSdk 37を要求する。またAGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、`org.jetbrains.kotlin.android` を適用するとビルドエラーになる仕様変更があった（Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要） |
 | D-021 | 2026-09-29 | D-004を変更。minSdk 28（§21）を「第一候補」から「確定」とする | minSdk 28でプロジェクトが作成・動作確認済みのため確定に格上げ |
 | D-022 | 2026-09-29 | MainActivityを`AppCompatActivity`にし、テーマの親を`Theme.AppCompat.DayNight.NoActionBar`にする（`androidx.appcompat` を依存に追加） | `AppCompatDelegate.setApplicationLocales()`（言語切替、§21で確定済み）はAndroid 12以前ではAppCompatActivity・AppCompat系テーマを前提とするため、後からの変更で手戻りが出る前に先行対応した。副次効果として、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも解消する |
-| D-023 | 2026-09-29 | Health Connectクライアントは`androidx.health.connect:connect-client` 1.1.0（安定版）を採用する。Manifestの権限宣言は、既存の原則（lessons.md 1.1）通り実際に読むデータ型だけとし、現時点ではPoC 1（WBS 2.1）で使う体重の読み取り権限＋履歴読み取り権限のみとする。権限説明画面（rationale intent）はMainActivityにintent-filterを追加する形で対応し、専用Activityやactivity-aliasは導入しない | 実機確認の結果、Health Connectは権限説明画面を処理できるActivityが無いと権限リクエスト自体を拒否する仕様と判明した（lessons.md 2.1を更新）。公式サンプル（android/health-samples）でも専用Activityやactivity-aliasは使っておらず、Viewerも現状Activityが1つのみのためMainActivityに統合した方が単純 |
+| D-023 | 2026-09-29 | Health Connectクライアントは`androidx.health.connect:connect-client` 1.1.0（安定版）を採用する。Manifestの権限宣言は、既存の原則（lessons.md 1.1）通り実際に読むデータ型だけとし、現時点ではPoC 1（WBS 2.1）で使う体重の読み取り権限＋履歴読み取り権限のみとする。権限説明画面（rationale intent）は、公式ドキュメントが推奨する専用Activity＋activity-alias＋`START_VIEW_PERMISSION_USAGE`保護ではなく、公式サンプル（android/health-samples）と同様にMainActivityへ直接intent-filterを追加する簡略構成で暫定対応する | 実機確認の結果、Health Connectは権限説明画面を処理できるActivityが無いと権限リクエスト自体を拒否する仕様と判明した（lessons.md 2.1を更新）。MainActivityはもともとLAUNCHERでexportedなため、保護なしの簡略構成でも実害は小さいと判断した。ただし公式ドキュメントは専用Activity＋保護付きalias構成を推奨しており、恒久対応ではない。実際のプライバシーポリシー文言を用意するWBS 8.1、または画面数が増えるタイミングで、公式ドキュメント通りの構成に切り替えるか再検討する |

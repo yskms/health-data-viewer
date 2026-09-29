@@ -6,5 +6,7 @@
     <string name="health_connect_available">Health Connect: available</string>
     <string name="health_connect_permission_granted">Weight read permission: granted</string>
     <string name="health_connect_permission_not_granted">Weight read permission: not granted</string>
+    <string name="health_connect_history_permission_granted">History read permission: granted</string>
+    <string name="health_connect_history_permission_not_granted">History read permission: not granted</string>
     <string name="health_connect_request_permission">Request permission</string>
 </resources>

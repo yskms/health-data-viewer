@@ -13,18 +13,20 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
+import kotlinx.coroutines.launch
 
 // AppCompatDelegate.setApplicationLocales()（アプリ内言語切替、要件§21）は
 // AppCompatActivityを前提とする（D-022）。
@@ -51,18 +53,26 @@ fun HealthConnectStatusScreen(
     healthConnectManager: HealthConnectManager,
     modifier: Modifier = Modifier,
 ) {
-    val availability = remember { healthConnectManager.availability }
-    var hasPermissions by remember { mutableStateOf<Boolean?>(null) }
+    var availability by remember { mutableStateOf(healthConnectManager.availability) }
+    // nullは「未確認」（初回読み込み中、または直前の問い合わせが失敗した状態）を表す。
+    var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     val requestPermissions =
         rememberLauncherForActivityResult(
             contract = healthConnectManager.createPermissionRequestContract(),
-        ) { granted -> hasPermissions = granted.containsAll(HealthConnectPermissions.WEIGHT) }
+        ) { granted -> grantedPermissions = granted }
 
-    LaunchedEffect(availability) {
+    // Health Connectの権限は設定画面などアプリの外から変わり得るため、起動時だけでなく
+    // 画面復帰のたびに問い合わせ直す（lessons.md 3.1）。
+    LifecycleResumeEffect(Unit) {
+        availability = healthConnectManager.availability
         if (availability == HealthConnectAvailability.INSTALLED) {
-            hasPermissions = healthConnectManager.hasAllPermissions(HealthConnectPermissions.WEIGHT)
+            coroutineScope.launch {
+                healthConnectManager.getGrantedPermissions()?.let { grantedPermissions = it }
+            }
         }
+        onPauseOrDispose {}
     }
 
     Column(
@@ -74,14 +84,35 @@ fun HealthConnectStatusScreen(
         when (availability) {
             HealthConnectAvailability.INSTALLED -> {
                 Text(text = stringResource(id = R.string.health_connect_available))
-                val permissionTextRes =
-                    when (hasPermissions) {
-                        true -> R.string.health_connect_permission_granted
-                        false -> R.string.health_connect_permission_not_granted
-                        null -> R.string.health_connect_checking
-                    }
-                Text(text = stringResource(id = permissionTextRes))
-                Button(onClick = { requestPermissions.launch(HealthConnectPermissions.WEIGHT) }) {
+                Text(
+                    text =
+                        stringResource(
+                            id =
+                                permissionStatusTextRes(
+                                    granted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ),
+                                    grantedRes = R.string.health_connect_permission_granted,
+                                    notGrantedRes = R.string.health_connect_permission_not_granted,
+                                ),
+                        ),
+                )
+                Text(
+                    text =
+                        stringResource(
+                            id =
+                                permissionStatusTextRes(
+                                    granted = grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ),
+                                    grantedRes = R.string.health_connect_history_permission_granted,
+                                    notGrantedRes = R.string.health_connect_history_permission_not_granted,
+                                ),
+                        ),
+                )
+                Button(
+                    onClick = {
+                        requestPermissions.launch(
+                            setOf(HealthConnectPermissions.WEIGHT_READ, HealthConnectPermissions.HISTORY_READ),
+                        )
+                    },
+                ) {
                     Text(text = stringResource(id = R.string.health_connect_request_permission))
                 }
             }
@@ -92,3 +123,10 @@ fun HealthConnectStatusScreen(
         }
     }
 }
+
+private fun permissionStatusTextRes(granted: Boolean?, grantedRes: Int, notGrantedRes: Int): Int =
+    when (granted) {
+        true -> grantedRes
+        false -> notGrantedRes
+        null -> R.string.health_connect_checking
+    }

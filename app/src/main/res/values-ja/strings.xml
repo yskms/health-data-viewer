@@ -6,5 +6,7 @@
     <string name="health_connect_available">Health Connect: 利用可能</string>
     <string name="health_connect_permission_granted">体重の読み取り権限: 許可済み</string>
     <string name="health_connect_permission_not_granted">体重の読み取り権限: 未許可</string>
+    <string name="health_connect_history_permission_granted">履歴読み取り権限: 許可済み</string>
+    <string name="health_connect_history_permission_not_granted">履歴読み取り権限: 未許可</string>
     <string name="health_connect_request_permission">権限をリクエスト</string>
 </resources>
