@@ -1,7 +1,7 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!--
         DayNightテーマにしているのはAppCompatDelegate.setApplicationLocales()の
-        前提（AppCompatActivity + AppCompat系テーマ）を満たすため（要件§21・D-021）。
+        前提（AppCompatActivity + AppCompat系テーマ）を満たすため（要件§21・D-022）。
         端末のダーク/ライト設定に応じて自動的に配色が切り替わり、Compose描画前の
         起動時背景色（windowBackground）もダークモードで正しく暗くなる。
     -->

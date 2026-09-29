@@ -56,9 +56,9 @@
 | 6.3 | 詳細: レコード（ページング、全件表示） | ⬜ | | | |
 | 6.4 | 詳細: データソース | ⬜ | | | |
 | 6.5 | 横画面の全画面グラフ | ⬜ | | | |
-| 6.6 | 設定（権限、表示指標、テーマ、言語、About） | ⬜ | | | |
+| 6.6 | 設定（権限、表示指標、テーマ、言語、About） | ⬜ | | | DataStore導入時、健康データを含まないためバックアップ除外は不要（`backup_rules.xml`/`data_extraction_rules.xml`参照） |
 | 6.7 | テーマ（System / Light / Dark） | ⬜ | | | |
-| 6.8 | 多言語（日本語 / English） | ⬜ | | | |
+| 6.8 | 多言語（日本語 / English） | ⬜ | | D-022 | `AppCompatDelegate.setApplicationLocales()`にはAppCompatActivity・AppCompat系テーマ（対応済み、D-022）に加え、マニフェストへの`AppLocalesMetadataHolderService`（`autoStoreLocales`、Android 12以前向け）と`android:localeConfig`（Android 13以降向け）の宣言が必要 |
 | 6.9 | Health Connect未対応・権限不足・データなしの案内 | ⬜ | | | |
 | 6.10 | 優先度Aのデータ型を順次対応 | ⬜ | | | |
 
@@ -69,7 +69,7 @@
 | 7.1 | AdMob組み込み（下部バナー、表示しない画面の制御） | ⬜ | | D-010 | |
 | 7.2 | UMP（同意取得、設定からの変更導線） | ⬜ | | D-010 | |
 | 7.3 | 健康データ層と広告の分離を確認 | ⬜ | | D-011 | |
-| 7.4 | Play Billing（買い切り、復元、acknowledge） | ⬜ | | D-012 | |
+| 7.4 | Play Billing（買い切り、復元、acknowledge） | ⬜ | | D-012 | 購入状態のDataStoreキャッシュは健康データを含まないためバックアップ除外は不要。起動時`queryPurchasesAsync()`で再検証するため、復元されたキャッシュが古くても実害はない |
 
 ## 8. リリース準備
 
@@ -117,4 +117,5 @@
 | D-018 | 2026-09-25 | スクリーンショットと画面録画は既定で禁止しない。Recent Appsのプレビュー保護や任意のスクリーンショット防止は、必要性を確認して将来検討する | 健康グラフを利用者自身が保存・共有する用途が想定されるため。共有機能をMVPに入れることとは別の判断 |
 | D-019 | 2026-09-25 | D-016を変更。名称を「Health Data Viewer」（日本語: 健康データビューア）とし、applicationIdは `com.yskms.healthdataviewer`、リポジトリ・ローカルフォルダは `health-data-viewer` に変更する。アプリ名・ストアのタイトル・applicationIdに「Health Connect」を含めない | Googleの商標ガイドラインが自社の製品名へのGoogleブランドの組み込みを禁じており、公式アプリと誤認させる名前はPlayのなりすましポリシーにも抵触し得る。近い立ち位置の他社アプリもタイトルに「Health Connect」を入れていない。Androidプロジェクト作成前なので変更コストがかからない。同名の著名アプリ・登録商標は公開検索では見つからなかった（正式な商標調査ではないため、公開直前に再確認する: WBS 8.7） |
 | D-020 | 2026-09-29 | AGP 9.4.1 / Kotlin 2.4.20 / Compose BOM 2026.09.00を採用し、compileSdk・targetSdkは37（Android 17、2026年6月に安定版リリース済み）とする。`org.jetbrains.kotlin.android` プラグインは適用しない | Compose BOM 2026.09.00がcompileSdk 37を要求する。またAGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、`org.jetbrains.kotlin.android` を適用するとビルドエラーになる仕様変更があった（Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要） |
-| D-021 | 2026-09-29 | minSdk 28（§21）を「第一候補」から「確定」に変更する。あわせてMainActivityを`AppCompatActivity`にし、テーマの親を`Theme.AppCompat.DayNight.NoActionBar`にする（`androidx.appcompat` を依存に追加） | minSdk 28でプロジェクトが作成・動作確認済みのため確定に格上げ。`AppCompatDelegate.setApplicationLocales()`（言語切替、§21で確定済み）はAndroid 12以前ではAppCompatActivity・AppCompat系テーマを前提とするため、後からの変更で手戻りが出る前に先行対応した。副次効果として、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも解消する |
+| D-021 | 2026-09-29 | minSdk 28（§21）を「第一候補」から「確定」に変更する | minSdk 28でプロジェクトが作成・動作確認済みのため確定に格上げ |
+| D-022 | 2026-09-29 | MainActivityを`AppCompatActivity`にし、テーマの親を`Theme.AppCompat.DayNight.NoActionBar`にする（`androidx.appcompat` を依存に追加） | `AppCompatDelegate.setApplicationLocales()`（言語切替、§21で確定済み）はAndroid 12以前ではAppCompatActivity・AppCompat系テーマを前提とするため、後からの変更で手戻りが出る前に先行対応した。副次効果として、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも解消する |

@@ -17,7 +17,7 @@ import androidx.compose.ui.unit.dp
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
 
 // AppCompatDelegate.setApplicationLocales()（アプリ内言語切替、要件§21）は
-// AppCompatActivityを前提とする（D-021）。
+// AppCompatActivityを前提とする（D-022）。
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

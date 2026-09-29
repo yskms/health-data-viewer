@@ -39,4 +39,4 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 ## UI基盤で誤解しやすい点
 
 -   MainActivityは`ComponentActivity`ではなく`AppCompatActivity`を使う。テーマの親も`Theme.AppCompat.DayNight.NoActionBar`（フレームワーク標準の`android:Theme.Material...`ではない）。Composeオンリーだからと`ComponentActivity`に「簡略化」しないこと
--   理由: 要件§21で確定済みの言語切替方式`AppCompatDelegate.setApplicationLocales()`は、Android 12以前ではAppCompatActivity・AppCompat系テーマが前提（D-021）。DayNightテーマにしているのは、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも同時に防ぐため
+-   理由: 要件§21で確定済みの言語切替方式`AppCompatDelegate.setApplicationLocales()`は、Android 12以前ではAppCompatActivity・AppCompat系テーマが前提（D-022）。DayNightテーマにしているのは、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも同時に防ぐため
