@@ -59,7 +59,7 @@
 | 6.6 | 設定（権限、表示指標、テーマ、言語、About） | ⬜ | | | DataStore導入時、健康データを含まないためバックアップ除外は不要（`backup_rules.xml`/`data_extraction_rules.xml`参照） |
 | 6.7 | テーマ（System / Light / Dark） | ⬜ | | | |
 | 6.8 | 多言語（日本語 / English） | ⬜ | | D-022 | `AppCompatDelegate.setApplicationLocales()`にはAppCompatActivity・AppCompat系テーマ（対応済み、D-022）に加え、マニフェストへの`AppLocalesMetadataHolderService`（`autoStoreLocales`、Android 12以前向け）と`android:localeConfig`（Android 13以降向け）の宣言が必要 |
-| 6.9 | Health Connect未対応・権限不足・データなしの案内 | ⬜ | | | WBS 1.3の仮UI（MainActivityのステータス画面）は未対応・要更新時にメッセージを出すだけで次の操作（Play Storeを開く等）がない。ここで正式な案内UIに置き換える |
+| 6.9 | Health Connect未対応・権限不足・データなしの案内 | ⬜ | | | WBS 1.3の仮UI（MainActivityのステータス画面）は未対応・要更新時にメッセージを出すだけで次の操作（Play Storeを開く等）がない。ここで正式な案内UIに置き換える。また権限取得の失敗（IPC例外）を「読み込み中」と同じ「確認中…」表示のままにせず、別の状態として表示する |
 | 6.10 | 優先度Aのデータ型を順次対応 | ⬜ | | | |
 
 ## 7. 収益化
