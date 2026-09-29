@@ -36,7 +36,7 @@
 
 | ID | タスク | 状態 | 完了日 | 関連 | メモ |
 |---|---|---|---|---|---|
-| 2.1 | PoC 1: Weight（All time、Raw、DataOrigin、横画面、History permission） | ⬜ | | | History permissionの確認事項: `client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_HISTORY)` でこの端末のHealth Connectが対応しているか確認できるか。未対応の環境では履歴読み取り権限が付与されず「未許可」から抜け出せなくなる可能性があるため、その場合の案内をどうするか決める |
+| 2.1 | PoC 1: Weight（All time、Raw、DataOrigin、横画面、History permission） | ✅ | 2026-09-29 | D-024, D-025, D-026 | `HealthConnectManager`に`isHistoryReadFeatureAvailable`（`client.features.getFeatureStatus()`、同期・IPC不要）と`readAllWeightRecords()`（全期間はページングで取得、履歴権限なしなら直近30日、取得中の`SecurityException`は直近30日にフォールバック）を追加。PoC専用の`poc/WeightRawRecordsScreen`（Raw一覧、DataOriginをアプリ名に解決、横画面はLazyColumnの自動追従で対応）とMainActivityからの導線を実装。画面切り替え状態は`rememberSaveable`で保持し、画面回転（Activity再生成）でもRaw一覧の表示が維持される。履歴読み取り権限の対応状況は`Boolean?`で保持し、確認前の初回フレームで誤表示しないようにしている（詳細はlessons.md 3.4, 6.1〜6.4）。Pixel 11（Android 17）実機で確認済み: `isHistoryReadFeatureAvailable`が`true`、体重権限→履歴権限が別ダイアログで問われ両方許可（lessons.md 3.4/3.5）、実データ（千件超）をページングで全件取得しDataOriginをサードパーティ製の体重計アプリの名前まで正しく解決、`pm revoke`で履歴権限を取り消した状態での「直近30日のみ表示」フォールバック、および履歴権限なしで全期間を試みた際に実際に`SecurityException`が発生してフォールバックする経路の両方を確認（クラッシュなし）、横画面回転でもRaw一覧の表示が維持されクラッシュ・一覧崩れなし、logcatに健康データの値は出ていない。DataOriginのアプリ名解決はAndroidManifest.xmlの`<queries>`宣言に依存しており、権限説明画面（rationale intent）はこの`<queries>`に依存しないことも実機で切り分け済み（lessons.md 6.4）。残る要検証: 未対応環境（Android 13以前等）での`isHistoryReadFeatureAvailable`、`ACTION_SHOW_PERMISSIONS_RATIONALE`を宣言しないソースアプリ（`VIEW_PERMISSION_USAGE`のみの新しいアプリ等）でのDataOrigin解決。横画面は破綻しないことのみ確認し、横幅を活かすレイアウトはWBS 6.5で対応する |
 | 2.2 | PoC 1: 同日複数レコードのグラフ上の扱いを決定 | ⬜ | | | |
 | 2.3 | PoC 1: ALLの開始日の特定方法を確認 | ⬜ | | | |
 | 2.4 | PoC 1: Vicoの評価 | ⬜ | | | |
@@ -53,7 +53,7 @@
 |---|---|---|---|---|---|
 | 6.1 | ホーム（今日／週／月／年、指標カード） | ⬜ | | | |
 | 6.2 | 詳細: グラフ（1W〜ALL、Custom、集計方法の表示） | ⬜ | | | |
-| 6.3 | 詳細: レコード（ページング、全件表示） | ⬜ | | | |
+| 6.3 | 詳細: レコード（ページング、全件表示） | ⬜ | | | PoC 2.1の`WeightRawRecordsScreen`では`LazyColumn`の`key`にレコードID（`metadata.id`）を使っているが、ページをまたいで同じIDが重複して返るとIllegalArgumentExceptionで画面ごとクラッシュする。通常は起きない想定だが、このアプリは重複レコードの検証自体が目的のため、`key`を外すか重複を検知して表示する設計を検討する |
 | 6.4 | 詳細: データソース | ⬜ | | | |
 | 6.5 | 横画面の全画面グラフ | ⬜ | | | |
 | 6.6 | 設定（権限、表示指標、テーマ、言語、About） | ⬜ | | | DataStore導入時、健康データを含まないためバックアップ除外は不要（`backup_rules.xml`/`data_extraction_rules.xml`参照） |
@@ -120,3 +120,6 @@
 | D-021 | 2026-09-29 | D-004を変更。minSdk 28（§21）を「第一候補」から「確定」とする | minSdk 28でプロジェクトが作成・動作確認済みのため確定に格上げ |
 | D-022 | 2026-09-29 | MainActivityを`AppCompatActivity`にし、テーマの親を`Theme.AppCompat.DayNight.NoActionBar`にする（`androidx.appcompat` を依存に追加） | `AppCompatDelegate.setApplicationLocales()`（言語切替、§21で確定済み）はAndroid 12以前ではAppCompatActivity・AppCompat系テーマを前提とするため、後からの変更で手戻りが出る前に先行対応した。副次効果として、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも解消する |
 | D-023 | 2026-09-29 | Health Connectクライアントは`androidx.health.connect:connect-client` 1.1.0（安定版）を採用する。Manifestの権限宣言は、既存の原則（lessons.md 1.1）通り実際に読むデータ型だけとし、現時点ではPoC 1（WBS 2.1）で使う体重の読み取り権限＋履歴読み取り権限のみとする。権限説明画面（rationale intent）は、公式ドキュメントが推奨する専用Activity＋activity-alias＋`START_VIEW_PERMISSION_USAGE`保護ではなく、公式サンプル（android/health-samples）と同様にMainActivityへ直接intent-filterを追加する簡略構成で暫定対応する | 実機確認の結果、Health Connectは権限説明画面を処理できるActivityが無いと権限リクエスト自体を拒否する仕様と判明した（lessons.md 2.1を更新）。MainActivityはもともとLAUNCHERでexportedなため、保護なしの簡略構成でも実害は小さいと判断した。ただし公式ドキュメントは専用Activity＋保護付きalias構成を推奨しており、恒久対応ではない。実際のプライバシーポリシー文言を用意するWBS 8.1、または画面数が増えるタイミングで、公式ドキュメント通りの構成に切り替えるか再検討する |
+| D-024 | 2026-09-29 | 端末のHealth Connectが`FEATURE_READ_HEALTH_DATA_HISTORY`に対応していない場合、権限リクエストのセットから`READ_HEALTH_DATA_HISTORY`を除外する。UI上も「未許可」ではなく「この端末では対応していない」という別の固定文言を表示する | 未対応の権限を含めてリクエストし続けても「未許可」から抜け出せず、ユーザー操作で解決できる状態だと誤認させるため（WBS 2.1のメモで挙がっていた懸案）。`isHistoryReadFeatureAvailable`は同期プロパティで取得コストが低く、都度チェックしても問題ない |
+| D-025 | 2026-09-29 | DataOriginのpackageNameからアプリ名を解決できない場合（アンインストール済み等）、隠さずpackageNameをそのまま表示する | 要件§19「詳細＝Health Connect Explorer（Inspector的体験）」の方針に合わせ、素性不明という事実も含めて生データを見せる。公式ドキュメント（Data display and attribution）も失敗時のフォールバック表示までは規定していないため、Viewer独自に決定した |
+| D-026 | 2026-09-29 | DataOriginのアプリ名解決がAndroidManifest.xmlの`<queries>`宣言に依存していることが実機検証で判明したため、その`<queries>`宣言を削除・変更しないこととし、AndroidManifest.xmlに依存関係のコメントを残す。データ型を追加する際も、新しいデータ型のソースアプリがこの`<queries>`で可視でない可能性を都度確認する。なお権限説明画面自体はこの`<queries>`に依存していないことも実機で切り分け済み（両者は独立した仕組み） | 公式ドキュメント「Data display and attribution」の「特別な権限は不要」という記述を、Android 11+のパッケージ可視性制限そのものが不要という意味に誤読していた。`<queries>`宣言を一時的に外して実機検証した結果、DataOrigin解決は失敗する一方、権限説明画面は影響を受けないことを確認した（lessons.md 6.4） |

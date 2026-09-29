@@ -3,6 +3,12 @@
     <!-- Health ConnectアプリのPackageManager可視性（Android 11+のパッケージ可視性制限）。 -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
+        <!-- DataOriginのアプリ名解決（PackageManager経由、healthconnect/DataOriginNameResolver.kt）用。
+             権限説明画面（下記intent-filter）の動作には影響しない（実機確認、2026-09-29。<queries>を
+             外しても権限ダイアログは正常に開いた。<queries>は自分が他アプリを見るための宣言であり、
+             Health Connect側が自分のintent-filterを見つけられるかどうかとは別の仕組みのため）。
+             同じandroidx.health.ACTION_SHOW_PERMISSIONS_RATIONALEをHealth Connect連携先アプリの多くが
+             実装しているため、Android 11+のパッケージ可視性制限下でも解決できている（lessons.md 6.4）。 -->
         <intent>
             <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
         </intent>

@@ -8,5 +8,18 @@
     <string name="health_connect_permission_not_granted">Weight read permission: not granted</string>
     <string name="health_connect_history_permission_granted">History read permission: granted</string>
     <string name="health_connect_history_permission_not_granted">History read permission: not granted</string>
+    <string name="health_connect_history_not_supported">This device\'s Health Connect does not support reading history data older than 30 days.</string>
     <string name="health_connect_request_permission">Request permission</string>
+    <string name="poc_weight_open_button">PoC: Show weight raw records</string>
+    <string name="poc_weight_title">Weight raw records (PoC)</string>
+    <string name="poc_weight_back">Back</string>
+    <string name="poc_weight_loading">Loading…</string>
+    <string name="poc_weight_error">Failed to load records.</string>
+    <string name="poc_weight_retry">Retry</string>
+    <string name="poc_weight_empty">No weight records found.</string>
+    <string name="poc_weight_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
+    <plurals name="poc_weight_record_count">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
 </resources>

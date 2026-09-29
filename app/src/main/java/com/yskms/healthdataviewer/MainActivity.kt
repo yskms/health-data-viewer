@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -25,6 +26,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
+import com.yskms.healthdataviewer.poc.WeightRawRecordsScreen
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
 import kotlinx.coroutines.launch
 
@@ -38,7 +40,7 @@ class MainActivity : AppCompatActivity() {
         setContent {
             HealthDataViewerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    HealthConnectStatusScreen(
+                    MainScreen(
                         healthConnectManager = healthConnectManager,
                         modifier = Modifier.padding(innerPadding),
                     )
@@ -49,13 +51,45 @@ class MainActivity : AppCompatActivity() {
 }
 
 @Composable
+fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
+    // WBS 2.1（PoC 1）専用の画面切り替え。画面数がまだ少ないPoC段階のため、Navigation Composeは
+    // 導入せずローカル状態で分岐する（導入は画面が本格的に増えるMVP実装時、WBS 6で検討）。
+    // rememberSaveableで保持する: remember だと画面回転（Activity再生成）でどちらも初期値に戻り、
+    // 一覧を開いたまま回転するとステータス画面に戻ってしまう（レビュー指摘、実機で再現確認済み）。
+    var showWeightRawRecords by rememberSaveable { mutableStateOf(false) }
+    var historyPermissionGrantedForWeightScreen by rememberSaveable { mutableStateOf(false) }
+
+    if (showWeightRawRecords) {
+        WeightRawRecordsScreen(
+            healthConnectManager = healthConnectManager,
+            historyPermissionGranted = historyPermissionGrantedForWeightScreen,
+            onBack = { showWeightRawRecords = false },
+            modifier = modifier,
+        )
+    } else {
+        HealthConnectStatusScreen(
+            healthConnectManager = healthConnectManager,
+            onOpenWeightRawRecords = { historyPermissionGranted ->
+                historyPermissionGrantedForWeightScreen = historyPermissionGranted
+                showWeightRawRecords = true
+            },
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
 fun HealthConnectStatusScreen(
     healthConnectManager: HealthConnectManager,
+    onOpenWeightRawRecords: (historyPermissionGranted: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
     // nullは「未確認」（初回読み込み中、または直前の問い合わせが失敗した状態）を表す。
     var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
+    // nullは「未確認」。falseで初期化すると、LifecycleResumeEffectが走るまでの最初のフレームで
+    // 「この端末では対応していない」と誤表示されてしまう（レビュー指摘）。
+    var historyFeatureAvailable by remember { mutableStateOf<Boolean?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     // 権限リクエストのActivityから戻ると必ずON_RESUMEが来るため、状態更新は下のLifecycleResumeEffectに
@@ -69,8 +103,15 @@ fun HealthConnectStatusScreen(
     // Health Connectの権限は設定画面などアプリの外から変わり得るため、起動時だけでなく
     // 画面復帰のたびに問い合わせ直す（lessons.md 3.1）。問い合わせが失敗した場合はnull
     // （＝未確認）に戻し、取り消し直後の失敗で古い許可状態を表示し続けないようにする。
+    // isHistoryReadFeatureAvailableもHealth Connectのアップデートで変わり得るため同様に再取得する。
     LifecycleResumeEffect(Unit) {
         availability = healthConnectManager.availability
+        historyFeatureAvailable =
+            if (availability == HealthConnectAvailability.INSTALLED) {
+                healthConnectManager.isHistoryReadFeatureAvailable
+            } else {
+                null
+            }
         val job =
             if (availability == HealthConnectAvailability.INSTALLED) {
                 coroutineScope.launch {
@@ -90,13 +131,14 @@ fun HealthConnectStatusScreen(
 
         when (availability) {
             HealthConnectAvailability.INSTALLED -> {
+                val weightGranted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ)
                 Text(text = stringResource(id = R.string.health_connect_available))
                 Text(
                     text =
                         stringResource(
                             id =
                                 permissionStatusTextRes(
-                                    granted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ),
+                                    granted = weightGranted,
                                     grantedRes = R.string.health_connect_permission_granted,
                                     notGrantedRes = R.string.health_connect_permission_not_granted,
                                 ),
@@ -106,21 +148,35 @@ fun HealthConnectStatusScreen(
                     text =
                         stringResource(
                             id =
-                                permissionStatusTextRes(
+                                historyPermissionStatusTextRes(
+                                    featureAvailable = historyFeatureAvailable,
                                     granted = grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ),
-                                    grantedRes = R.string.health_connect_history_permission_granted,
-                                    notGrantedRes = R.string.health_connect_history_permission_not_granted,
                                 ),
                         ),
                 )
                 Button(
                     onClick = {
-                        requestPermissions.launch(
-                            setOf(HealthConnectPermissions.WEIGHT_READ, HealthConnectPermissions.HISTORY_READ),
-                        )
+                        // 端末のHealth Connectが履歴読み取りに対応していない場合、HISTORY_READを
+                        // リクエストセットから除外する。対応していない権限を含めて何度もリクエストしても
+                        // 「未許可」から抜け出せないままになるため（WBS 2.1）。
+                        val permissions =
+                            buildSet {
+                                add(HealthConnectPermissions.WEIGHT_READ)
+                                if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
+                            }
+                        requestPermissions.launch(permissions)
                     },
                 ) {
                     Text(text = stringResource(id = R.string.health_connect_request_permission))
+                }
+                if (weightGranted == true) {
+                    Button(
+                        onClick = {
+                            onOpenWeightRawRecords(grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ) == true)
+                        },
+                    ) {
+                        Text(text = stringResource(id = R.string.poc_weight_open_button))
+                    }
                 }
             }
             HealthConnectAvailability.UPDATE_REQUIRED ->
@@ -136,4 +192,15 @@ private fun permissionStatusTextRes(granted: Boolean?, grantedRes: Int, notGrant
         true -> grantedRes
         false -> notGrantedRes
         null -> R.string.health_connect_checking
+    }
+
+private fun historyPermissionStatusTextRes(featureAvailable: Boolean?, granted: Boolean?): Int =
+    when {
+        // featureAvailableが未確認のうちは「未確認」を優先する。falseだと確定してから初めて、
+        // ユーザー操作で解決できる「未許可」とは区別した固定の案内を出す。
+        featureAvailable == null -> R.string.health_connect_checking
+        !featureAvailable -> R.string.health_connect_history_not_supported
+        granted == true -> R.string.health_connect_history_permission_granted
+        granted == false -> R.string.health_connect_history_permission_not_granted
+        else -> R.string.health_connect_checking
     }

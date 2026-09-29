@@ -1,7 +1,7 @@
 # Health Data Viewer
 
 Health Connectに保存済みのデータを読み取り専用で可視化・検証するAndroidアプリ。
-現在は企画・PoC前の段階。
+現在はPoCフェーズ（WBS 2〜5、[docs/wbs.md](docs/wbs.md)参照）。
 
 -   要件・技術方針: [docs/requirements.md](docs/requirements.md)（第II部は「確定」と「PoCで確定する候補」を区別している）
 -   WBS・決定ログ: [docs/wbs.md](docs/wbs.md)。タスクの完了時に状態を更新し、方針を変えたら決定ログに追記する
@@ -29,6 +29,7 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   ソース別の**レコード件数**はAggregateでは取れない（全件走査が必要）
 -   Health Connectが動くのはAndroid 9（API 28）以上。SDKのminSdk 26に合わせない
 -   グラフの集計方法はデータ型・期間ごとに決め、画面にも明示する（例: 「月平均」）
+-   `ReadRecordsRequest(recordType = X::class, timeRangeFilter = ..., ...)`という通常の呼び方（公式サンプルと同じ形。内部的には`recordType`を除いた6引数のコンストラクタが呼ばれる）でRawレコードを読む場合、`deduplicateStrategy`は指定しなくても自動的に`DISABLED`（重複排除なし、生データ全件）になる。これは上記「変えてはいけない原則」（重複も含めてすべて表示）と整合するための挙動。`deduplicateStrategy`を実際に指定できるコンストラクタは`@RestrictTo(LIBRARY)`（ライブラリ内部専用）かつ`@ExperimentalDeduplicationApi`（要opt-in）が付いており、通常の呼び方では到達しない・する必要がない。**`@OptIn(ExperimentalDeduplicationApi::class)`でこの制限付きコンストラクタを直接呼ぶような変更はしないこと**（Rawレコードの重複が意図せず消える）（[docs/lessons.md](docs/lessons.md) 6.3）
 
 ## Gradle設定で誤解しやすい点
 
