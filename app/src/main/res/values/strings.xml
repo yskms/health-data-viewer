@@ -3,17 +3,6 @@
     <string name="health_connect_checking">Checking…</string>
     <string name="health_connect_not_installed">Health Connect is not available on this device.</string>
     <string name="health_connect_update_required">Health Connect needs to be updated.</string>
-    <string name="health_connect_available">Health Connect: available</string>
-    <string name="health_connect_permission_granted">Weight read permission: granted</string>
-    <string name="health_connect_permission_not_granted">Weight read permission: not granted</string>
-    <string name="health_connect_steps_permission_granted">Steps read permission: granted</string>
-    <string name="health_connect_steps_permission_not_granted">Steps read permission: not granted</string>
-    <string name="health_connect_heart_rate_permission_granted">Heart rate read permission: granted</string>
-    <string name="health_connect_heart_rate_permission_not_granted">Heart rate read permission: not granted</string>
-    <string name="health_connect_sleep_permission_granted">Sleep read permission: granted</string>
-    <string name="health_connect_sleep_permission_not_granted">Sleep read permission: not granted</string>
-    <string name="health_connect_history_permission_granted">History read permission: granted</string>
-    <string name="health_connect_history_permission_not_granted">History read permission: not granted</string>
     <string name="health_connect_history_not_supported">This device\'s Health Connect does not support reading history data older than 30 days.</string>
     <string name="health_connect_request_permission">Request permission</string>
     <!-- WBS 6.1: Home dashboard (period tabs + metric cards). -->

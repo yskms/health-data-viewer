@@ -193,6 +193,13 @@ fun HomeScreen(
                     )
                 }
 
+                // 旧HealthConnectStatusScreenが表示していた「この端末は履歴読み取りに対応していない」
+                // という案内（コードレビュー指摘: HomeScreen化で表示先がなくなっていた）。
+                // historyFeatureAvailable == falseと確定した場合のみ表示する（nullは未確認）。
+                if (historyFeatureAvailable == false) {
+                    Text(text = stringResource(id = R.string.health_connect_history_not_supported), style = MaterialTheme.typography.bodySmall)
+                }
+
                 SingleChoiceSegmentedButtonRow {
                     DashboardPeriod.entries.forEachIndexed { index, entry ->
                         SegmentedButton(
@@ -351,6 +358,15 @@ private fun WeightCard(granted: Boolean?, load: WeightRecordsResult?, onClick: (
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
+                }
+                // Weightは期間タブに依存せず常に全体から最新値を探すため、期間タブ基準の
+                // 共有historyLimited通知（DashboardPeriod.isHistoryLimited）では検知できない
+                // （Today/Weekタブでは常にfalseになる）。findLatestWeightRecords()自身の結果
+                // （直近30日へのフォールバックが実際に発生したか）を見て、このカード単体で通知する
+                // （コードレビュー指摘: 履歴読み取り権限がない状態で最新の記録が30日より前しかない場合、
+                // 説明なしに「データがありません」とだけ表示されてしまっていた）。
+                if (load.historyLimited) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
