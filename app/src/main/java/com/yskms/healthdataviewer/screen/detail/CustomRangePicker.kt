@@ -7,6 +7,7 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
@@ -31,6 +32,17 @@ import java.time.format.FormatStyle
 // 呼び出し元に渡す前にここで入れ替える。4画面（Weight/Steps/HeartRate/Sleep）で共有する。
 private enum class CustomRangeField { START, END }
 
+// 今日より後の日付を選べないようにする（レビュー指摘）。開始日に未来を選ぶと、終了側がnowで
+// 頭打ちになる一方で開始側は選んだ未来日のままになり、start > endの範囲になってクラッシュし得る
+// （DetailGraphRange.Emptyでも検出しているが、そもそも選べなくするほうが自然なUX）。
+private val notAfterTodaySelectableDates =
+    object : SelectableDates {
+        override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+            val pickedDate = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+            return !pickedDate.isAfter(LocalDate.now())
+        }
+    }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CustomRangePicker(range: Pair<LocalDate, LocalDate>?, onRangeChange: (Pair<LocalDate, LocalDate>) -> Unit) {
@@ -54,6 +66,7 @@ fun CustomRangePicker(range: Pair<LocalDate, LocalDate>?, onRangeChange: (Pair<L
         val state =
             rememberDatePickerState(
                 initialSelectedDateMillis = initialDate.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli(),
+                selectableDates = notAfterTodaySelectableDates,
             )
         DatePickerDialog(
             onDismissRequest = { pickerTarget = null },

@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -46,15 +48,16 @@ import java.time.ZoneId
 
 // WBS 6.2: Stepsの詳細画面グラフを新規実装する（要件§27「Stepsのグラフ集計ルール自体が未定」の決着）。
 // 既存のpoc/StepsScreen（PoC 2、Raw/Aggregate比較専用）とは別物で、そちらはどこからも遷移しない
-// ままにする（D-033と同じ扱い）。StepsはMetricDensity.HIGH（HeartRateと同じ理由・同じ閾値。
-// Stepsのbucket集計は今回が初実装で所要時間が未実測のため保守的な閾値を暫定適用する、要検証）。
+// ままにする（D-033と同じ扱い）。StepsはMetricDensity.HIGH（HeartRateと同じ理由・同じ閾値）。
 // COUNT_TOTALは合計1系列のみ（SleepAggregateChartと同じ形）で、WEEK/MONTH bucketでは決定事項5により
-// 「1日あたり平均」に正規化して表示する。
+// 「1日あたり平均」に正規化して表示する。実機ではHeartRateと異なりどの期間も高速（3ヶ月221ms・
+// 6ヶ月335ms・1年685ms・全期間5.0秒）なことを確認済み（lessons.md 6.12）。
 private val STEPS_DENSITY = MetricDensity.HIGH
 
-// oldestStartはALLの最初のbucketの日数按分クランプに使う（SleepLoad.oldestStartと同じ理由、
-// SleepDetailScreen.perDayDuration()参照）。ALL以外のperiodではnull。
-private data class StepsLoad(val result: StepsAggregatesResult, val granularity: BucketGranularity, val oldestStart: LocalDateTime?)
+// denominatorFloorはbucketの日数按分クランプに使う（resolveDetailGraphRange()が解決する。
+// SleepLoad.denominatorFloorと同じ理由、SleepDetailScreen.perDayDuration()参照）。クランプ不要な
+// 場合はnull。
+private data class StepsLoad(val result: StepsAggregatesResult, val granularity: BucketGranularity, val denominatorFloor: LocalDateTime?)
 
 @Composable
 fun StepsDetailScreen(
@@ -92,7 +95,7 @@ fun StepsDetailScreen(
                                     StepsLoad(
                                         result = StepsAggregatesResult.Success(buckets = emptyList(), historyLimited = !historyPermissionGranted),
                                         granularity = BucketGranularity.MONTH,
-                                        oldestStart = null,
+                                        denominatorFloor = null,
                                     ),
                             )
                         return@LaunchedEffect
@@ -109,10 +112,22 @@ fun StepsDetailScreen(
                 density = STEPS_DENSITY,
                 now = LocalDateTime.now(),
                 oldestStart = oldestStart,
+                historyPermissionGranted = historyPermissionGranted,
                 customRange = customRange,
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
+            DetailGraphRange.Empty ->
+                aggregatesLoad =
+                    PeriodTaggedResult(
+                        period = period,
+                        result =
+                            StepsLoad(
+                                result = StepsAggregatesResult.Success(buckets = emptyList(), historyLimited = false),
+                                granularity = BucketGranularity.DAY,
+                                denominatorFloor = null,
+                            ),
+                    )
             is DetailGraphRange.Resolved -> {
                 aggregatesLoad = PeriodTaggedResult(period = period, result = null)
                 val result =
@@ -124,14 +139,14 @@ fun StepsDetailScreen(
                 aggregatesLoad =
                     PeriodTaggedResult(
                         period = period,
-                        result = StepsLoad(result = result, granularity = range.granularity, oldestStart = oldestStart),
+                        result = StepsLoad(result = result, granularity = range.granularity, denominatorFloor = range.denominatorFloor),
                     )
             }
         }
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
+        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         TextButton(onClick = onBack) {
@@ -149,10 +164,13 @@ fun StepsDetailScreen(
         val currentLoad = aggregatesLoad
         val currentStepsLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
         when (val currentResult = currentStepsLoad?.result) {
-            null -> {
-                CircularProgressIndicator()
-                Text(text = stringResource(id = R.string.detail_loading))
-            }
+            null ->
+                if (period == GraphPeriod.CUSTOM && customRange == null) {
+                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+                } else {
+                    CircularProgressIndicator()
+                    Text(text = stringResource(id = R.string.detail_loading))
+                }
             StepsAggregatesResult.Failure -> {
                 Text(text = stringResource(id = R.string.detail_error))
                 Button(onClick = { retryKey++ }) {
@@ -167,7 +185,7 @@ fun StepsDetailScreen(
                 if (currentResult.historyLimited) {
                     Text(text = stringResource(id = R.string.detail_history_limited_notice))
                 }
-                StepsAggregateChart(buckets = currentResult.buckets, granularity = granularity, oldestStart = currentStepsLoad.oldestStart)
+                StepsAggregateChart(buckets = currentResult.buckets, granularity = granularity, denominatorFloor = currentStepsLoad.denominatorFloor)
             }
         }
     }
@@ -177,27 +195,27 @@ private data class StepsChartPoint(val x: Long, val steps: Double)
 
 // COUNT_TOTALは合計1系列のみ（SleepAggregateChartと同じ形）。WEEK/MONTH bucketでは決定事項5により
 // 実カバー日数で割った「1日あたり平均歩数」に正規化する（daysCoveredBy()、SumMetricNormalization.kt）。
-// oldestStartによる最初のbucketのクランプはSleepDetailScreen.perDayDuration()と同じ理由
-// （ALLが暦月境界に揃えるためのstartOfMonth()切り捨てで、実際の最古レコードより前の日数まで
+// denominatorFloorによる最初のbucketのクランプはSleepDetailScreen.perDayDuration()と同じ理由
+// （ALL・Customが暦月境界に揃えるための切り捨てで、実際にデータがあり得る開始日より前の日数まで
 // 分母に含めてしまう問題への対処。レビューで発見）。
 @Composable
 private fun StepsAggregateChart(
     buckets: List<StepsAggregateBucket>,
     granularity: BucketGranularity,
-    oldestStart: LocalDateTime?,
+    denominatorFloor: LocalDateTime?,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalLocale.current.platformLocale
     val modelProducer = remember { CartesianChartModelProducer() }
     val points =
-        remember(buckets, granularity, oldestStart) {
+        remember(buckets, granularity, denominatorFloor) {
             buckets.mapNotNull { bucket ->
                 bucket.total?.let { total ->
                     val value =
                         if (granularity == BucketGranularity.DAY) {
                             total.toDouble()
                         } else {
-                            val effectiveStart = oldestStart?.let { maxOf(bucket.periodStart, it) } ?: bucket.periodStart
+                            val effectiveStart = denominatorFloor?.let { maxOf(bucket.periodStart, it) } ?: bucket.periodStart
                             total.toDouble() / daysCoveredBy(effectiveStart, bucket.periodEnd)
                         }
                     StepsChartPoint(x = granularity.xValue(bucket.periodStart), steps = value)

@@ -56,9 +56,9 @@ import java.util.Locale
 // 1日あたり平均にする（記録開始月・当月のような日数不足月が不自然に低く見える問題を解消する）。
 private val SLEEP_DENSITY = MetricDensity.LOW
 
-// oldestStartは、ALLの最初のbucketをdaysCoveredBy()で日数按分する際の下限クランプに使う
-// （perDayDuration()参照）。ALL以外のperiodではnull（クランプ不要）。
-private data class SleepLoad(val result: SleepAggregatesResult, val granularity: BucketGranularity, val oldestStart: LocalDateTime?)
+// denominatorFloorはbucketの日数按分クランプに使う（resolveDetailGraphRange()が解決する。
+// perDayDuration()参照）。クランプ不要な場合はnull。
+private data class SleepLoad(val result: SleepAggregatesResult, val granularity: BucketGranularity, val denominatorFloor: LocalDateTime?)
 
 @Composable
 fun SleepDetailScreen(
@@ -96,7 +96,7 @@ fun SleepDetailScreen(
                                     SleepLoad(
                                         result = SleepAggregatesResult.Success(buckets = emptyList(), historyLimited = !historyPermissionGranted),
                                         granularity = BucketGranularity.MONTH,
-                                        oldestStart = null,
+                                        denominatorFloor = null,
                                     ),
                             )
                         return@LaunchedEffect
@@ -113,10 +113,22 @@ fun SleepDetailScreen(
                 density = SLEEP_DENSITY,
                 now = LocalDateTime.now(),
                 oldestStart = oldestStart,
+                historyPermissionGranted = historyPermissionGranted,
                 customRange = customRange,
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
+            DetailGraphRange.Empty ->
+                aggregatesLoad =
+                    PeriodTaggedResult(
+                        period = period,
+                        result =
+                            SleepLoad(
+                                result = SleepAggregatesResult.Success(buckets = emptyList(), historyLimited = false),
+                                granularity = BucketGranularity.DAY,
+                                denominatorFloor = null,
+                            ),
+                    )
             is DetailGraphRange.Resolved -> {
                 aggregatesLoad = PeriodTaggedResult(period = period, result = null)
                 val result =
@@ -128,7 +140,7 @@ fun SleepDetailScreen(
                 aggregatesLoad =
                     PeriodTaggedResult(
                         period = period,
-                        result = SleepLoad(result = result, granularity = range.granularity, oldestStart = oldestStart),
+                        result = SleepLoad(result = result, granularity = range.granularity, denominatorFloor = range.denominatorFloor),
                     )
             }
         }
@@ -153,10 +165,13 @@ fun SleepDetailScreen(
         val currentLoad = aggregatesLoad
         val currentSleepLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
         when (val currentResult = currentSleepLoad?.result) {
-            null -> {
-                CircularProgressIndicator()
-                Text(text = stringResource(id = R.string.detail_loading))
-            }
+            null ->
+                if (period == GraphPeriod.CUSTOM && customRange == null) {
+                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+                } else {
+                    CircularProgressIndicator()
+                    Text(text = stringResource(id = R.string.detail_loading))
+                }
             SleepAggregatesResult.Failure -> {
                 Text(text = stringResource(id = R.string.detail_error))
                 Button(onClick = { retryKey++ }) {
@@ -171,10 +186,10 @@ fun SleepDetailScreen(
                 if (currentResult.historyLimited) {
                     Text(text = stringResource(id = R.string.detail_history_limited_notice))
                 }
-                SleepAggregateChart(buckets = currentResult.buckets, granularity = granularity, oldestStart = currentSleepLoad.oldestStart)
+                SleepAggregateChart(buckets = currentResult.buckets, granularity = granularity, denominatorFloor = currentSleepLoad.denominatorFloor)
                 // WBS 5.1: 日付境界をまたぐSessionがbucketにどう配分されるかを、グラフの折れ線だけでなく
                 // 数値でも確認できるようにする（既存PoCから引き続き。Vicoのマーカーは長押し操作が必要）。
-                SleepBucketList(buckets = currentResult.buckets, granularity = granularity, oldestStart = currentSleepLoad.oldestStart)
+                SleepBucketList(buckets = currentResult.buckets, granularity = granularity, denominatorFloor = currentSleepLoad.denominatorFloor)
             }
         }
     }
@@ -190,29 +205,31 @@ private fun formatDuration(duration: Duration): String {
 }
 
 // WEEK/MONTH bucketでは決定事項5により実カバー日数で割った1日あたり平均に正規化する
-// （daysCoveredBy()、SumMetricNormalization.kt）。分未満は切り捨てる（表示はh:mm単位のため）。
+// （daysCoveredBy()、SumMetricNormalization.kt。小数日数を使うため進行中の最新bucketでも
+// 端数が切り捨てられず正しく按分される。レビュー指摘、lessons.md 6.12続報）。
 //
-// oldestStart: ALLの最初のbucketは、暦月境界に揃えるためのstartOfMonth()切り捨て（lessons.md 7.5）
-// により、実際の最古レコードより前の日数まで含めた「その月の全日数」がperiodStart〜periodEndになる
-// （例: 最古レコードが5/27でもbucketは5/1〜6/1の31日間になる）。この31日をそのまま分母にすると、
-// 実際にはレコードが存在し得ない5/1〜5/26分も「記録なし」として平均に薄めて含めてしまい、
-// 「日数不足月が不自然に低く見える」という決定事項5がそもそも解消したかった問題を、月初への
-// 切り捨てが別の形で再現してしまう（レビューで発見）。oldestStartが分かっている場合は、
-// bucket開始時刻をmaxOf(bucket.periodStart, oldestStart)にクランプしてから日数を数え、
-// 実際にレコードが存在し得た範囲だけを分母にする。ALL以外のperiod・oldestStart不明時はnullのまま
-// 従来通りbucket.periodStartを使う（このクランプは最初のbucketのみに影響し、以降のbucketは
-// 通常periodStart >= oldestStartのため実質的に無効化される）。
+// denominatorFloor: ALL・Customが暦月境界に揃えるための切り捨て（lessons.md 7.5）により、実際に
+// データがあり得る開始日より前の日数まで含めた「bucketの全日数」がperiodStart〜periodEndになる
+// 場合がある（例: 最古レコードが5/27でもbucketは5/1〜6/1の31日間になる）。この31日をそのまま
+// 分母にすると、実際にはレコードが存在し得ない5/1〜5/26分も「記録なし」として平均に薄めて
+// 含めてしまい、「日数不足月が不自然に低く見える」という決定事項5がそもそも解消したかった問題を、
+// 切り捨てが別の形で再現してしまう（レビューで発見）。denominatorFloorが分かっている場合は、
+// bucket開始時刻をmaxOf(bucket.periodStart, denominatorFloor)にクランプしてから日数を数え、
+// 実際にレコードが存在し得た範囲だけを分母にする（resolveDetailGraphRange()が解決する。
+// クランプ不要な場合はnullで、このとき従来通りbucket.periodStartを使う。このクランプは最初の
+// bucketのみに影響し、以降のbucketは通常periodStart >= denominatorFloorのため実質的に無効化される）。
 private fun perDayDuration(
     bucket: SleepAggregateBucket,
     granularity: BucketGranularity,
     duration: Duration,
-    oldestStart: LocalDateTime?,
+    denominatorFloor: LocalDateTime?,
 ): Duration =
     if (granularity == BucketGranularity.DAY) {
         duration
     } else {
-        val effectiveStart = oldestStart?.let { maxOf(bucket.periodStart, it) } ?: bucket.periodStart
-        duration.dividedBy(daysCoveredBy(effectiveStart, bucket.periodEnd))
+        val effectiveStart = denominatorFloor?.let { maxOf(bucket.periodStart, it) } ?: bucket.periodStart
+        val days = daysCoveredBy(effectiveStart, bucket.periodEnd)
+        Duration.ofMillis((duration.toMillis() / days).toLong())
     }
 
 private data class SleepChartPoint(val x: Long, val hours: Double)
@@ -223,16 +240,16 @@ private data class SleepChartPoint(val x: Long, val hours: Double)
 private fun SleepAggregateChart(
     buckets: List<SleepAggregateBucket>,
     granularity: BucketGranularity,
-    oldestStart: LocalDateTime?,
+    denominatorFloor: LocalDateTime?,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalLocale.current.platformLocale
     val modelProducer = remember { CartesianChartModelProducer() }
     val points =
-        remember(buckets, granularity, oldestStart) {
+        remember(buckets, granularity, denominatorFloor) {
             buckets.mapNotNull { bucket ->
                 bucket.totalSleepDuration?.let { duration ->
-                    val normalized = perDayDuration(bucket, granularity, duration, oldestStart)
+                    val normalized = perDayDuration(bucket, granularity, duration, denominatorFloor)
                     SleepChartPoint(x = granularity.xValue(bucket.periodStart), hours = normalized.toMinutes() / 60.0)
                 }
             }
@@ -278,16 +295,16 @@ private fun SleepAggregateChart(
 private fun SleepBucketList(
     buckets: List<SleepAggregateBucket>,
     granularity: BucketGranularity,
-    oldestStart: LocalDateTime?,
+    denominatorFloor: LocalDateTime?,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalLocale.current.platformLocale
     val rows =
-        remember(buckets, granularity, oldestStart) {
+        remember(buckets, granularity, denominatorFloor) {
             buckets
                 .mapNotNull { bucket ->
                     bucket.totalSleepDuration?.let { duration ->
-                        granularity.xValue(bucket.periodStart) to perDayDuration(bucket, granularity, duration, oldestStart)
+                        granularity.xValue(bucket.periodStart) to perDayDuration(bucket, granularity, duration, denominatorFloor)
                     }
                 }.sortedByDescending { it.first }
         }

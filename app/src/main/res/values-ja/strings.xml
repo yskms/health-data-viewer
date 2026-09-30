@@ -130,6 +130,7 @@
     <string name="detail_granularity_weekly">週</string>
     <string name="detail_granularity_monthly">月</string>
     <string name="detail_custom_not_selected">未選択</string>
+    <string name="detail_custom_pick_prompt">開始日・終了日を選んでください。</string>
     <string name="detail_custom_dialog_confirm">OK</string>
     <string name="detail_custom_dialog_dismiss">キャンセル</string>
     <string name="detail_weight_title">体重</string>

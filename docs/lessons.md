@@ -276,6 +276,20 @@
 -   **根拠**: 実機確認（Pixel 11、実データ、Sleep ALLの最初のbucketの表示値を修正前後で比較、2026-10-01）
 -   **確認日**: 2026-10-01
 
+### 6.14 「1日あたり平均」の日数計算に`ChronoUnit.DAYS.between()`（整数日数）を使うと、進行中の最新bucketで端数が切り捨てられ、値が実際より大きく出る
+
+-   **知見**: WBS 6.2のコードレビューで指摘。`daysCoveredBy()`が`ChronoUnit.DAYS.between(periodStart, periodEnd)`で日数を整数に丸めていたため、bucketの実際のカバー期間に端数（例: 1.99日）がある場合、切り捨てられて1日として扱われていた。これが顕著に起きるのは、問い合わせ終了時刻（`now`）が任意の時刻（日の途中）であるために生じる、進行中の最新bucket（WEEK bucketなら「今週分」、MONTH bucketなら「今月分」）。端数が切り捨てられるぶん分母が実際より小さくなり、値が最大で約2倍近くまで高く出る
+-   **Viewerへの適用**: `daysCoveredBy()`を`Duration.between().toMillis()`ベースの小数日数（`Double`）に変更した。Sleepの`perDayDuration()`はDurationを小数日数で割った後にミリ秒単位で`Duration`へ戻す。Stepsは`Double / Double`のままで変更不要
+-   **根拠**: コードレビュー指摘を受けたコード解析（`ChronoUnit.DAYS.between()`の切り捨て仕様を確認し、bucket境界が`now`（時刻付き）に依存する設計と組み合わせた際の影響を検証、2026-10-01）
+-   **確認日**: 2026-10-01
+
+### 6.15 Customの開始日・終了日から機械的に決めた粒度がMONTHになる場合、開始日を暦月初へ切り捨てないと、グラフの月ラベルと実際のbucket境界がずれる。ALLで履歴読み取り権限がない場合も、フォールバック先のbucket粒度を問い合わせ範囲に合わせて再計算しないと同じズレが起きる
+
+-   **知見**: WBS 6.2のコードレビューで指摘。(1) Customで1年を超える範囲を選ぶとMONTH bucketになるが、開始日を暦日切り捨て（`startOfDay`）にしか揃えていなかったため、bucketが「10/15〜11/15」のような月の途中区切りになり、x軸・一覧のラベル（`YearMonth`から生成）が示す「2023/10」等と実際の集計範囲が食い違っていた。(2) ALLで履歴読み取り権限がない場合、`oldestStart`から素直に月初へ切り捨てた開始日は直近30日より古くなりやすく、`HealthConnectManager`内部のSecurityException→直近30日フォールバックに入るが、フォールバック先でも呼び出し時に固定したbucket粒度（このケースではMONTH）がそのまま使われ続けるため、暦月に整列しない範囲を月bucketとして問い合わせてしまっていた
+-   **Viewerへの適用**: (1) `resolveDetailGraphRange()`のCUSTOM分岐で、暦日切り捨てだけの開始日から仮のspanDaysを計算して粒度を先に決め、粒度がMONTHの場合のみ開始日を暦月初へ切り捨て直す2段階の解決にした。(2) ALL分岐に`historyPermissionGranted`を渡し、falseの場合は`oldestStart`の月初切り捨てと直近30日floorの遅い方（`maxOf`）を開始日に使うことで、`HealthConnectManager`内部のフォールバックに入る前に正しい（短い）spanDaysで粒度を決め直せるようにした。実機で、履歴読み取り権限を取り消した状態のStepsのALLが、月bucketではなく日bucketで正しく表示されることを確認した。権限が画面表示中に取り消される稀なケース（`historyPermissionGranted`のスナップショットが古いまま）は、`HealthConnectManager`側のフォールバックに引き続き委ねており、その経路では同じズレが再発し得る既知の残課題として残る
+-   **根拠**: 実機確認（Pixel 11、実データ。Customで2023/10/15〜2026/10/01（3年弱）を選び月bucket・暦月ラベルが一致することを確認。`pm revoke android.permission.health.READ_HEALTH_DATA_HISTORY`でStepsのALLが日bucketにフォールバックすることを確認、2026-10-01）
+-   **確認日**: 2026-10-01
+
 ------------------------------------------------------------------------
 
 ## 7. グラフ描画（Vico、WBS 2.4）
@@ -309,6 +323,7 @@
 -   **確認日**: 2026-09-30
 -   **既知の制約（PoC 3レビュー指摘、未対応）**: 「取得失敗」の場合の開始無制限フォールバックは、`findOldestWeightRecordTime()`/`findOldestHeartRateRecordTime()`自体が失敗した（＝レアケース）場合にのみ通る経路だが、通った場合は実データがない期間も含めた大量bucketをAggregate APIに要求することになる。Heart Rateは集計負荷が大きい（6.8参照）ため、Weightより影響が重くなり得る。`HeartRateGraphScreen`もWeightと同じ実装のまま維持しており、この経路自体の対策（例: 開始無制限ではなく妥当な上限で打ち切る）は今回のセッションでは行っていない
 -   **既知の制約（PoC 3レビュー指摘、未対応・極めて低確率）**: `HeartRatePeriod.TODAY`/`StepsPeriod.TODAY`が使う`TimeRangeFilter.between(startOfDay, now)`は、`now`を取得した瞬間がちょうど0時0分0秒0ミリ秒と完全に一致した場合、開始と終了が同一時刻になり`IllegalArgumentException`（本項の(2)と同じ制約）でクラッシュし得る。発生確率は極めて低く、Stepsから引き継いだ既存の設計のため対策は行っていない
+-   **WBS 6.2で発見した同じ制約の別パターン（クラッシュ、修正済み）**: Custom期間で開始日に今日より後（未来）の日付を選ぶと、終了日は`minOf(選択日+1日, now)`で`now`に頭打ちになる一方、開始日は選んだ未来の日付のままになり、開始が終了より後になる。この状態で`TimeRangeFilter.between()`を組み立てると本項(2)と同じ`IllegalArgumentException`でクラッシュする。`DatePickerDialog`に`selectableDates`を指定せず、通常の操作（未来日を選ぶだけ）で誰でも踏める点が(2)と異なる（コードレビュー指摘）。`DatePickerDialog`に今日より後を選べない`SelectableDates`制約を追加し、あわせて`resolveDetailGraphRange()`側でも開始 >= 終了を検出したら`TimeRangeFilter`を組み立てず空の結果を返す（`DetailGraphRange.Empty`）防御を二重に入れた
 
 ### 7.5 `aggregateGroupByPeriod()`のbucket境界は、渡した開始時刻からの機械的な等間隔区切りで、暦日・暦月に自動整列しない
 

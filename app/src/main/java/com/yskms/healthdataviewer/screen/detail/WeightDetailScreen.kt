@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -110,10 +112,17 @@ fun WeightDetailScreen(
                 density = WEIGHT_DENSITY,
                 now = LocalDateTime.now(),
                 oldestStart = oldestStart,
+                historyPermissionGranted = historyPermissionGranted,
                 customRange = customRange,
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
+            DetailGraphRange.Empty ->
+                aggregatesLoad =
+                    PeriodTaggedResult(
+                        period = period,
+                        result = WeightLoad(result = WeightAggregatesResult.Success(buckets = emptyList(), historyLimited = false), granularity = BucketGranularity.DAY),
+                    )
             is DetailGraphRange.Resolved -> {
                 aggregatesLoad = PeriodTaggedResult(period = period, result = null)
                 val result =
@@ -128,7 +137,7 @@ fun WeightDetailScreen(
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
+        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         TextButton(onClick = onBack) {
@@ -146,10 +155,13 @@ fun WeightDetailScreen(
         val currentLoad = aggregatesLoad
         val currentWeightLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
         when (val currentResult = currentWeightLoad?.result) {
-            null -> {
-                CircularProgressIndicator()
-                Text(text = stringResource(id = R.string.detail_loading))
-            }
+            null ->
+                if (period == GraphPeriod.CUSTOM && customRange == null) {
+                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+                } else {
+                    CircularProgressIndicator()
+                    Text(text = stringResource(id = R.string.detail_loading))
+                }
             WeightAggregatesResult.Failure -> {
                 Text(text = stringResource(id = R.string.detail_error))
                 Button(onClick = { retryKey++ }) {

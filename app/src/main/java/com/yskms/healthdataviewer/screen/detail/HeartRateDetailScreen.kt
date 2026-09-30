@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -46,10 +48,13 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 
 // WBS 6.2: poc/HeartRateGraphScreen（PoC 3）を置き換える正式なDetail画面。WeightDetailScreenと同じ
-// 共通基盤を使う。HeartRateはMetricDensity.HIGH（1W/1Mは日bucket、3M/6M/1Yは週bucket、ALLは月bucket。
-// 1Y日bucketが実機で遅かったlessons.md 6.8への対策、要検証）。経過時間の実測表示（PoCにあった
-// 「集計にかかった時間」テキスト）は正式画面には持ち込まない（決定事項6。粒度チューニングの計測は
-// 実装中にLogcatで確認する）。
+// 共通基盤を使う。HeartRateはMetricDensity.HIGH（1W/1Mは日bucket、3M/6M/1Yは週bucket、ALLは月bucket）。
+// 経過時間の実測表示（PoCにあった「集計にかかった時間」テキスト）は正式画面には持ち込まない
+// （決定事項6。粒度チューニングの計測は実装中にLogcatで確認した）。**週bucketへの粗粒度化は、
+// このHeart Rateデータ（バックグラウンド継続記録）の所要時間をほとんど改善しなかった**
+// （週bucketでも6ヶ月30秒・1年57秒、全期間96秒。lessons.md 6.12）。所要時間の主要因はbucket数では
+// なく問い合わせ範囲の実データ量であり、bucket粒度調整だけでは解消できない既知の制約として
+// 受け入れている（読み込み中はメインスレッドをブロックせず、クラッシュもしない）。
 private val HEART_RATE_DENSITY = MetricDensity.HIGH
 
 private data class HeartRateLoad(val result: HeartRateAggregatesResult, val granularity: BucketGranularity)
@@ -110,10 +115,21 @@ fun HeartRateDetailScreen(
                 density = HEART_RATE_DENSITY,
                 now = LocalDateTime.now(),
                 oldestStart = oldestStart,
+                historyPermissionGranted = historyPermissionGranted,
                 customRange = customRange,
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
+            DetailGraphRange.Empty ->
+                aggregatesLoad =
+                    PeriodTaggedResult(
+                        period = period,
+                        result =
+                            HeartRateLoad(
+                                result = HeartRateAggregatesResult.Success(buckets = emptyList(), historyLimited = false),
+                                granularity = BucketGranularity.DAY,
+                            ),
+                    )
             is DetailGraphRange.Resolved -> {
                 aggregatesLoad = PeriodTaggedResult(period = period, result = null)
                 val result =
@@ -128,7 +144,7 @@ fun HeartRateDetailScreen(
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
+        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         TextButton(onClick = onBack) {
@@ -146,10 +162,13 @@ fun HeartRateDetailScreen(
         val currentLoad = aggregatesLoad
         val currentHeartRateLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
         when (val currentResult = currentHeartRateLoad?.result) {
-            null -> {
-                CircularProgressIndicator()
-                Text(text = stringResource(id = R.string.detail_loading))
-            }
+            null ->
+                if (period == GraphPeriod.CUSTOM && customRange == null) {
+                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+                } else {
+                    CircularProgressIndicator()
+                    Text(text = stringResource(id = R.string.detail_loading))
+                }
             HeartRateAggregatesResult.Failure -> {
                 Text(text = stringResource(id = R.string.detail_error))
                 Button(onClick = { retryKey++ }) {

@@ -134,6 +134,7 @@
     <string name="detail_granularity_weekly">weekly</string>
     <string name="detail_granularity_monthly">monthly</string>
     <string name="detail_custom_not_selected">Not selected</string>
+    <string name="detail_custom_pick_prompt">Choose a start and end date.</string>
     <string name="detail_custom_dialog_confirm">OK</string>
     <string name="detail_custom_dialog_dismiss">Cancel</string>
     <string name="detail_weight_title">Weight</string>
