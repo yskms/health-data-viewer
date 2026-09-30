@@ -94,7 +94,7 @@ private fun DashboardPeriod.startOfPeriod(now: Instant): Instant {
 // （実機で発見。1日あたり平均が不自然に小さい値になっていた）。
 //
 // クランプ後の開始時刻は、nowと同じ時刻のまま30日前（日の途中）にするのではなく、暦日に揃えた
-// 翌日0時（切り上げ）にする（コードレビュー指摘）。日の途中を境界にすると、Sleep平均の分母
+// 翌日0時（切り上げ）にする（レビュー指摘）。日の途中を境界にすると、Sleep平均の分母
 // （暦日数、両端含む）にはその境界日を1日分含めてしまう一方、実際のクエリ範囲からはその日の
 // 朝の睡眠（境界時刻より前）が漏れてしまい、分子と分母がわずかにずれて平均が実際より小さくなる。
 // 安全側に倒し切り上げる考え方はrecentRangeFilterLocal()と同じ（lessons.md 6.1）。
@@ -116,9 +116,10 @@ private fun DashboardPeriod.actualStart(now: Instant, historyPermissionGranted: 
 private fun DashboardPeriod.timeRangeFilter(now: Instant, historyPermissionGranted: Boolean): TimeRangeFilter =
     TimeRangeFilter.between(actualStart(now, historyPermissionGranted), now)
 
+// actualStart()自身の判定から導く（クランプが実際に発生したかどうかの基準を1箇所にまとめ、
+// 別の基準（例: 「現在時刻の30日前」を境界にする単純な比較）で再実装して食い違うのを防ぐ）。
 private fun DashboardPeriod.isHistoryLimited(now: Instant, historyPermissionGranted: Boolean): Boolean =
-    !historyPermissionGranted &&
-        startOfPeriod(now).isBefore(now.minus(HealthConnectManager.HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS))
+    actualStart(now, historyPermissionGranted) != startOfPeriod(now)
 
 private data class StepsCardLoad(val period: DashboardPeriod, val result: StepsAggregateTotalResult?)
 
@@ -210,7 +211,7 @@ fun HomeScreen(
                 }
 
                 // 旧HealthConnectStatusScreenが表示していた「この端末は履歴読み取りに対応していない」
-                // という案内（コードレビュー指摘: HomeScreen化で表示先がなくなっていた）。
+                // という案内（レビュー指摘: HomeScreen化で表示先がなくなっていた）。
                 // historyFeatureAvailable == falseと確定した場合のみ表示する（nullは未確認）。
                 if (historyFeatureAvailable == false) {
                     Text(text = stringResource(id = R.string.health_connect_history_not_supported), style = MaterialTheme.typography.bodySmall)
@@ -230,7 +231,7 @@ fun HomeScreen(
 
                 // 端末が履歴読み取りに対応していない場合（historyFeatureAvailable == false）は、
                 // 上でその案内を既に出しているため、ここでは重ねて表示しない（Weightカードと同じ理由。
-                // コードレビュー指摘: この条件が抜けていたため、履歴非対応の端末では「対応していません」と
+                // レビュー指摘: この条件が抜けていたため、履歴非対応の端末では「対応していません」と
                 // 「権限がないため直近30日のみ表示」が並んで出て、権限を許可すれば解決するように誤読され得た）。
                 val historyLimited = selectedPeriod.isHistoryLimited(Instant.now(), historyPermissionGranted)
                 if (historyLimited && historyFeatureAvailable != false) {
@@ -287,7 +288,7 @@ fun HomeScreen(
                                         // で数える。睡眠は明け方に集中するため、例えば週の途中（水曜10時）
                                         // に見ると、経過時間の切り捨て（2日）では分子（月・火・水の約3晩分）
                                         // に対して分母が小さすぎ、平均が実際より大きく出てしまう
-                                        // （コードレビュー指摘、水曜朝で約1.5倍、火曜朝で約2倍）。
+                                        // （レビュー指摘、水曜朝で約1.5倍、火曜朝で約2倍）。
                                         // 「今日」の日付も1日として分母に数えることで、今日の朝に含まれる
                                         // 前夜分の睡眠と整合させる。
                                         val zone = ZoneId.systemDefault()
@@ -351,7 +352,7 @@ private fun MetricCardContainer(
         }
         content()
     }
-    // タップ可能かどうかでCardのオーバーロードを分ける（コードレビュー指摘）。
+    // タップ可能かどうかでCardのオーバーロードを分ける（レビュー指摘）。
     // Modifier.clickable()だとrippleがCardの角丸で切り取られず、Roleのセマンティクスも付かない。
     // Card(onClick = ...)はMaterial3標準のインタラクティブ扱いで両方解決する。
     if (onClick != null) {
@@ -414,7 +415,7 @@ private fun WeightCard(
                 // Weightは期間タブに依存せず常に全体から最新値を探すため、期間タブ基準の
                 // 共有historyLimited通知（DashboardPeriod.isHistoryLimited）では検知できない
                 // （Today/Weekタブでは常にfalseになる）。findLatestWeightRecords()自身の結果の
-                // historyLimitedを見てこのカード単体で通知する（コードレビュー指摘: 履歴読み取り権限が
+                // historyLimitedを見てこのカード単体で通知する（レビュー指摘: 履歴読み取り権限が
                 // ない状態で最新の記録が30日より前しかない場合、説明なしに「データがありません」とだけ
                 // 表示されてしまっていた）。
                 //
@@ -425,7 +426,7 @@ private fun WeightCard(
                 // ただし端末がそもそも履歴読み取りに対応していない場合（historyFeatureAvailable == false）は、
                 // 上部に既に「対応していません」の案内が出ているため、ここでは重ねて表示しない
                 // （「権限がないため」という文言が実際の理由＝端末非対応と食い違い、権限を許可すれば
-                // 解決するように誤読されるのを避ける。コードレビュー指摘）。
+                // 解決するように誤読されるのを避ける。レビュー指摘）。
                 if (load.historyLimited && historyFeatureAvailable != false) {
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }

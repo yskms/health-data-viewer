@@ -57,7 +57,7 @@ private const val ROUTE_STEPS = "steps"
 private const val ROUTE_HEART_RATE_GRAPH = "heart_rate_graph"
 private const val ROUTE_SLEEP_GRAPH = "sleep_graph"
 
-// カードの連続タップや「戻る」の連打への対策（コードレビュー指摘）。現在の画面（backstack先頭）が
+// カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
 // まだRESUMEDになっていない間はnavigate()/popBackStack()を呼ばない。ガードなしだと、素早く2回
 // タップした場合に同じGraph画面が2つ積まれたり、「戻る」の連打でpopBackStack()が2回処理されて
 // 開始画面（home）を超えてpopしてしまい空白画面になり得る（Navigation Composeで知られた問題）。
