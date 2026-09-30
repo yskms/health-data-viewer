@@ -85,14 +85,20 @@ private fun DashboardPeriod.startOfPeriod(now: Instant): Instant {
 }
 
 // 開始時刻が現在から30日以上前かつ履歴読み取り権限がない場合は直近30日にクランプする
-// （今日・週は常に30日以内のため実質「月」「年」だけで効く）。終了は必ずnowで明示的に固定する
-// （D-029/D-030と同じ理由：範囲を呼び出しごとに閉じておく）。
-private fun DashboardPeriod.timeRangeFilter(now: Instant, historyPermissionGranted: Boolean): TimeRangeFilter {
+// （今日・週は常に30日以内のため実質「月」「年」だけで効く）。Sleepカードの「1日あたり平均」
+// （週/月/年タブ）は、この実際にクエリした開始時刻（クランプ後）を使って日数を割る必要がある。
+// startOfPeriod()（暦の開始、クランプ前）をそのまま使うと、履歴読み取り権限がない状態で
+// 年タブを見たときに「直近30日分の合計 ÷ 年初からの日数」という誤った平均になる
+// （実機で発見。1日あたり平均が不自然に小さい値になっていた）。
+private fun DashboardPeriod.actualStart(now: Instant, historyPermissionGranted: Boolean): Instant {
     val idealStart = startOfPeriod(now)
     val fallbackStart = now.minus(HealthConnectManager.HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS)
-    val start = if (!historyPermissionGranted && idealStart.isBefore(fallbackStart)) fallbackStart else idealStart
-    return TimeRangeFilter.between(start, now)
+    return if (!historyPermissionGranted && idealStart.isBefore(fallbackStart)) fallbackStart else idealStart
 }
+
+// 終了は必ずnowで明示的に固定する（D-029/D-030と同じ理由：範囲を呼び出しごとに閉じておく）。
+private fun DashboardPeriod.timeRangeFilter(now: Instant, historyPermissionGranted: Boolean): TimeRangeFilter =
+    TimeRangeFilter.between(actualStart(now, historyPermissionGranted), now)
 
 private fun DashboardPeriod.isHistoryLimited(now: Instant, historyPermissionGranted: Boolean): Boolean =
     !historyPermissionGranted &&
@@ -233,7 +239,8 @@ fun HomeScreen(
                     if (sleepGranted != true) return@LaunchedEffect
                     sleepLoad = SleepCardLoad(period = selectedPeriod, result = null)
                     val effectNow = Instant.now()
-                    val filter = selectedPeriod.timeRangeFilter(effectNow, historyPermissionGranted)
+                    val actualStart = selectedPeriod.actualStart(effectNow, historyPermissionGranted)
+                    val filter = TimeRangeFilter.between(actualStart, effectNow)
                     val result =
                         when (val summary = healthConnectManager.readSleepAggregateSummary(filter)) {
                             is SleepAggregateSummaryResult.Success -> {
@@ -244,8 +251,10 @@ fun HomeScreen(
                                     } else if (selectedPeriod == DashboardPeriod.TODAY) {
                                         SleepCardValue(duration = total, isAveraged = false)
                                     } else {
-                                        val elapsedDays =
-                                            ChronoUnit.DAYS.between(selectedPeriod.startOfPeriod(effectNow), effectNow).coerceAtLeast(1)
+                                        // 実際にクエリした開始時刻（クランプ後）で割る。暦の開始時刻
+                                        // （startOfPeriod()）をそのまま使うと、履歴読み取り権限が
+                                        // ない状態で誤った平均になる（上のactualStart()のコメント参照）。
+                                        val elapsedDays = ChronoUnit.DAYS.between(actualStart, effectNow).coerceAtLeast(1)
                                         SleepCardValue(duration = total.dividedBy(elapsedDays), isAveraged = true)
                                     }
                                 SleepCardResult.Success(value)
