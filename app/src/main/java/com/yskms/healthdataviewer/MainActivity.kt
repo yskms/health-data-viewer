@@ -26,6 +26,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
+import com.yskms.healthdataviewer.poc.StepsScreen
 import com.yskms.healthdataviewer.poc.WeightGraphScreen
 import com.yskms.healthdataviewer.poc.WeightRawRecordsScreen
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
@@ -51,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH }
+private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH, STEPS }
 
 @Composable
 fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
@@ -60,20 +61,30 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
     // rememberSaveableで保持する: remember だと画面回転（Activity再生成）でどちらも初期値に戻り、
     // 一覧を開いたまま回転するとステータス画面に戻ってしまう（レビュー指摘、実機で再現確認済み）。
     var screen by rememberSaveable { mutableStateOf(PocScreen.STATUS) }
-    var historyPermissionGrantedForWeightScreen by rememberSaveable { mutableStateOf(false) }
+    // Weightの2画面（画面遷移時のスナップショットを受け取る設計）でのみ使う。Steps（StepsScreen）は
+    // D-030により、この値を受け取らず自身で毎回問い合わせ直す。
+    var historyPermissionGrantedForPocScreens by rememberSaveable { mutableStateOf(false) }
 
     when (screen) {
         PocScreen.WEIGHT_RAW_RECORDS ->
             WeightRawRecordsScreen(
                 healthConnectManager = healthConnectManager,
-                historyPermissionGranted = historyPermissionGrantedForWeightScreen,
+                historyPermissionGranted = historyPermissionGrantedForPocScreens,
                 onBack = { screen = PocScreen.STATUS },
                 modifier = modifier,
             )
         PocScreen.WEIGHT_GRAPH ->
             WeightGraphScreen(
                 healthConnectManager = healthConnectManager,
-                historyPermissionGranted = historyPermissionGrantedForWeightScreen,
+                historyPermissionGranted = historyPermissionGrantedForPocScreens,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
+        PocScreen.STEPS ->
+            // StepsScreenはD-030により、履歴読み取り権限の状態を画面遷移時のスナップショットとして
+            // 受け取らず、自身のLaunchedEffect内で毎回問い合わせ直す（lessons.md 3.1）。
+            StepsScreen(
+                healthConnectManager = healthConnectManager,
                 onBack = { screen = PocScreen.STATUS },
                 modifier = modifier,
             )
@@ -81,13 +92,14 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
             HealthConnectStatusScreen(
                 healthConnectManager = healthConnectManager,
                 onOpenWeightRawRecords = { historyPermissionGranted ->
-                    historyPermissionGrantedForWeightScreen = historyPermissionGranted
+                    historyPermissionGrantedForPocScreens = historyPermissionGranted
                     screen = PocScreen.WEIGHT_RAW_RECORDS
                 },
                 onOpenWeightGraph = { historyPermissionGranted ->
-                    historyPermissionGrantedForWeightScreen = historyPermissionGranted
+                    historyPermissionGrantedForPocScreens = historyPermissionGranted
                     screen = PocScreen.WEIGHT_GRAPH
                 },
+                onOpenSteps = { screen = PocScreen.STEPS },
                 modifier = modifier,
             )
     }
@@ -98,6 +110,7 @@ fun HealthConnectStatusScreen(
     healthConnectManager: HealthConnectManager,
     onOpenWeightRawRecords: (historyPermissionGranted: Boolean) -> Unit,
     onOpenWeightGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenSteps: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
@@ -148,6 +161,7 @@ fun HealthConnectStatusScreen(
         when (availability) {
             HealthConnectAvailability.INSTALLED -> {
                 val weightGranted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ)
+                val stepsGranted = grantedPermissions?.contains(HealthConnectPermissions.STEPS_READ)
                 Text(text = stringResource(id = R.string.health_connect_available))
                 Text(
                     text =
@@ -157,6 +171,17 @@ fun HealthConnectStatusScreen(
                                     granted = weightGranted,
                                     grantedRes = R.string.health_connect_permission_granted,
                                     notGrantedRes = R.string.health_connect_permission_not_granted,
+                                ),
+                        ),
+                )
+                Text(
+                    text =
+                        stringResource(
+                            id =
+                                permissionStatusTextRes(
+                                    granted = stepsGranted,
+                                    grantedRes = R.string.health_connect_steps_permission_granted,
+                                    notGrantedRes = R.string.health_connect_steps_permission_not_granted,
                                 ),
                         ),
                 )
@@ -178,6 +203,7 @@ fun HealthConnectStatusScreen(
                         val permissions =
                             buildSet {
                                 add(HealthConnectPermissions.WEIGHT_READ)
+                                add(HealthConnectPermissions.STEPS_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                             }
                         requestPermissions.launch(permissions)
@@ -199,6 +225,11 @@ fun HealthConnectStatusScreen(
                         },
                     ) {
                         Text(text = stringResource(id = R.string.poc_weight_graph_open_button))
+                    }
+                }
+                if (stepsGranted == true) {
+                    Button(onClick = onOpenSteps) {
+                        Text(text = stringResource(id = R.string.poc_steps_open_button))
                     }
                 }
             }

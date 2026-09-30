@@ -1,6 +1,7 @@
 package com.yskms.healthdataviewer.healthconnect
 
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 
 // データ型を追加するときは、実際に読むデータ型のREAD_権限だけを増やす（lessons.md 1.1）。
@@ -8,5 +9,6 @@ import androidx.health.connect.client.records.WeightRecord
 // 別に許可状態を扱う（権限リクエストのダイアログ上も別画面で個別に許可・拒否できる。lessons.md 3.5）。
 object HealthConnectPermissions {
     val WEIGHT_READ: String = HealthPermission.getReadPermission(WeightRecord::class)
+    val STEPS_READ: String = HealthPermission.getReadPermission(StepsRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

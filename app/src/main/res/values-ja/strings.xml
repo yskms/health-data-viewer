@@ -6,6 +6,8 @@
     <string name="health_connect_available">Health Connect: 利用可能</string>
     <string name="health_connect_permission_granted">体重の読み取り権限: 許可済み</string>
     <string name="health_connect_permission_not_granted">体重の読み取り権限: 未許可</string>
+    <string name="health_connect_steps_permission_granted">歩数の読み取り権限: 許可済み</string>
+    <string name="health_connect_steps_permission_not_granted">歩数の読み取り権限: 未許可</string>
     <string name="health_connect_history_permission_granted">履歴読み取り権限: 許可済み</string>
     <string name="health_connect_history_permission_not_granted">履歴読み取り権限: 未許可</string>
     <string name="health_connect_history_not_supported">この端末のHealth Connectは、30日より前の履歴データの読み取りに対応していません。</string>
@@ -28,6 +30,31 @@
     <string name="poc_weight_empty">体重のレコードがありません。</string>
     <string name="poc_weight_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
     <plurals name="poc_weight_record_count">
+        <item quantity="other">%1$d件</item>
+    </plurals>
+    <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
+    <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
+    <string name="poc_steps_period_today">今日</string>
+    <string name="poc_steps_period_week">過去7日間</string>
+    <string name="poc_steps_period_all">全期間</string>
+    <string name="poc_steps_back">戻る</string>
+    <string name="poc_steps_loading">読み込み中…</string>
+    <string name="poc_steps_error">読み込みに失敗しました。</string>
+    <string name="poc_steps_retry">再試行</string>
+    <string name="poc_steps_empty">歩数のレコードがありません。</string>
+    <string name="poc_steps_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
+    <string name="poc_steps_raw_sum">単純合計・重複排除なし（全ソース）: %1$s歩</string>
+    <string name="poc_steps_official_total">公式合計・Health Connect Aggregate（全ソース）: %1$s歩</string>
+    <string name="poc_steps_by_source_title">ソース別</string>
+    <string name="poc_steps_raw_records_title">生レコード一覧</string>
+    <string name="poc_steps_diff_match">単純合計と公式合計が一致しています。</string>
+    <string name="poc_steps_diff_official_lower">公式合計が単純合計より%1$s歩少ないです（複数ソース間の重複除去とは限りません）。</string>
+    <string name="poc_steps_diff_official_higher">公式合計が単純合計より%1$s歩多いです（想定外の結果のため要確認）。</string>
+    <string name="poc_steps_source_summary">%1$s件、単純合計 %2$s歩、このソース単体の公式合計: %3$s歩</string>
+    <string name="poc_steps_zero_length">ゼロ長レコード（開始＝終了）: %1$s件、合計%2$s歩</string>
+    <string name="poc_steps_overlapping">同じソース内の他レコードとInstant精度で重なっているレコード: %1$s件、合計%2$s歩</string>
+    <string name="poc_steps_estimated_official">推定公式合計（区間の和集合による時間按分）: %1$s歩</string>
+    <plurals name="poc_steps_record_count">
         <item quantity="other">%1$d件</item>
     </plurals>
 </resources>

@@ -6,8 +6,11 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.io.IOException
@@ -19,6 +22,12 @@ import java.time.temporal.ChronoUnit
 // 権限の許可状態はアプリ内にキャッシュせず、呼び出しのたびにHealth Connectへ問い合わせる。
 // Health Connectの設定などアプリ外から権限が取り消され得るため（lessons.md 3.1）。
 class HealthConnectManager(context: Context) {
+    companion object {
+        // 履歴読み取り権限がない場合に読める範囲の近似日数（lessons.md 6.1）。recentRangeFilter()・
+        // recentRangeFilterLocal()・StepsScreenの直近フォールバック計算で共通して使う。
+        const val HISTORY_FALLBACK_DAYS = 30L
+    }
+
     private val appContext = context.applicationContext
 
     val availability: HealthConnectAvailability
@@ -229,9 +238,89 @@ class HealthConnectManager(context: Context) {
         }
     }
 
+    // WBS 3.1（PoC 2）: readStepsRecords()とreadStepsAggregateTotal()は、呼び出し元（StepsScreen）が
+    // 期間（Today/直近7日/全期間）ごとに決めたTimeRangeFilterをそのまま受け取るだけで、Weightの
+    // readAllWeightRecords()のようなSecurityException時の直近30日への自動フォールバックは
+    // どちらも行わない（D-029）。RawとAggregateの合計を突き合わせて公式の重複処理の結果を見ることが
+    // このPoCの目的のため、両者に渡すfilterを呼び出し元で完全に一致させることを優先する。
+    // 片方だけ内部でフォールバックすると、Raw側とAggregate側で実際に問い合わせた範囲がずれ、
+    // 比較自体が成立しなくなるため（Weightのように単一の呼び出し結果をそのまま表示するだけの
+    // 画面とは異なり、2つの呼び出し結果を比較するこの画面ではフォールバックの非対称性が
+    // そのまま誤った差分として表示されてしまう）。全期間（ALL）で履歴読み取り権限がない場合の
+    // 範囲は、呼び出し元がfilterを直近30日にして渡すことで対応する（StepsScreen.StepsPeriod参照）。
+    //
+    // 呼び出し元は「今日」「直近7日間」でも終了側を無制限（after()）にせず、同じInstant.now()を使った
+    // between(start, now)で終了側も固定する。終了側を無制限にすると、Raw読み取り→全ソースAggregate→
+    // ソース別Aggregate…と複数回に分けて呼ぶ間にHealth Connect側へ新しいレコードが書き込まれた場合、
+    // 後続の呼び出しだけがそれを含んでしまい、公式の重複処理とは無関係な差分が生じ得る。
+    private suspend fun readStepsPaged(filter: TimeRangeFilter): List<StepsRecord> {
+        val records = mutableListOf<StepsRecord>()
+        var pageToken: String? = null
+        do {
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = StepsRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageToken = pageToken,
+                    ),
+                )
+            records += response.records
+            pageToken = response.pageToken?.ifEmpty { null }
+        } while (pageToken != null)
+        return records
+    }
+
+    suspend fun readStepsRecords(timeRangeFilter: TimeRangeFilter): StepsRecordsResult =
+        try {
+            StepsRecordsResult.Success(records = readStepsPaged(timeRangeFilter))
+        } catch (e: RemoteException) {
+            StepsRecordsResult.Failure
+        } catch (e: IOException) {
+            StepsRecordsResult.Failure
+        } catch (e: SecurityException) {
+            StepsRecordsResult.Failure
+        }
+
+    // WBS 3.1（PoC 2）: RawとAggregateの差、複数Sourceの公式重複処理の結果を確認するための歩数合計。
+    // dataOriginFilterを空集合で呼ぶと全ソース合算（Steps=Activity系のため公式の重複処理が適用される、
+    // requirements.md §22.2）、単一のDataOriginを指定するとそのソース単体の合計になる（呼び出し元の
+    // StepsScreenで、Rawの単純合計との比較・ソース単体Aggregateとの比較に使う）。
+    // ただし単一ソース単体を指定した場合でも、そのソースのRaw単純合計とAggregate合計が一致するとは
+    // 限らないことを実機で確認している。原因はレビューで複数の説（表示精度による誤読、ゼロ長レコード、
+    // クエリ境界を一部だけまたぐレコードの扱いの違いなど）が指摘され未確定（lessons.md 6.6、要検証）。
+    // aggregate()はreadRecords()と同じInstantベースのTimeRangeFilterを受け付ける（Period単位でbucket化する
+    // aggregateGroupByPeriod()だけがLocalDateTimeを要求する。lessons.md 6.5）。例外の型もreadRecords()と
+    // 同じ3種（RemoteException/SecurityException/IOException）と仮定している（javapでは確認できず要検証）。
+    suspend fun readStepsAggregateTotal(
+        timeRangeFilter: TimeRangeFilter,
+        dataOriginFilter: Set<DataOrigin> = emptySet(),
+    ): StepsAggregateTotalResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(StepsRecord.COUNT_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                        dataOriginFilter = dataOriginFilter,
+                    ),
+                )
+            StepsAggregateTotalResult.Success(total = result[StepsRecord.COUNT_TOTAL])
+        } catch (e: RemoteException) {
+            StepsAggregateTotalResult.Failure
+        } catch (e: IOException) {
+            StepsAggregateTotalResult.Failure
+        } catch (e: SecurityException) {
+            StepsAggregateTotalResult.Failure
+        }
+
     // 履歴読み取り権限がない状態で読める範囲の近似（6.1参照）。readAllWeightRecords() /
-    // findOldestWeightRecordTime()で使うInstantベースのTimeRangeFilter。
-    private fun recentRangeFilter(): TimeRangeFilter = TimeRangeFilter.after(Instant.now().minus(30, ChronoUnit.DAYS))
+    // findOldestWeightRecordTime()で使うInstantベースのTimeRangeFilter。Steps側（StepsScreen）は
+    // Raw読み取りとAggregate呼び出しの範囲を完全に一致させる必要があるため、この関数は使わず
+    // 同じHISTORY_FALLBACK_DAYS定数を使って呼び出し元で独自にfilterを組み立てる（D-029）。
+    private fun recentRangeFilter(): TimeRangeFilter =
+        TimeRangeFilter.after(Instant.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS))
 
     // readWeightAggregates()用のLocalDateTimeベース版（同関数のコメント参照）。開始時刻を単純に
     // 日初へ切り捨てる（floor）と、許可される範囲（Instant.now()から30日前）よりわずかに古くなり、
@@ -239,5 +328,7 @@ class HealthConnectManager(context: Context) {
     // 翌日の0時（切り上げ、ceiling）にする。bucket境界を暦日に揃えるための代償として、実際に
     // 読める範囲より最大1日分狭くなるが、lessons.md 6.1の既存の安全側の考え方と整合する。
     private fun recentRangeFilterLocal(): TimeRangeFilter =
-        TimeRangeFilter.after(LocalDateTime.now().minus(30, ChronoUnit.DAYS).toLocalDate().plusDays(1).atStartOfDay())
+        TimeRangeFilter.after(
+            LocalDateTime.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS).toLocalDate().plusDays(1).atStartOfDay(),
+        )
 }

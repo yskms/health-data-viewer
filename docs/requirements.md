@@ -444,7 +444,7 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 | データ型 | Aggregate Metric | 公式の重複処理 | 備考 |
 |---|---|---|---|
 | Weight | 平均・最小・最大 | なし | 同日複数レコードは独自判定せず、公式Aggregate Metric（平均・最小・最大）をbucket集計して使う（PoC 1で決定、D-027） |
-| Steps | 合計 | あり（Activity） | |
+| Steps | 合計 | あり（Activity） | 実データでは、単一ソースだけを指定したAggregateがそのソースの生データ単純合計と一致しないことがあった。同一ソース内で秒単位で実際に重なっている区間を時間按分している可能性が高いことを定量的に確認したが、正確な計算式は未確定（PoC 2、lessons.md 6.6、要検証） |
 | Distance | 合計 | あり（Activity） | |
 | Calories | 合計 | あり（Activity） | Total / Activeの区別あり |
 | Heart Rate | 平均・最小・最大・測定数 | なし | 測定数はサンプル数であり、レコード数ではない |

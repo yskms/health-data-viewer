@@ -6,6 +6,8 @@
     <string name="health_connect_available">Health Connect: available</string>
     <string name="health_connect_permission_granted">Weight read permission: granted</string>
     <string name="health_connect_permission_not_granted">Weight read permission: not granted</string>
+    <string name="health_connect_steps_permission_granted">Steps read permission: granted</string>
+    <string name="health_connect_steps_permission_not_granted">Steps read permission: not granted</string>
     <string name="health_connect_history_permission_granted">History read permission: granted</string>
     <string name="health_connect_history_permission_not_granted">History read permission: not granted</string>
     <string name="health_connect_history_not_supported">This device\'s Health Connect does not support reading history data older than 30 days.</string>
@@ -28,6 +30,32 @@
     <string name="poc_weight_empty">No weight records found.</string>
     <string name="poc_weight_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
     <plurals name="poc_weight_record_count">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
+    <string name="poc_steps_open_button">PoC: Show steps comparison</string>
+    <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
+    <string name="poc_steps_period_today">Today</string>
+    <string name="poc_steps_period_week">7 days</string>
+    <string name="poc_steps_period_all">ALL</string>
+    <string name="poc_steps_back">Back</string>
+    <string name="poc_steps_loading">Loading…</string>
+    <string name="poc_steps_error">Failed to load records.</string>
+    <string name="poc_steps_retry">Retry</string>
+    <string name="poc_steps_empty">No steps records found.</string>
+    <string name="poc_steps_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
+    <string name="poc_steps_raw_sum">Raw sum, no dedup (all sources): %1$s steps</string>
+    <string name="poc_steps_official_total">Official total, Health Connect aggregate (all sources): %1$s steps</string>
+    <string name="poc_steps_by_source_title">By source</string>
+    <string name="poc_steps_raw_records_title">Raw records</string>
+    <string name="poc_steps_diff_match">Raw sum matches the official total.</string>
+    <string name="poc_steps_diff_official_lower">Official total is %1$s steps lower than the raw sum (not necessarily cross-source dedup alone).</string>
+    <string name="poc_steps_diff_official_higher">Official total is %1$s steps higher than the raw sum (unexpected — needs investigation).</string>
+    <string name="poc_steps_source_summary">Records: %1$s · Raw sum: %2$s · Official (this source alone): %3$s</string>
+    <string name="poc_steps_zero_length">Zero-length records (start == end): %1$s, summing %2$s steps</string>
+    <string name="poc_steps_overlapping">Records overlapping another record from this source (Instant precision): %1$s, summing %2$s steps</string>
+    <string name="poc_steps_estimated_official">Estimated official total, time-weighted by union of intervals: %1$s steps</string>
+    <plurals name="poc_steps_record_count">
         <item quantity="one">%1$d record</item>
         <item quantity="other">%1$d records</item>
     </plurals>
