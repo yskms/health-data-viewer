@@ -50,8 +50,9 @@ import java.util.Locale
 // WBS 3.1（PoC 2）: Stepsで確認する内容は、RawレコードとAggregate（公式）の差、複数Sourceの扱い、
 // Health Connect公式の重複処理の結果（Steps=Activity系のため、Weight（PoC 1）とは異なり
 // aggregate()に公式の重複処理が効く、requirements.md §22.2）。
-// WeightRawRecordsScreen / WeightGraphScreenと同様、WBS 6.2/6.3の正式なDetail画面に置き換えられる
-// 前提の簡略実装（画面回転時は再取得する）。
+// WeightRawRecordsScreenと同様、WBS 6.3/6.4の正式なDetail画面（Records/Sources）に置き換えられる
+// 前提の簡略実装（画面回転時は再取得する）。WBS 6.2ではWeight/Steps/HeartRate/Sleepのグラフビューを
+// screen/detail配下のDetail画面に置き換えたが、この比較PoC画面自体はグラフではないため対象外。
 private enum class StepsPeriod { TODAY, LAST_7_DAYS, ALL }
 
 // TODAY・LAST_7_DAYSは常に30日以内に収まるため、履歴読み取り権限の有無に関わらず同じ範囲になる。
@@ -64,8 +65,9 @@ private enum class StepsPeriod { TODAY, LAST_7_DAYS, ALL }
 // 公式の重複処理とは無関係な差分が生じ得る（同じ`now`を使っていても、`after()`はその値を上限としては
 // 使わない）。
 //
-// LAST_7_DAYSは暦日ではなく「現在時刻から168時間前」までの単純なローリングウィンドウ（1M/1Yを30日／365日で
-// 近似しているWeightGraphScreenの既存の簡略化と同じ方針）。
+// LAST_7_DAYSは暦日ではなく「現在時刻から168時間前」までの単純なローリングウィンドウ（このPoC専用の
+// 簡略化。WBS 6.2でWeight等のDetail画面は暦ベースの計算に変更したが、この比較PoC画面はWBS 6.3/6.4で
+// 置き換えられるまでこの簡略化のままにする）。
 private fun StepsPeriod.timeRangeFilter(now: Instant, historyPermissionGranted: Boolean): TimeRangeFilter =
     when (this) {
         StepsPeriod.TODAY -> TimeRangeFilter.between(now.atZone(ZoneId.systemDefault()).toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant(), now)

@@ -19,10 +19,10 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
-import com.yskms.healthdataviewer.poc.HeartRateGraphScreen
-import com.yskms.healthdataviewer.poc.SleepGraphScreen
-import com.yskms.healthdataviewer.poc.StepsScreen
-import com.yskms.healthdataviewer.poc.WeightGraphScreen
+import com.yskms.healthdataviewer.screen.detail.HeartRateDetailScreen
+import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
+import com.yskms.healthdataviewer.screen.detail.StepsDetailScreen
+import com.yskms.healthdataviewer.screen.detail.WeightDetailScreen
 import com.yskms.healthdataviewer.screen.home.HomeScreen
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
 
@@ -46,16 +46,15 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-// WBS 6.1: ホーム画面（screen/home/HomeScreen.kt）を起点にし、指標カードのタップ先を既存
-// poc/各Graph画面へ暫定的に接続する（WBS 6.2〜6.4で正式なDetail画面に置き換わるまでのブリッジ。
-// Rawレコード一覧＝WeightRawRecordsScreen等は今回どこからも遷移させない）。
-// 画面数がまだ少ないPoC段階ではNavigation Composeを導入せずローカル状態（PocScreen enum）で
-// 分岐していたが、ホーム画面の追加でその前提が崩れたため、ここでNavigation Composeを導入した。
+// WBS 6.2: ホーム画面（screen/home/HomeScreen.kt）を起点にし、指標カードのタップ先を
+// screen/detail配下の正式なDetail画面へ接続する（D-033のpoc/各Graph画面への暫定的なブリッジを
+// 置き換えた。Rawレコード一覧＝WeightRawRecordsScreen等・Steps比較PoC＝poc/StepsScreenは
+// 引き続きどこからも遷移させない。WBS 6.3/6.4で扱う）。
 private const val ROUTE_HOME = "home"
-private const val ROUTE_WEIGHT_GRAPH = "weight_graph"
-private const val ROUTE_STEPS = "steps"
-private const val ROUTE_HEART_RATE_GRAPH = "heart_rate_graph"
-private const val ROUTE_SLEEP_GRAPH = "sleep_graph"
+private const val ROUTE_WEIGHT_DETAIL = "weight_detail"
+private const val ROUTE_STEPS_DETAIL = "steps_detail"
+private const val ROUTE_HEART_RATE_DETAIL = "heart_rate_detail"
+private const val ROUTE_SLEEP_DETAIL = "sleep_detail"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
 // まだRESUMEDになっていない間はnavigate()/popBackStack()を呼ばない。ガードなしだと、素早く2回
@@ -76,9 +75,10 @@ private fun NavHostController.popBackStackOnce() {
 @Composable
 private fun MainNavHost(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
     val navController: NavHostController = rememberNavController()
-    // WeightGraphScreen/HeartRateGraphScreen/SleepGraphScreenが引数として受け取る
-    // historyPermissionGrantedのスナップショット。旧MainActivity（PocScreen分岐時代）と
-    // 同じ設計で、遷移直前にHomeScreen側の最新の許可状態を書き込む。
+    // WeightDetailScreen/StepsDetailScreen/HeartRateDetailScreen/SleepDetailScreenが引数として
+    // 受け取るhistoryPermissionGrantedのスナップショット。遷移直前にHomeScreen側の最新の許可状態を
+    // 書き込む（D-029/D-030はStepsの比較PoC画面専用の設計判断で、Steps Detail画面には適用しない。
+    // 他の3データ型と同じスナップショット方式に揃える）。
     var historyPermissionGrantedSnapshot by rememberSaveable { mutableStateOf(false) }
 
     NavHost(navController = navController, startDestination = ROUTE_HOME, modifier = modifier) {
@@ -87,41 +87,45 @@ private fun MainNavHost(healthConnectManager: HealthConnectManager, modifier: Mo
                 healthConnectManager = healthConnectManager,
                 onOpenWeightGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
-                    navController.navigateOnce(ROUTE_WEIGHT_GRAPH)
+                    navController.navigateOnce(ROUTE_WEIGHT_DETAIL)
                 },
-                onOpenSteps = { navController.navigateOnce(ROUTE_STEPS) },
+                onOpenSteps = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_STEPS_DETAIL)
+                },
                 onOpenHeartRateGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
-                    navController.navigateOnce(ROUTE_HEART_RATE_GRAPH)
+                    navController.navigateOnce(ROUTE_HEART_RATE_DETAIL)
                 },
                 onOpenSleepGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
-                    navController.navigateOnce(ROUTE_SLEEP_GRAPH)
+                    navController.navigateOnce(ROUTE_SLEEP_DETAIL)
                 },
             )
         }
-        composable(ROUTE_WEIGHT_GRAPH) {
-            WeightGraphScreen(
+        composable(ROUTE_WEIGHT_DETAIL) {
+            WeightDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },
             )
         }
-        composable(ROUTE_STEPS) {
-            StepsScreen(
-                healthConnectManager = healthConnectManager,
-                onBack = { navController.popBackStackOnce() },
-            )
-        }
-        composable(ROUTE_HEART_RATE_GRAPH) {
-            HeartRateGraphScreen(
+        composable(ROUTE_STEPS_DETAIL) {
+            StepsDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },
             )
         }
-        composable(ROUTE_SLEEP_GRAPH) {
-            SleepGraphScreen(
+        composable(ROUTE_HEART_RATE_DETAIL) {
+            HeartRateDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_SLEEP_DETAIL) {
+            SleepDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

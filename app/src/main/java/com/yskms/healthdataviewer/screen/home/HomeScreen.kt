@@ -142,7 +142,7 @@ private data class SleepCardLoad(val period: DashboardPeriod, val result: SleepC
 fun HomeScreen(
     healthConnectManager: HealthConnectManager,
     onOpenWeightGraph: (historyPermissionGranted: Boolean) -> Unit,
-    onOpenSteps: () -> Unit,
+    onOpenSteps: (historyPermissionGranted: Boolean) -> Unit,
     onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSleepGraph: (historyPermissionGranted: Boolean) -> Unit,
     modifier: Modifier = Modifier,
@@ -314,7 +314,12 @@ fun HomeScreen(
                     historyFeatureAvailable = historyFeatureAvailable,
                     onClick = { onOpenWeightGraph(historyPermissionGranted) },
                 )
-                StepsCard(period = selectedPeriod, granted = stepsGranted, load = stepsLoad, onClick = onOpenSteps)
+                StepsCard(
+                    period = selectedPeriod,
+                    granted = stepsGranted,
+                    load = stepsLoad,
+                    onClick = { onOpenSteps(historyPermissionGranted) },
+                )
                 HeartRateCard(
                     period = selectedPeriod,
                     granted = heartRateGranted,
@@ -526,8 +531,9 @@ private fun SleepCard(period: DashboardPeriod, granted: Boolean?, load: SleepCar
     }
 }
 
-// SleepRawRecordsScreen/SleepGraphScreen.formatDuration()と同じ定義を複製している（private宣言のため
-// ファイルをまたいで再利用できない。既存の複製箇所と同じ理由、共通化はWBS 6.2で検討する）。
+// SleepRawRecordsScreen/SleepDetailScreen.formatDuration()と同じ定義を複製している（private宣言の
+// ため、ファイルをまたいで再利用できない）。WBS 6.2で他の重複（bucket境界・periodタグ付け等）は
+// 共通化したが、この5行程度の書式関数まで共通化するのは過剰と判断し、複製のままにしている。
 private fun formatSleepDuration(duration: Duration): String {
     val totalMinutes = duration.toMinutes()
     val hours = totalMinutes / 60

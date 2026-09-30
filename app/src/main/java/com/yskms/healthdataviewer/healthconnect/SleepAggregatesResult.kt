@@ -13,8 +13,11 @@ import java.time.LocalDateTime
 // Health Connectが実際にどう計算しているか（Stage単位の計算か、Session全体を一様分布とみなす近似的な
 // 計算か）と複数ソース時の重複処理（Source priority）は単一ソースのデータでしか確認しておらず未確認の
 // まま（lessons.md 6.9、D-032、requirements.md §27）。
+// periodEndはWBS 6.2で追加。StepsAggregateBucket.periodEndと同じ理由（画面側でWEEK/MONTH bucketを
+// 「1日あたり平均」に正規化する際、periodStart〜periodEndの実日数で割るために使う）。
 data class SleepAggregateBucket(
     val periodStart: LocalDateTime,
+    val periodEnd: LocalDateTime,
     val totalSleepDuration: Duration?,
 )
 

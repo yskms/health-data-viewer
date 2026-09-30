@@ -48,9 +48,9 @@ import java.util.Locale
 // WBS 5.1（PoC 4）: Sleepで確認する内容はSession/Stage、Source priority（複数ソースが重なる場合の扱い）、
 // 日付境界をまたぐSession、可視化（requirements.md §26）。この画面はSession/Stageの生データと
 // ソース別の内訳（Source priorityを見る材料）を担当し、公式Aggregateの集計結果（日付境界の扱いを含む）は
-// SleepGraphScreenで確認する。StepsScreen/HeartRateRawRecordsScreenと同様、期間選択
-// （今日／過去7日間／全期間）はStepsPeriodのパターンを踏襲し、WBS 6.2/6.3の正式なDetail画面に
-// 置き換えられる前提の簡略実装（画面回転時は再取得する）。
+// SleepDetailScreen（WBS 6.2）で確認する。StepsScreen/HeartRateRawRecordsScreenと同様、期間選択
+// （今日／過去7日間／全期間）はStepsPeriodのパターンを踏襲し、WBS 6.3/6.4の正式なDetail画面
+// （Records/Sources）に置き換えられる前提の簡略実装（画面回転時は再取得する）。
 private enum class SleepPeriod { TODAY, LAST_7_DAYS, ALL }
 
 // StepsPeriod.timeRangeFilter()/HeartRatePeriod.timeRangeFilter()と同じロジック。TODAYは「今日の0時〜今」の
@@ -128,7 +128,7 @@ private fun stageTotals(stages: List<SleepSessionRecord.Stage>): Map<Int, Durati
 
 // naiveTotalDuration: Session区間（startTime〜endTime）の単純合計（重複排除なし）。StepsScreenのnaiveSumと
 // 同じ考え方で、Source priority（複数ソースが同じ夜を別々に記録した場合にどう見えるか）を確認する材料にする。
-// 実際の公式集計（SLEEP_DURATION_TOTAL、重複処理あり）はSleepGraphScreen側で別途確認する。
+// 実際の公式集計（SLEEP_DURATION_TOTAL、重複処理あり）はSleepDetailScreen側で別途確認する。
 private data class SleepSourceSummary(val dataOrigin: DataOrigin, val sessionCount: Int, val naiveTotalDuration: Duration)
 
 private fun summarizeBySource(records: List<SleepSessionRecord>): List<SleepSourceSummary> =
@@ -151,7 +151,7 @@ private sealed interface SleepLoadOutcome {
 }
 
 // 表示中のperiodと非同期結果のperiodが一致するかを確認してから描画する
-// （WeightGraphScreenのAggregatesLoadと同じ理由、lessons.md 7.6）。
+// （screen/detail/PeriodTaggedResult.ktと同じ理由、lessons.md 7.6）。
 private data class SleepPeriodLoad(val period: SleepPeriod, val outcome: SleepLoadOutcome?)
 
 @Composable

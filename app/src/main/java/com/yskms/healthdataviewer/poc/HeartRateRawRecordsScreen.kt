@@ -111,7 +111,7 @@ private sealed interface HeartRateLoadOutcome {
 }
 
 // 表示中のperiodと非同期結果のperiodが一致するかを確認してから描画する
-// （WeightGraphScreenのAggregatesLoadと同じ理由、lessons.md 7.6）。
+// （screen/detail/PeriodTaggedResult.ktと同じ理由、lessons.md 7.6）。
 private data class PeriodLoad(val period: HeartRatePeriod, val outcome: HeartRateLoadOutcome?)
 
 @Composable

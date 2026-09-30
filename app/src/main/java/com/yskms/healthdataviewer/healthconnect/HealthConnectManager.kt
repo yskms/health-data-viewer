@@ -149,7 +149,7 @@ class HealthConnectManager(context: Context) {
     // 最古のレコード1件だけを1回のIPCで取得できる（readAllWeightRecords()のような全件ページングは不要）。
     // 例外・フォールバックの方針はreadAllWeightRecords()と揃える（6.1参照。フォールバック自体の実装は
     // readWithHistoryFallback()参照）。
-    suspend fun findOldestWeightRecordTime(historyPermissionGranted: Boolean): OldestWeightRecordResult {
+    suspend fun findOldestWeightRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
         suspend fun readOldest(filter: TimeRangeFilter): Instant? =
             client
                 .readRecords(
@@ -173,8 +173,8 @@ class HealthConnectManager(context: Context) {
                     read = ::readOldest,
                 )
         ) {
-            is HistoryFallbackOutcome.Success -> OldestWeightRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
-            HistoryFallbackOutcome.Failure -> OldestWeightRecordResult.Failure
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
         }
     }
 
@@ -215,7 +215,7 @@ class HealthConnectManager(context: Context) {
     // aggregateGroupByDuration()との違い）が、bucketの区切りは渡したtimeRangeFilterの開始時刻を
     // 起点にPeriod単位で機械的に等間隔に区切るだけで、暦日・暦月の境界に自動的には合わせてくれない。
     // 暦日・暦月区切りにするには、呼び出し元が開始時刻を日初／月初に切り捨てて渡す必要がある
-    // （呼び出し元のWeightGraphScreen.GraphPeriod.timeRangeFilter()で対応。レビュー指摘、要検証）。
+    // （呼び出し元のscreen/detail/DetailGraphRange.kt resolveDetailGraphRange()で対応。レビュー指摘、要検証）。
     // これが正しく機能すれば「タイムゾーン変更・夏時間の扱い」（requirements.md §10）にも
     // 対応しやすくなる見込みだが、実データでの確認はまだできていない。
     //
@@ -398,7 +398,7 @@ class HealthConnectManager(context: Context) {
         }
 
     // findOldestWeightRecordTime()と同じ理由・同じ形（昇順・pageSize = 1で全件ページング不要）。
-    suspend fun findOldestHeartRateRecordTime(historyPermissionGranted: Boolean): OldestHeartRateRecordResult {
+    suspend fun findOldestHeartRateRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
         suspend fun readOldest(filter: TimeRangeFilter): Instant? =
             client
                 .readRecords(
@@ -422,8 +422,8 @@ class HealthConnectManager(context: Context) {
                     read = ::readOldest,
                 )
         ) {
-            is HistoryFallbackOutcome.Success -> OldestHeartRateRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
-            HistoryFallbackOutcome.Failure -> OldestHeartRateRecordResult.Failure
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
         }
     }
 
@@ -531,6 +531,7 @@ class HealthConnectManager(context: Context) {
             readAggregates(filter).map { grouped ->
                 SleepAggregateBucket(
                     periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
                     totalSleepDuration = grouped.result[SleepSessionRecord.SLEEP_DURATION_TOTAL],
                 )
             }
@@ -605,7 +606,7 @@ class HealthConnectManager(context: Context) {
 
     // findOldestWeightRecordTime()/findOldestHeartRateRecordTime()と同じ形。SleepSessionRecordには
     // WeightRecordの.timeのような単一時刻フィールドがないため、IntervalRecord共通のstartTimeを使う。
-    suspend fun findOldestSleepSessionRecordTime(historyPermissionGranted: Boolean): OldestSleepSessionRecordResult {
+    suspend fun findOldestSleepSessionRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
         suspend fun readOldest(filter: TimeRangeFilter): Instant? =
             client
                 .readRecords(
@@ -629,8 +630,78 @@ class HealthConnectManager(context: Context) {
                     read = ::readOldest,
                 )
         ) {
-            is HistoryFallbackOutcome.Success -> OldestSleepSessionRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
-            HistoryFallbackOutcome.Failure -> OldestSleepSessionRecordResult.Failure
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // WBS 6.2: findOldestWeightRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestStepsRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = StepsRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // WBS 6.2: 詳細画面のStepsグラフ用。readWeightAggregates()と同じ形（aggregateGroupByPeriod()で
+    // bucket集計、readWithHistoryFallback経由）。既存のreadStepsAggregateTotal()（D-029、Raw/Aggregate
+    // 比較PoC専用、bucket分割なし・内部フォールバックなし）とは別物。COUNT_TOTALはAggregateMetric<Long>。
+    suspend fun readStepsAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): StepsAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(StepsRecord.COUNT_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                StepsAggregateBucket(
+                    periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
+                    total = grouped.result[StepsRecord.COUNT_TOTAL],
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> StepsAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> StepsAggregatesResult.Failure
         }
     }
 
