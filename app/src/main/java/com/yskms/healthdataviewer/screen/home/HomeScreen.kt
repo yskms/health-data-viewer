@@ -92,9 +92,23 @@ private fun DashboardPeriod.startOfPeriod(now: Instant): Instant {
 // startOfPeriod()（暦の開始、クランプ前）をそのまま使うと、履歴読み取り権限がない状態で
 // 年タブを見たときに「直近30日分の合計 ÷ 年初からの日数」という誤った平均になる
 // （実機で発見。1日あたり平均が不自然に小さい値になっていた）。
+//
+// クランプ後の開始時刻は、nowと同じ時刻のまま30日前（日の途中）にするのではなく、暦日に揃えた
+// 翌日0時（切り上げ）にする（コードレビュー指摘）。日の途中を境界にすると、Sleep平均の分母
+// （暦日数、両端含む）にはその境界日を1日分含めてしまう一方、実際のクエリ範囲からはその日の
+// 朝の睡眠（境界時刻より前）が漏れてしまい、分子と分母がわずかにずれて平均が実際より小さくなる。
+// 安全側に倒し切り上げる考え方はrecentRangeFilterLocal()と同じ（lessons.md 6.1）。
 private fun DashboardPeriod.actualStart(now: Instant, historyPermissionGranted: Boolean): Instant {
+    val zone = ZoneId.systemDefault()
     val idealStart = startOfPeriod(now)
-    val fallbackStart = now.minus(HealthConnectManager.HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS)
+    val fallbackStart =
+        now
+            .minus(HealthConnectManager.HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS)
+            .atZone(zone)
+            .toLocalDate()
+            .plusDays(1)
+            .atStartOfDay(zone)
+            .toInstant()
     return if (!historyPermissionGranted && idealStart.isBefore(fallbackStart)) fallbackStart else idealStart
 }
 
@@ -214,8 +228,12 @@ fun HomeScreen(
                     }
                 }
 
+                // 端末が履歴読み取りに対応していない場合（historyFeatureAvailable == false）は、
+                // 上でその案内を既に出しているため、ここでは重ねて表示しない（Weightカードと同じ理由。
+                // コードレビュー指摘: この条件が抜けていたため、履歴非対応の端末では「対応していません」と
+                // 「権限がないため直近30日のみ表示」が並んで出て、権限を許可すれば解決するように誤読され得た）。
                 val historyLimited = selectedPeriod.isHistoryLimited(Instant.now(), historyPermissionGranted)
-                if (historyLimited) {
+                if (historyLimited && historyFeatureAvailable != false) {
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
