@@ -178,6 +178,36 @@ class HealthConnectManager(context: Context) {
         }
     }
 
+    // WBS 6.1: ホーム画面の体重カード（「最新値＋前回比」、期間タブに依存しない）用。
+    // findOldestWeightRecordTime()と同じ形（全件ページング不要）だが、降順・pageSize = limitで
+    // 直近limit件を取得する。records[0]が最新値、records.getOrNull(1)との差が前回比になる。
+    suspend fun findLatestWeightRecords(limit: Int, historyPermissionGranted: Boolean): WeightRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<WeightRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = WeightRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> WeightRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> WeightRecordsResult.Failure
+        }
+    }
+
     // WBS 2.2（PoC 1）: 同日複数レコードのグラフ上の扱い。
     // D-027の通り、アプリ独自に平均／最新値を選ぶのではなく、Health Connect公式のAggregate Metric
     // （WEIGHT_AVG / WEIGHT_MIN / WEIGHT_MAX）をaggregateGroupByPeriod()でbucket集計して使う。
@@ -444,6 +474,40 @@ class HealthConnectManager(context: Context) {
         }
     }
 
+    // WBS 6.1: ホーム画面のHeart Rateカード（選択期間の平均・最小・最大、期間タブごとに変わる）用。
+    // readHeartRateAggregates()（グラフ用、aggregateGroupByPeriod()でbucket分割）とは別物で、
+    // readStepsAggregateTotal()と同じ形（client.aggregate()、Instantベースのfilter、bucket分割なし）。
+    // 呼び出し元（ホーム画面）が期間ごとのfilterを安全な範囲に事前クランプする設計のため、
+    // Steps同様historyPermissionGrantedによる内部フォールバックは持たせない（D-029と同じ考え方）。
+    suspend fun readHeartRateAggregateSummary(timeRangeFilter: TimeRangeFilter): HeartRateAggregateSummaryResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics =
+                            setOf(
+                                HeartRateRecord.BPM_AVG,
+                                HeartRateRecord.BPM_MIN,
+                                HeartRateRecord.BPM_MAX,
+                                HeartRateRecord.MEASUREMENTS_COUNT,
+                            ),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            HeartRateAggregateSummaryResult.Success(
+                averageBpm = result[HeartRateRecord.BPM_AVG],
+                minBpm = result[HeartRateRecord.BPM_MIN],
+                maxBpm = result[HeartRateRecord.BPM_MAX],
+                measurementCount = result[HeartRateRecord.MEASUREMENTS_COUNT],
+            )
+        } catch (e: RemoteException) {
+            HeartRateAggregateSummaryResult.Failure
+        } catch (e: IOException) {
+            HeartRateAggregateSummaryResult.Failure
+        } catch (e: SecurityException) {
+            HeartRateAggregateSummaryResult.Failure
+        }
+
     // WBS 5.1（PoC 4）: Sleepの公式Aggregate（SLEEP_DURATION_TOTAL）はActivity/Sleepにのみ効く公式の
     // 重複処理を経る（requirements.md §22.2）。Weight/Heart Rateと同じくreadWeightAggregates()と同じ形
     // （metricsをSLEEP_DURATION_TOTAL 1つに差し替え、結果はDuration）にする。
@@ -491,6 +555,26 @@ class HealthConnectManager(context: Context) {
             HistoryFallbackOutcome.Failure -> SleepAggregatesResult.Failure
         }
     }
+
+    // WBS 6.1: ホーム画面のSleepカード用。readHeartRateAggregateSummary()と同じ理由・同じ形
+    // （client.aggregate()、Instantベースのfilter、bucket分割なし、内部フォールバックなし）。
+    suspend fun readSleepAggregateSummary(timeRangeFilter: TimeRangeFilter): SleepAggregateSummaryResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(SleepSessionRecord.SLEEP_DURATION_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            SleepAggregateSummaryResult.Success(totalSleepDuration = result[SleepSessionRecord.SLEEP_DURATION_TOTAL])
+        } catch (e: RemoteException) {
+            SleepAggregateSummaryResult.Failure
+        } catch (e: IOException) {
+            SleepAggregateSummaryResult.Failure
+        } catch (e: SecurityException) {
+            SleepAggregateSummaryResult.Failure
+        }
 
     // WBS 5.1: readStepsRecords()/readHeartRateRecords()と同じく、呼び出し元（SleepRawRecordsScreen）が
     // 期間（今日／過去7日間／全期間）ごとにTimeRangeFilterを決める。Sleep Sessionは1日1〜数件程度で、
