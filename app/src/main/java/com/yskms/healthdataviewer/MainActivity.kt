@@ -28,6 +28,8 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.poc.HeartRateGraphScreen
 import com.yskms.healthdataviewer.poc.HeartRateRawRecordsScreen
+import com.yskms.healthdataviewer.poc.SleepGraphScreen
+import com.yskms.healthdataviewer.poc.SleepRawRecordsScreen
 import com.yskms.healthdataviewer.poc.StepsScreen
 import com.yskms.healthdataviewer.poc.WeightGraphScreen
 import com.yskms.healthdataviewer.poc.WeightRawRecordsScreen
@@ -54,7 +56,7 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH, STEPS, HEART_RATE_RAW_RECORDS, HEART_RATE_GRAPH }
+private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH, STEPS, HEART_RATE_RAW_RECORDS, HEART_RATE_GRAPH, SLEEP_RAW_RECORDS, SLEEP_GRAPH }
 
 @Composable
 fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
@@ -111,6 +113,23 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
                 onBack = { screen = PocScreen.STATUS },
                 modifier = modifier,
             )
+        PocScreen.SLEEP_RAW_RECORDS ->
+            // SleepRawRecordsScreenはHeartRateRawRecordsScreenと同じ理由で、履歴読み取り権限を自身で
+            // 毎回問い合わせ直す。
+            SleepRawRecordsScreen(
+                healthConnectManager = healthConnectManager,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
+        PocScreen.SLEEP_GRAPH ->
+            // SleepGraphScreenはWeightGraphScreen/HeartRateGraphScreenと同じ理由で、画面遷移時の
+            // スナップショットを受け取る。
+            SleepGraphScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedForPocScreens,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
         PocScreen.STATUS ->
             HealthConnectStatusScreen(
                 healthConnectManager = healthConnectManager,
@@ -128,6 +147,11 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
                     historyPermissionGrantedForPocScreens = historyPermissionGranted
                     screen = PocScreen.HEART_RATE_GRAPH
                 },
+                onOpenSleepRawRecords = { screen = PocScreen.SLEEP_RAW_RECORDS },
+                onOpenSleepGraph = { historyPermissionGranted ->
+                    historyPermissionGrantedForPocScreens = historyPermissionGranted
+                    screen = PocScreen.SLEEP_GRAPH
+                },
                 modifier = modifier,
             )
     }
@@ -141,6 +165,8 @@ fun HealthConnectStatusScreen(
     onOpenSteps: () -> Unit,
     onOpenHeartRateRawRecords: () -> Unit,
     onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenSleepRawRecords: () -> Unit,
+    onOpenSleepGraph: (historyPermissionGranted: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
@@ -193,6 +219,7 @@ fun HealthConnectStatusScreen(
                 val weightGranted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ)
                 val stepsGranted = grantedPermissions?.contains(HealthConnectPermissions.STEPS_READ)
                 val heartRateGranted = grantedPermissions?.contains(HealthConnectPermissions.HEART_RATE_READ)
+                val sleepGranted = grantedPermissions?.contains(HealthConnectPermissions.SLEEP_READ)
                 Text(text = stringResource(id = R.string.health_connect_available))
                 Text(
                     text =
@@ -231,6 +258,17 @@ fun HealthConnectStatusScreen(
                     text =
                         stringResource(
                             id =
+                                permissionStatusTextRes(
+                                    granted = sleepGranted,
+                                    grantedRes = R.string.health_connect_sleep_permission_granted,
+                                    notGrantedRes = R.string.health_connect_sleep_permission_not_granted,
+                                ),
+                        ),
+                )
+                Text(
+                    text =
+                        stringResource(
+                            id =
                                 historyPermissionStatusTextRes(
                                     featureAvailable = historyFeatureAvailable,
                                     granted = grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ),
@@ -247,6 +285,7 @@ fun HealthConnectStatusScreen(
                                 add(HealthConnectPermissions.WEIGHT_READ)
                                 add(HealthConnectPermissions.STEPS_READ)
                                 add(HealthConnectPermissions.HEART_RATE_READ)
+                                add(HealthConnectPermissions.SLEEP_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                             }
                         requestPermissions.launch(permissions)
@@ -285,6 +324,18 @@ fun HealthConnectStatusScreen(
                         },
                     ) {
                         Text(text = stringResource(id = R.string.poc_heart_rate_graph_open_button))
+                    }
+                }
+                if (sleepGranted == true) {
+                    Button(onClick = onOpenSleepRawRecords) {
+                        Text(text = stringResource(id = R.string.poc_sleep_open_button))
+                    }
+                    Button(
+                        onClick = {
+                            onOpenSleepGraph(grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ) == true)
+                        },
+                    ) {
+                        Text(text = stringResource(id = R.string.poc_sleep_graph_open_button))
                     }
                 }
             }

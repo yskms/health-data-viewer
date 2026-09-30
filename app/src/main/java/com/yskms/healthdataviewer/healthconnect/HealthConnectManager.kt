@@ -7,6 +7,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
@@ -443,9 +444,123 @@ class HealthConnectManager(context: Context) {
         }
     }
 
+    // WBS 5.1（PoC 4）: Sleepの公式Aggregate（SLEEP_DURATION_TOTAL）はActivity/Sleepにのみ効く公式の
+    // 重複処理を経る（requirements.md §22.2）。Weight/Heart Rateと同じくreadWeightAggregates()と同じ形
+    // （metricsをSLEEP_DURATION_TOTAL 1つに差し替え、結果はDuration）にする。
+    //
+    // 日付境界をまたぐSleep Session（例: 23:30〜翌07:15）が、aggregateGroupByPeriod()のbucket境界を
+    // またいだ場合にどう扱われるかは、このJetpackクライアントのソースやKDocには記載がなく、実際の集計は
+    // Health Connect本体（プラットフォーム側）が行うためjavapによる逆コンパイルでも確認できない
+    // （lessons.md 6.3のような手法が使えない）。Pixel 11実機の実データ（単一ソースのみ、0時より前の
+    // 時間が4分〜86.5分と幅のある6事例）で確認した結果、丸ごと1つのbucketに計上されることはなく、
+    // 両日のbucketに実時間の重なりに応じて按分されることは分かったが、Health Connectが実際にどう
+    // 計算しているか（Stage単位の計算か近似的な計算か）と複数ソース時の重複処理（Source priority）は
+    // 未確認のまま残っている（lessons.md 6.9、D-032、requirements.md §27）。
+    suspend fun readSleepAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): SleepAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(SleepSessionRecord.SLEEP_DURATION_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                SleepAggregateBucket(
+                    periodStart = grouped.startTime,
+                    totalSleepDuration = grouped.result[SleepSessionRecord.SLEEP_DURATION_TOTAL],
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> SleepAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> SleepAggregatesResult.Failure
+        }
+    }
+
+    // WBS 5.1: readStepsRecords()/readHeartRateRecords()と同じく、呼び出し元（SleepRawRecordsScreen）が
+    // 期間（今日／過去7日間／全期間）ごとにTimeRangeFilterを決める。Sleep Sessionは1日1〜数件程度で、
+    // Heart Rateのような大量サンプルを1レコードに抱えないため、HEART_RATE_RAW_SAMPLE_LIMITのような
+    // 安全弁（lessons.md 6.7）は設けていない。
+    private suspend fun readSleepSessionRecordsPaged(filter: TimeRangeFilter): List<SleepSessionRecord> {
+        val records = mutableListOf<SleepSessionRecord>()
+        var pageToken: String? = null
+        do {
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = SleepSessionRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageToken = pageToken,
+                    ),
+                )
+            records += response.records
+            pageToken = response.pageToken?.ifEmpty { null }
+        } while (pageToken != null)
+        return records
+    }
+
+    suspend fun readSleepSessionRecords(timeRangeFilter: TimeRangeFilter): SleepSessionRecordsResult =
+        try {
+            SleepSessionRecordsResult.Success(records = readSleepSessionRecordsPaged(timeRangeFilter))
+        } catch (e: RemoteException) {
+            SleepSessionRecordsResult.Failure
+        } catch (e: IOException) {
+            SleepSessionRecordsResult.Failure
+        } catch (e: SecurityException) {
+            SleepSessionRecordsResult.Failure
+        }
+
+    // findOldestWeightRecordTime()/findOldestHeartRateRecordTime()と同じ形。SleepSessionRecordには
+    // WeightRecordの.timeのような単一時刻フィールドがないため、IntervalRecord共通のstartTimeを使う。
+    suspend fun findOldestSleepSessionRecordTime(historyPermissionGranted: Boolean): OldestSleepSessionRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = SleepSessionRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestSleepSessionRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestSleepSessionRecordResult.Failure
+        }
+    }
+
     // findOldestWeightRecordTime() / readWeightAggregates() / findOldestHeartRateRecordTime() /
-    // readHeartRateAggregates()に共通する構造（PoC 3でHeart Rate用の2関数を追加した際、Weight用の
-    // 既存2関数と合わせて同じtry/catchの入れ子が4箇所に重複したため、レビューを受けて共通化した）。
+    // readHeartRateAggregates() / findOldestSleepSessionRecordTime() / readSleepAggregates()に共通する構造
+    // （PoC 3でHeart Rate用の2関数を追加した際、Weight用の既存2関数と合わせて同じtry/catchの入れ子が
+    // 4箇所に重複したため、レビューを受けて共通化した。PoC 4のSleep用2関数も同じ形にそのまま乗せている）。
     // 主範囲（primaryFilter）をまず試し、SecurityExceptionなら直近30日（fallbackFilter）で1回だけ
     // 再試行する。再試行後もRemoteException/IOException/SecurityExceptionのいずれかで失敗した場合、
     // また主範囲がSecurityException以外（RemoteException/IOException）で失敗した場合はFailureにする。
