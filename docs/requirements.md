@@ -525,8 +525,8 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 
 -   グラフ集計ルールの詳細（データ型×期間。Weightのbucket集計方針はPoC 1で決定済み、§8/§22.2）
 -   ソース別件数の表示仕様
--   Vico採用後の残課題: 10年規模・大量bucketでの操作感（Pixel 11実機で数年分・千件規模までは確認済み）、ピンチズーム、`aggregateGroupByPeriod()`が値のないbucketを実際にどう返すか（lessons.md 7.2〜7.3）
--   Roomを導入するか
+-   Vico採用後の残課題: 10年規模（数千bucket）での操作感（Pixel 11実機でHeart Rateの365bucket規模までは描画・横スクロールとも確認済み）、ピンチズーム、`aggregateGroupByPeriod()`が値のないbucketを実際にどう返すか（lessons.md 7.2〜7.3）
+-   Roomを導入するか。PoC 3（Heart Rate）実機検証で、Raw全件読み込みのOutOfMemoryError・Aggregateのbucket数依存の応答性能低下という、§23の検討トリガーとなる事象が実際に発生した（lessons.md 6.7、6.8）。Room導入以外の対策（Raw表示範囲を絞る、bucket粒度をデータ型ごとに変える等）との組み合わせも含め検討する
 -   3Y / 5Y期間を追加するか
 -   Body Fat / Blood Glucose / SpO2 / HRV のAggregate対応状況
 

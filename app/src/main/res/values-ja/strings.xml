@@ -8,6 +8,8 @@
     <string name="health_connect_permission_not_granted">体重の読み取り権限: 未許可</string>
     <string name="health_connect_steps_permission_granted">歩数の読み取り権限: 許可済み</string>
     <string name="health_connect_steps_permission_not_granted">歩数の読み取り権限: 未許可</string>
+    <string name="health_connect_heart_rate_permission_granted">心拍数の読み取り権限: 許可済み</string>
+    <string name="health_connect_heart_rate_permission_not_granted">心拍数の読み取り権限: 未許可</string>
     <string name="health_connect_history_permission_granted">履歴読み取り権限: 許可済み</string>
     <string name="health_connect_history_permission_not_granted">履歴読み取り権限: 未許可</string>
     <string name="health_connect_history_not_supported">この端末のHealth Connectは、30日より前の履歴データの読み取りに対応していません。</string>
@@ -57,4 +59,37 @@
     <plurals name="poc_steps_record_count">
         <item quantity="other">%1$d件</item>
     </plurals>
+    <string name="poc_heart_rate_open_button">PoC: 心拍数の生データを表示</string>
+    <string name="poc_heart_rate_title">心拍数 生データ（PoC）</string>
+    <string name="poc_heart_rate_period_today">今日</string>
+    <string name="poc_heart_rate_period_week">過去7日間</string>
+    <string name="poc_heart_rate_period_all">全期間</string>
+    <string name="poc_heart_rate_back">戻る</string>
+    <string name="poc_heart_rate_loading">読み込み中…</string>
+    <string name="poc_heart_rate_error">読み込みに失敗しました。</string>
+    <string name="poc_heart_rate_retry">再試行</string>
+    <string name="poc_heart_rate_empty">心拍数のレコードがありません。</string>
+    <string name="poc_heart_rate_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
+    <string name="poc_heart_rate_limit_reached_notice">対象期間のサンプル数が多すぎるため、メモリ不足によるクラッシュを避けて読み込みを打ち切りました。全件ではありません。</string>
+    <string name="poc_heart_rate_sample_count">測定数（サンプル数）: %1$s</string>
+    <string name="poc_heart_rate_elapsed_time">読み込み時間: %1$sミリ秒</string>
+    <string name="poc_heart_rate_by_source_title">ソース別</string>
+    <string name="poc_heart_rate_source_summary">%1$s件、測定数 %2$s</string>
+    <string name="poc_heart_rate_raw_records_title">生レコード一覧</string>
+    <string name="poc_heart_rate_record_summary">%1$s  %2$d件のサンプル  平均%3$s bpm</string>
+    <string name="poc_heart_rate_record_summary_no_samples">%1$s  %2$d件のサンプル</string>
+    <plurals name="poc_heart_rate_record_count">
+        <item quantity="other">%1$d件</item>
+    </plurals>
+    <string name="poc_heart_rate_graph_open_button">PoC: 心拍数のグラフを表示</string>
+    <string name="poc_heart_rate_graph_title">心拍数 グラフ（PoC）</string>
+    <string name="poc_heart_rate_graph_period_1m">1ヶ月</string>
+    <string name="poc_heart_rate_graph_period_1y">1年</string>
+    <string name="poc_heart_rate_graph_period_all">全期間</string>
+    <string name="poc_heart_rate_graph_aggregation_daily">集計方法: 日平均・最小・最大bpm（Health Connect公式Aggregate API）</string>
+    <string name="poc_heart_rate_graph_aggregation_monthly">集計方法: 月平均・最小・最大bpm（Health Connect公式Aggregate API）</string>
+    <string name="poc_heart_rate_graph_oldest_record">最古のレコード: %1$s</string>
+    <string name="poc_heart_rate_graph_oldest_record_none">読み取れる範囲にレコードがありません。</string>
+    <string name="poc_heart_rate_graph_measurement_count">期間内の測定数（サンプル数。レコード数ではない）: %1$s</string>
+    <string name="poc_heart_rate_graph_elapsed_time">Aggregate取得時間: %1$sミリ秒</string>
 </resources>

@@ -8,6 +8,8 @@
     <string name="health_connect_permission_not_granted">Weight read permission: not granted</string>
     <string name="health_connect_steps_permission_granted">Steps read permission: granted</string>
     <string name="health_connect_steps_permission_not_granted">Steps read permission: not granted</string>
+    <string name="health_connect_heart_rate_permission_granted">Heart rate read permission: granted</string>
+    <string name="health_connect_heart_rate_permission_not_granted">Heart rate read permission: not granted</string>
     <string name="health_connect_history_permission_granted">History read permission: granted</string>
     <string name="health_connect_history_permission_not_granted">History read permission: not granted</string>
     <string name="health_connect_history_not_supported">This device\'s Health Connect does not support reading history data older than 30 days.</string>
@@ -59,4 +61,38 @@
         <item quantity="one">%1$d record</item>
         <item quantity="other">%1$d records</item>
     </plurals>
+    <string name="poc_heart_rate_open_button">PoC: Show heart rate raw records</string>
+    <string name="poc_heart_rate_title">Heart rate raw records (PoC)</string>
+    <string name="poc_heart_rate_period_today">Today</string>
+    <string name="poc_heart_rate_period_week">7 days</string>
+    <string name="poc_heart_rate_period_all">ALL</string>
+    <string name="poc_heart_rate_back">Back</string>
+    <string name="poc_heart_rate_loading">Loading…</string>
+    <string name="poc_heart_rate_error">Failed to load records.</string>
+    <string name="poc_heart_rate_retry">Retry</string>
+    <string name="poc_heart_rate_empty">No heart rate records found.</string>
+    <string name="poc_heart_rate_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
+    <string name="poc_heart_rate_limit_reached_notice">Too many samples in range — loading was stopped early to avoid an out-of-memory crash. This is not the full record set.</string>
+    <string name="poc_heart_rate_sample_count">Samples: %1$s</string>
+    <string name="poc_heart_rate_elapsed_time">Load time: %1$s ms</string>
+    <string name="poc_heart_rate_by_source_title">By source</string>
+    <string name="poc_heart_rate_source_summary">Records: %1$s · Samples: %2$s</string>
+    <string name="poc_heart_rate_raw_records_title">Raw records</string>
+    <string name="poc_heart_rate_record_summary">%1$s  %2$d samples  avg %3$s bpm</string>
+    <string name="poc_heart_rate_record_summary_no_samples">%1$s  %2$d samples</string>
+    <plurals name="poc_heart_rate_record_count">
+        <item quantity="one">%1$d record</item>
+        <item quantity="other">%1$d records</item>
+    </plurals>
+    <string name="poc_heart_rate_graph_open_button">PoC: Show heart rate graph</string>
+    <string name="poc_heart_rate_graph_title">Heart rate graph (PoC)</string>
+    <string name="poc_heart_rate_graph_period_1m">1M</string>
+    <string name="poc_heart_rate_graph_period_1y">1Y</string>
+    <string name="poc_heart_rate_graph_period_all">ALL</string>
+    <string name="poc_heart_rate_graph_aggregation_daily">Aggregation: daily average / min / max bpm (official Aggregate API)</string>
+    <string name="poc_heart_rate_graph_aggregation_monthly">Aggregation: monthly average / min / max bpm (official Aggregate API)</string>
+    <string name="poc_heart_rate_graph_oldest_record">Oldest record found: %1$s</string>
+    <string name="poc_heart_rate_graph_oldest_record_none">No records found in the readable range.</string>
+    <string name="poc_heart_rate_graph_measurement_count">Measurements in this period (samples, not records): %1$s</string>
+    <string name="poc_heart_rate_graph_elapsed_time">Aggregate fetch time: %1$s ms</string>
 </resources>

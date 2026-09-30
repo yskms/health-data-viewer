@@ -1,6 +1,7 @@
 package com.yskms.healthdataviewer.healthconnect
 
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
 
@@ -10,5 +11,6 @@ import androidx.health.connect.client.records.WeightRecord
 object HealthConnectPermissions {
     val WEIGHT_READ: String = HealthPermission.getReadPermission(WeightRecord::class)
     val STEPS_READ: String = HealthPermission.getReadPermission(StepsRecord::class)
+    val HEART_RATE_READ: String = HealthPermission.getReadPermission(HeartRateRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

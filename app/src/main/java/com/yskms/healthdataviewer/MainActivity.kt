@@ -26,6 +26,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
+import com.yskms.healthdataviewer.poc.HeartRateGraphScreen
+import com.yskms.healthdataviewer.poc.HeartRateRawRecordsScreen
 import com.yskms.healthdataviewer.poc.StepsScreen
 import com.yskms.healthdataviewer.poc.WeightGraphScreen
 import com.yskms.healthdataviewer.poc.WeightRawRecordsScreen
@@ -52,7 +54,7 @@ class MainActivity : AppCompatActivity() {
     }
 }
 
-private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH, STEPS }
+private enum class PocScreen { STATUS, WEIGHT_RAW_RECORDS, WEIGHT_GRAPH, STEPS, HEART_RATE_RAW_RECORDS, HEART_RATE_GRAPH }
 
 @Composable
 fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
@@ -61,8 +63,9 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
     // rememberSaveableで保持する: remember だと画面回転（Activity再生成）でどちらも初期値に戻り、
     // 一覧を開いたまま回転するとステータス画面に戻ってしまう（レビュー指摘、実機で再現確認済み）。
     var screen by rememberSaveable { mutableStateOf(PocScreen.STATUS) }
-    // Weightの2画面（画面遷移時のスナップショットを受け取る設計）でのみ使う。Steps（StepsScreen）は
-    // D-030により、この値を受け取らず自身で毎回問い合わせ直す。
+    // 画面遷移時のスナップショットを受け取る設計の画面（Weightの2画面、HeartRateGraphScreen）でのみ使う。
+    // Steps（StepsScreen）・HeartRateRawRecordsScreenはD-030と同じ理由で、この値を受け取らず自身で
+    // 毎回問い合わせ直す。
     var historyPermissionGrantedForPocScreens by rememberSaveable { mutableStateOf(false) }
 
     when (screen) {
@@ -88,6 +91,26 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
                 onBack = { screen = PocScreen.STATUS },
                 modifier = modifier,
             )
+        PocScreen.HEART_RATE_RAW_RECORDS ->
+            // HeartRateRawRecordsScreenはStepsScreenと同じ理由で、履歴読み取り権限を自身で毎回問い合わせ直す
+            // （全期間が大量データ・長時間になり得るため）。
+            HeartRateRawRecordsScreen(
+                healthConnectManager = healthConnectManager,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
+        PocScreen.HEART_RATE_GRAPH ->
+            // HeartRateGraphScreenはWeightGraphScreenと同じ理由で、画面遷移時のスナップショットを受け取る。
+            // 「1回の呼び出しで完結しRawほど長時間化しない」という想定は、実機検証で1Y（日bucket365点）が
+            // 数分規模かかることが分かり崩れている（lessons.md 6.8）。ただし読み込み中に履歴読み取り権限が
+            // 取り消された場合も`readWithHistoryFallback()`が直近30日へフォールバックするため、
+            // スナップショットが古いままでも致命的にはならない。
+            HeartRateGraphScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedForPocScreens,
+                onBack = { screen = PocScreen.STATUS },
+                modifier = modifier,
+            )
         PocScreen.STATUS ->
             HealthConnectStatusScreen(
                 healthConnectManager = healthConnectManager,
@@ -100,6 +123,11 @@ fun MainScreen(healthConnectManager: HealthConnectManager, modifier: Modifier = 
                     screen = PocScreen.WEIGHT_GRAPH
                 },
                 onOpenSteps = { screen = PocScreen.STEPS },
+                onOpenHeartRateRawRecords = { screen = PocScreen.HEART_RATE_RAW_RECORDS },
+                onOpenHeartRateGraph = { historyPermissionGranted ->
+                    historyPermissionGrantedForPocScreens = historyPermissionGranted
+                    screen = PocScreen.HEART_RATE_GRAPH
+                },
                 modifier = modifier,
             )
     }
@@ -111,6 +139,8 @@ fun HealthConnectStatusScreen(
     onOpenWeightRawRecords: (historyPermissionGranted: Boolean) -> Unit,
     onOpenWeightGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSteps: () -> Unit,
+    onOpenHeartRateRawRecords: () -> Unit,
+    onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
@@ -162,6 +192,7 @@ fun HealthConnectStatusScreen(
             HealthConnectAvailability.INSTALLED -> {
                 val weightGranted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ)
                 val stepsGranted = grantedPermissions?.contains(HealthConnectPermissions.STEPS_READ)
+                val heartRateGranted = grantedPermissions?.contains(HealthConnectPermissions.HEART_RATE_READ)
                 Text(text = stringResource(id = R.string.health_connect_available))
                 Text(
                     text =
@@ -189,6 +220,17 @@ fun HealthConnectStatusScreen(
                     text =
                         stringResource(
                             id =
+                                permissionStatusTextRes(
+                                    granted = heartRateGranted,
+                                    grantedRes = R.string.health_connect_heart_rate_permission_granted,
+                                    notGrantedRes = R.string.health_connect_heart_rate_permission_not_granted,
+                                ),
+                        ),
+                )
+                Text(
+                    text =
+                        stringResource(
+                            id =
                                 historyPermissionStatusTextRes(
                                     featureAvailable = historyFeatureAvailable,
                                     granted = grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ),
@@ -204,6 +246,7 @@ fun HealthConnectStatusScreen(
                             buildSet {
                                 add(HealthConnectPermissions.WEIGHT_READ)
                                 add(HealthConnectPermissions.STEPS_READ)
+                                add(HealthConnectPermissions.HEART_RATE_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                             }
                         requestPermissions.launch(permissions)
@@ -230,6 +273,18 @@ fun HealthConnectStatusScreen(
                 if (stepsGranted == true) {
                     Button(onClick = onOpenSteps) {
                         Text(text = stringResource(id = R.string.poc_steps_open_button))
+                    }
+                }
+                if (heartRateGranted == true) {
+                    Button(onClick = onOpenHeartRateRawRecords) {
+                        Text(text = stringResource(id = R.string.poc_heart_rate_open_button))
+                    }
+                    Button(
+                        onClick = {
+                            onOpenHeartRateGraph(grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ) == true)
+                        },
+                    ) {
+                        Text(text = stringResource(id = R.string.poc_heart_rate_graph_open_button))
                     }
                 }
             }
