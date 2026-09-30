@@ -16,6 +16,27 @@
     <string name="health_connect_history_permission_not_granted">履歴読み取り権限: 未許可</string>
     <string name="health_connect_history_not_supported">この端末のHealth Connectは、30日より前の履歴データの読み取りに対応していません。</string>
     <string name="health_connect_request_permission">権限をリクエスト</string>
+    <!-- WBS 6.1: ホームダッシュボード（期間タブ＋指標カード）。 -->
+    <string name="home_period_today">今日</string>
+    <string name="home_period_week">週</string>
+    <string name="home_period_month">月</string>
+    <string name="home_period_year">年</string>
+    <string name="home_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
+    <string name="home_permission_banner">一部のデータ型が未許可です。</string>
+    <string name="home_permission_not_granted">許可されていません</string>
+    <string name="home_loading">読み込み中…</string>
+    <string name="home_error">読み込みに失敗しました。</string>
+    <string name="home_no_data">データがありません。</string>
+    <string name="home_weight_title">体重</string>
+    <string name="home_weight_value">%1$s kg</string>
+    <string name="home_weight_delta">前回比: %1$s kg</string>
+    <string name="home_steps_title">歩数</string>
+    <string name="home_steps_value">%1$s 歩</string>
+    <string name="home_heart_rate_title">心拍数</string>
+    <string name="home_heart_rate_value">平均 %1$d bpm</string>
+    <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
+    <string name="home_sleep_title">睡眠</string>
+    <string name="home_sleep_average_per_day_notice">この期間の1日あたり平均</string>
     <string name="poc_weight_open_button">PoC: 体重の生データを表示</string>
     <string name="poc_weight_title">体重 生データ（PoC）</string>
     <string name="poc_weight_graph_open_button">PoC: 体重のグラフを表示</string>

@@ -16,6 +16,27 @@
     <string name="health_connect_history_permission_not_granted">History read permission: not granted</string>
     <string name="health_connect_history_not_supported">This device\'s Health Connect does not support reading history data older than 30 days.</string>
     <string name="health_connect_request_permission">Request permission</string>
+    <!-- WBS 6.1: Home dashboard (period tabs + metric cards). -->
+    <string name="home_period_today">Today</string>
+    <string name="home_period_week">Week</string>
+    <string name="home_period_month">Month</string>
+    <string name="home_period_year">Year</string>
+    <string name="home_history_limited_notice">History permission isn\'t granted, so this only reflects the last 30 days.</string>
+    <string name="home_permission_banner">Some data types aren\'t allowed yet.</string>
+    <string name="home_permission_not_granted">Not allowed</string>
+    <string name="home_loading">Loading…</string>
+    <string name="home_error">Failed to load.</string>
+    <string name="home_no_data">No data.</string>
+    <string name="home_weight_title">Weight</string>
+    <string name="home_weight_value">%1$s kg</string>
+    <string name="home_weight_delta">vs. previous: %1$s kg</string>
+    <string name="home_steps_title">Steps</string>
+    <string name="home_steps_value">%1$s steps</string>
+    <string name="home_heart_rate_title">Heart Rate</string>
+    <string name="home_heart_rate_value">%1$d bpm avg</string>
+    <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
+    <string name="home_sleep_title">Sleep</string>
+    <string name="home_sleep_average_per_day_notice">Average per day for this period</string>
     <string name="poc_weight_open_button">PoC: Show weight raw records</string>
     <string name="poc_weight_title">Weight raw records (PoC)</string>
     <string name="poc_weight_graph_open_button">PoC: Show weight graph</string>
