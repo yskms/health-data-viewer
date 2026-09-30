@@ -7,7 +7,6 @@ sealed interface HeartRateAggregateSummaryResult {
         val averageBpm: Long?,
         val minBpm: Long?,
         val maxBpm: Long?,
-        val measurementCount: Long?,
     ) : HeartRateAggregateSummaryResult
 
     data object Failure : HeartRateAggregateSummaryResult

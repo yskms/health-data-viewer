@@ -2,16 +2,18 @@ package com.yskms.healthdataviewer.screen.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -162,7 +164,7 @@ fun HomeScreen(
     }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(24.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.titleLarge)
@@ -261,7 +263,23 @@ fun HomeScreen(
                                         // 実際にクエリした開始時刻（クランプ後）で割る。暦の開始時刻
                                         // （startOfPeriod()）をそのまま使うと、履歴読み取り権限が
                                         // ない状態で誤った平均になる（上のactualStart()のコメント参照）。
-                                        val elapsedDays = ChronoUnit.DAYS.between(actualStart, effectNow).coerceAtLeast(1)
+                                        //
+                                        // 日数は経過時間（Duration）の単純な切り捨てではなく、
+                                        // actualStartの日付からeffectNowの日付までの暦日数（両端含む）
+                                        // で数える。睡眠は明け方に集中するため、例えば週の途中（水曜10時）
+                                        // に見ると、経過時間の切り捨て（2日）では分子（月・火・水の約3晩分）
+                                        // に対して分母が小さすぎ、平均が実際より大きく出てしまう
+                                        // （コードレビュー指摘、水曜朝で約1.5倍、火曜朝で約2倍）。
+                                        // 「今日」の日付も1日として分母に数えることで、今日の朝に含まれる
+                                        // 前夜分の睡眠と整合させる。
+                                        val zone = ZoneId.systemDefault()
+                                        val elapsedDays =
+                                            (
+                                                ChronoUnit.DAYS.between(
+                                                    actualStart.atZone(zone).toLocalDate(),
+                                                    effectNow.atZone(zone).toLocalDate(),
+                                                ) + 1
+                                            ).coerceAtLeast(1)
                                         SleepCardValue(duration = total.dividedBy(elapsedDays), isAveraged = true)
                                     }
                                 SleepCardResult.Success(value)
@@ -271,7 +289,12 @@ fun HomeScreen(
                     sleepLoad = SleepCardLoad(period = selectedPeriod, result = result)
                 }
 
-                WeightCard(granted = weightGranted, load = weightLoad, onClick = { onOpenWeightGraph(historyPermissionGranted) })
+                WeightCard(
+                    granted = weightGranted,
+                    load = weightLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    onClick = { onOpenWeightGraph(historyPermissionGranted) },
+                )
                 StepsCard(period = selectedPeriod, granted = stepsGranted, load = stepsLoad, onClick = onOpenSteps)
                 HeartRateCard(
                     period = selectedPeriod,
@@ -303,17 +326,23 @@ private fun MetricCardContainer(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    val clickableModifier = if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
-    Card(modifier = modifier.fillMaxWidth().then(clickableModifier)) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Box(modifier = Modifier.size(10.dp).background(color = accentColor, shape = CircleShape))
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-            }
-            content()
+    val cardContent: @Composable ColumnScope.() -> Unit = {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(modifier = Modifier.size(10.dp).background(color = accentColor, shape = CircleShape))
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+        }
+        content()
+    }
+    // タップ可能かどうかでCardのオーバーロードを分ける（コードレビュー指摘）。
+    // Modifier.clickable()だとrippleがCardの角丸で切り取られず、Roleのセマンティクスも付かない。
+    // Card(onClick = ...)はMaterial3標準のインタラクティブ扱いで両方解決する。
+    if (onClick != null) {
+        Card(onClick = onClick, modifier = modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp), content = cardContent)
+        }
+    } else {
+        Card(modifier = modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp), content = cardContent)
         }
     }
 }
@@ -329,7 +358,12 @@ private fun PermissionNotGrantedOrLoadingText(granted: Boolean?) {
 }
 
 @Composable
-private fun WeightCard(granted: Boolean?, load: WeightRecordsResult?, onClick: () -> Unit) {
+private fun WeightCard(
+    granted: Boolean?,
+    load: WeightRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    onClick: () -> Unit,
+) {
     val locale = LocalLocale.current.platformLocale
     MetricCardContainer(
         title = stringResource(id = R.string.home_weight_title),
@@ -361,11 +395,20 @@ private fun WeightCard(granted: Boolean?, load: WeightRecordsResult?, onClick: (
                 }
                 // Weightは期間タブに依存せず常に全体から最新値を探すため、期間タブ基準の
                 // 共有historyLimited通知（DashboardPeriod.isHistoryLimited）では検知できない
-                // （Today/Weekタブでは常にfalseになる）。findLatestWeightRecords()自身の結果
-                // （直近30日へのフォールバックが実際に発生したか）を見て、このカード単体で通知する
-                // （コードレビュー指摘: 履歴読み取り権限がない状態で最新の記録が30日より前しかない場合、
-                // 説明なしに「データがありません」とだけ表示されてしまっていた）。
-                if (load.historyLimited) {
+                // （Today/Weekタブでは常にfalseになる）。findLatestWeightRecords()自身の結果の
+                // historyLimitedを見てこのカード単体で通知する（コードレビュー指摘: 履歴読み取り権限が
+                // ない状態で最新の記録が30日より前しかない場合、説明なしに「データがありません」とだけ
+                // 表示されてしまっていた）。
+                //
+                // load.historyLimitedは「実際に直近30日へのフォールバックが発生したか」ではなく、
+                // 単に`!historyPermissionGranted`をそのまま反映しているだけ（readWithHistoryFallback()の
+                // 通常経路。他のRaw/Graph画面のhistoryLimited通知も同じ挙動）。そのため履歴読み取り権限が
+                // ない限り、最新の記録が実際には30日以内にあっても常に表示される（安全側の簡略化として許容）。
+                // ただし端末がそもそも履歴読み取りに対応していない場合（historyFeatureAvailable == false）は、
+                // 上部に既に「対応していません」の案内が出ているため、ここでは重ねて表示しない
+                // （「権限がないため」という文言が実際の理由＝端末非対応と食い違い、権限を許可すれば
+                // 解決するように誤読されるのを避ける。コードレビュー指摘）。
+                if (load.historyLimited && historyFeatureAvailable != false) {
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
             }

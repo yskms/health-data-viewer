@@ -484,13 +484,7 @@ class HealthConnectManager(context: Context) {
             val result =
                 client.aggregate(
                     AggregateRequest(
-                        metrics =
-                            setOf(
-                                HeartRateRecord.BPM_AVG,
-                                HeartRateRecord.BPM_MIN,
-                                HeartRateRecord.BPM_MAX,
-                                HeartRateRecord.MEASUREMENTS_COUNT,
-                            ),
+                        metrics = setOf(HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MIN, HeartRateRecord.BPM_MAX),
                         timeRangeFilter = timeRangeFilter,
                     ),
                 )
@@ -498,7 +492,6 @@ class HealthConnectManager(context: Context) {
                 averageBpm = result[HeartRateRecord.BPM_AVG],
                 minBpm = result[HeartRateRecord.BPM_MIN],
                 maxBpm = result[HeartRateRecord.BPM_MAX],
-                measurementCount = result[HeartRateRecord.MEASUREMENTS_COUNT],
             )
         } catch (e: RemoteException) {
             HeartRateAggregateSummaryResult.Failure
