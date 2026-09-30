@@ -117,13 +117,13 @@ fun StepsDetailScreen(
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
-            DetailGraphRange.Empty ->
+            is DetailGraphRange.Empty ->
                 aggregatesLoad =
                     PeriodTaggedResult(
                         period = period,
                         result =
                             StepsLoad(
-                                result = StepsAggregatesResult.Success(buckets = emptyList(), historyLimited = false),
+                                result = StepsAggregatesResult.Success(buckets = emptyList(), historyLimited = range.historyLimited),
                                 granularity = BucketGranularity.DAY,
                                 denominatorFloor = null,
                             ),

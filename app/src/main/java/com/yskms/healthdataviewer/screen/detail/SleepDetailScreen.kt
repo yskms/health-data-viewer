@@ -118,13 +118,13 @@ fun SleepDetailScreen(
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
-            DetailGraphRange.Empty ->
+            is DetailGraphRange.Empty ->
                 aggregatesLoad =
                     PeriodTaggedResult(
                         period = period,
                         result =
                             SleepLoad(
-                                result = SleepAggregatesResult.Success(buckets = emptyList(), historyLimited = false),
+                                result = SleepAggregatesResult.Success(buckets = emptyList(), historyLimited = range.historyLimited),
                                 granularity = BucketGranularity.DAY,
                                 denominatorFloor = null,
                             ),
@@ -204,9 +204,8 @@ private fun formatDuration(duration: Duration): String {
     return String.format(Locale.ROOT, "%d:%02d", hours, minutes)
 }
 
-// WEEK/MONTH bucketでは決定事項5により実カバー日数で割った1日あたり平均に正規化する
-// （daysCoveredBy()、SumMetricNormalization.kt。小数日数を使うため進行中の最新bucketでも
-// 端数が切り捨てられず正しく按分される。レビュー指摘、lessons.md 6.12続報）。
+// WEEK/MONTH bucketでは決定事項5により実カバー日数（暦日数、両端含む）で割った1日あたり平均に
+// 正規化する（daysCoveredBy()、SumMetricNormalization.kt）。
 //
 // denominatorFloor: ALL・Customが暦月境界に揃えるための切り捨て（lessons.md 7.5）により、実際に
 // データがあり得る開始日より前の日数まで含めた「bucketの全日数」がperiodStart〜periodEndになる
@@ -228,8 +227,7 @@ private fun perDayDuration(
         duration
     } else {
         val effectiveStart = denominatorFloor?.let { maxOf(bucket.periodStart, it) } ?: bucket.periodStart
-        val days = daysCoveredBy(effectiveStart, bucket.periodEnd)
-        Duration.ofMillis((duration.toMillis() / days).toLong())
+        duration.dividedBy(daysCoveredBy(effectiveStart, bucket.periodEnd))
     }
 
 private data class SleepChartPoint(val x: Long, val hours: Double)

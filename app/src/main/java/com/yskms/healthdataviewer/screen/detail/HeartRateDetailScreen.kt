@@ -120,13 +120,13 @@ fun HeartRateDetailScreen(
             )
         when (range) {
             DetailGraphRange.Pending -> aggregatesLoad = PeriodTaggedResult(period = period, result = null)
-            DetailGraphRange.Empty ->
+            is DetailGraphRange.Empty ->
                 aggregatesLoad =
                     PeriodTaggedResult(
                         period = period,
                         result =
                             HeartRateLoad(
-                                result = HeartRateAggregatesResult.Success(buckets = emptyList(), historyLimited = false),
+                                result = HeartRateAggregatesResult.Success(buckets = emptyList(), historyLimited = range.historyLimited),
                                 granularity = BucketGranularity.DAY,
                             ),
                     )
