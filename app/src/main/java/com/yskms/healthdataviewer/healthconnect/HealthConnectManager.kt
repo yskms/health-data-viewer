@@ -343,9 +343,13 @@ class HealthConnectManager(context: Context) {
 
     // WBS 6.10: ホーム画面のResting Heart Rateカード（「最新値＋前回比」、期間タブに依存しない）用。
     // findLatestWeightRecords()と同じ形・同じ理由（D-044）。Heart Rateカード（選択期間の平均・最小・
-    // 最大、readHeartRateAggregateSummary()）とは異なり、Resting Heart Rateは安静時に日1回程度
-    // 記録されることが多い（Weightと同じ記録頻度のプロファイル）ため、期間タブごとのAggregateではなく
-    // Weightと同じ「最新値＋前回比」を採用した。
+    // 最大、readHeartRateAggregateSummary()）とは異なり、Resting Heart Rateは安静時に日1回程度しか
+    // 記録されないことが多く、継続記録されるHeart Rateとは記録頻度のプロファイルが異なる（一般的な
+    // Health Connect連携アプリの傾向としての想定。実装前の設計判断の時点ではこのアプリでの実測はまだ
+    // 無かった）ため、期間タブごとのAggregateではなくWeightと同じ「最新値＋前回比」を採用した。
+    // Pixel 11実機のFitソースで2025/10/25〜2025/11/26の33日間に32件（1日あたりほぼ1件、ほぼ連続した
+    // 日次記録。欠けていたのは33日中1日のみ）を確認でき、この想定と一致した（D-044、単一ソース・
+    // 短い期間のみの確認）。
     suspend fun findLatestRestingHeartRateRecords(limit: Int, historyPermissionGranted: Boolean): RestingHeartRateRecordsResult {
         suspend fun readLatest(filter: TimeRangeFilter): List<RestingHeartRateRecord> =
             client

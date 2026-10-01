@@ -332,7 +332,10 @@ fun HomeScreen(
                 // Resting Heart Rateカード（WBS 6.10、D-044）: WeightCardと同じ「最新値＋前回比」
                 // （期間タブに依存しない）。Heart Rateカードが選択期間のAggregate平均・最小・最大を
                 // 使うのに対し、Resting Heart Rateは安静時に日1回程度しか記録されないことが多く、
-                // Weightと同じ記録頻度のプロファイルのためこのパターンを採用した。
+                // 継続記録されるHeart Rateとは異なりWeightに近い記録頻度のプロファイルのため、このパターン
+                // を採用した。Pixel 11実機のFitソースで2025/10/25〜2025/11/26の33日間に32件（ほぼ連続
+                // した日次記録）を確認済み（詳細はHealthConnectManager.findLatestRestingHeartRateRecords()
+                // のコメント、D-044参照）。
                 var restingHeartRateLoad by remember { mutableStateOf<RestingHeartRateRecordsResult?>(null) }
                 LaunchedEffect(restingHeartRateGranted, historyPermissionGranted, resumeKey) {
                     if (restingHeartRateGranted != true) return@LaunchedEffect
@@ -793,7 +796,10 @@ private fun HeartRateCard(
 }
 
 // WeightCardと同じ形（D-044。「最新値＋前回比」、beatsPerMinuteはLongのため.inKilogramsのような
-// 単位変換・小数書式は不要）。
+// 単位変換・小数書式は不要）。WeightCardと同じ既知の制約も引き継ぐ: 「最新値」「前回比」は記録日付を
+// 画面に出さないため、記録に抜けがある期間に見ると、表示されている2値がどちらも「最新」に見えて
+// 実際には数日離れた記録同士の比較になっていることに気付きにくい（コードレビュー指摘）。WeightCardで
+// 既に許容されている簡略化のため、本カードだけ記録日付を追加する変更は本タスクでは行わない。
 @Composable
 private fun RestingHeartRateCard(
     permissionsCheckState: PermissionsCheckState,
