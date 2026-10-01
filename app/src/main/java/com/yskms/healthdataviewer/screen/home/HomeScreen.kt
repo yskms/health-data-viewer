@@ -531,9 +531,9 @@ private fun SleepCard(period: DashboardPeriod, granted: Boolean?, load: SleepCar
     }
 }
 
-// SleepRawRecordsScreen/SleepDetailScreen.formatDuration()と同じ定義を複製している（private宣言の
-// ため、ファイルをまたいで再利用できない）。WBS 6.2で他の重複（bucket境界・periodタグ付け等）は
-// 共通化したが、この5行程度の書式関数まで共通化するのは過剰と判断し、複製のままにしている。
+// SleepDetailScreen.formatDuration()と同じ定義を複製している（private宣言のため、ファイルをまたいで
+// 再利用できない）。WBS 6.2で他の重複（bucket境界・periodタグ付け等）は共通化したが、この5行程度の
+// 書式関数まで共通化するのは過剰と判断し、複製のままにしている。
 private fun formatSleepDuration(duration: Duration): String {
     val totalMinutes = duration.toMinutes()
     val hours = totalMinutes / 60

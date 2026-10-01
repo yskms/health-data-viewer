@@ -257,7 +257,7 @@ fun SleepDetailScreen(
     }
 }
 
-// poc/SleepRawRecordsScreen.stageTypeLabelRes()と同じ対応（既存PoCから移植）。
+// 旧poc/SleepRawRecordsScreen.stageTypeLabelRes()と同じ対応（WBS 6.3で移植、元のPoC画面は削除）。
 private fun stageTypeLabelRes(stageType: Int): Int =
     when (stageType) {
         SleepSessionRecord.STAGE_TYPE_AWAKE -> R.string.detail_sleep_stage_awake
@@ -270,7 +270,7 @@ private fun stageTypeLabelRes(stageType: Int): Int =
         else -> R.string.detail_sleep_stage_unknown
     }
 
-// poc/SleepRawRecordsScreen.STAGE_DISPLAY_ORDERと同じ順序（既存PoCから移植）。
+// 旧poc/SleepRawRecordsScreen.STAGE_DISPLAY_ORDERと同じ順序（WBS 6.3で移植、元のPoC画面は削除）。
 private val STAGE_DISPLAY_ORDER =
     listOf(
         SleepSessionRecord.STAGE_TYPE_AWAKE,
@@ -283,14 +283,14 @@ private val STAGE_DISPLAY_ORDER =
         SleepSessionRecord.STAGE_TYPE_UNKNOWN,
     )
 
-// poc/SleepRawRecordsScreen.stageTotals()と同じ（既存PoCから移植）。
+// 旧poc/SleepRawRecordsScreen.stageTotals()と同じ（WBS 6.3で移植、元のPoC画面は削除）。
 private fun stageTotals(stages: List<SleepSessionRecord.Stage>): Map<Int, Duration> =
     stages
         .groupBy { it.stage }
         .mapValues { (_, list) -> list.fold(Duration.ZERO) { acc, stage -> acc + Duration.between(stage.startTime, stage.endTime) } }
 
-// poc/SleepRawRecordsScreen.SleepRecordRow()と同じフォーマット（既存PoCから移植）。formatDuration()は
-// このファイル内の既存定義をそのまま使う。
+// 旧poc/SleepRawRecordsScreen.SleepRecordRow()と同じフォーマット（WBS 6.3で移植、元のPoC画面は削除）。
+// formatDuration()はこのファイル内の既存定義をそのまま使う。
 @Composable
 private fun SleepRecordRow(record: SleepSessionRecord) {
     val context = LocalContext.current
@@ -315,7 +315,7 @@ private fun SleepRecordRow(record: SleepSessionRecord) {
         } else {
             // joinToString(transform = ...)は非inline関数のため、渡したラムダの中で@Composableな
             // stringResource()を直接呼べない（コンパイルエラーになる）。mapNotNull（inline）側でラベルを
-            // 文字列に解決してから、transformなしのjoinToStringで連結する（既存PoCから踏襲）。
+            // 文字列に解決してから、transformなしのjoinToStringで連結する（旧poc/SleepRawRecordsScreenから踏襲）。
             val stageText =
                 STAGE_DISPLAY_ORDER
                     .mapNotNull { stageType ->
@@ -326,8 +326,8 @@ private fun SleepRecordRow(record: SleepSessionRecord) {
     }
 }
 
-// SleepRawRecordsScreen.formatDuration()と同じ定義（private宣言のためファイルをまたいで再利用でき
-// ない。既存PoCから踏襲）。
+// 旧poc/SleepRawRecordsScreen.formatDuration()と同じ定義（private宣言のためファイルをまたいで再利用でき
+// ない。元のPoC画面はWBS 6.3で削除）。
 private fun formatDuration(duration: Duration): String {
     val totalMinutes = duration.toMinutes()
     val hours = totalMinutes / 60

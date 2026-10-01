@@ -90,6 +90,7 @@
     <string name="detail_tab_chart">グラフ</string>
     <string name="detail_tab_records">レコード</string>
     <string name="detail_records_empty">読み取れる範囲にレコードがありません。</string>
+    <string name="detail_error_permission">Health Connectの権限が変わった可能性があります。権限を確認してから再試行してください。</string>
     <string name="detail_heart_rate_record_summary">%1$s  %2$d件のサンプル  平均%3$s bpm</string>
     <string name="detail_heart_rate_record_summary_no_samples">%1$s  %2$d件のサンプル</string>
     <string name="detail_sleep_no_stage_data">段階データなし。</string>

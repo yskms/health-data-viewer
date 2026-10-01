@@ -50,9 +50,10 @@ import java.util.Locale
 // WBS 3.1（PoC 2）: Stepsで確認する内容は、RawレコードとAggregate（公式）の差、複数Sourceの扱い、
 // Health Connect公式の重複処理の結果（Steps=Activity系のため、Weight（PoC 1）とは異なり
 // aggregate()に公式の重複処理が効く、requirements.md §22.2）。
-// WeightRawRecordsScreenと同様、WBS 6.3/6.4の正式なDetail画面（Records/Sources）に置き換えられる
-// 前提の簡略実装（画面回転時は再取得する）。WBS 6.2ではWeight/Steps/HeartRate/Sleepのグラフビューを
-// screen/detail配下のDetail画面に置き換えたが、この比較PoC画面自体はグラフではないため対象外。
+// WBS 6.3でRecordsタブ（ページング生レコード一覧）をStepsDetailScreenにも追加したが、この比較PoC
+// 画面はRaw一覧ではなくRaw/Aggregateの突き合わせ専用のため対象外で、引き続きどこからも遷移しない
+// 簡略実装のまま残している（画面回転時は再取得する）。ソース別件数の表示仕様を確定するWBS 6.4で
+// この画面の扱いを改めて決める。
 private enum class StepsPeriod { TODAY, LAST_7_DAYS, ALL }
 
 // TODAY・LAST_7_DAYSは常に30日以内に収まるため、履歴読み取り権限の有無に関わらず同じ範囲になる。
@@ -438,7 +439,7 @@ private fun StepsSourceRowContent(row: StepsSourceRow, sourceName: String, numbe
     }
 }
 
-// FormatStyle.MEDIUM（秒まで表示、WeightRawRecordsScreenと同じスタイル）を使う。PoCの目的の1つが
+// FormatStyle.MEDIUM（秒まで表示、WeightDetailScreenの生レコード行と同じスタイル）を使う。PoCの目的の1つが
 // レコード同士の区間が実際に重なっているかどうかの確認であり、分単位（SHORT）だと本来重ならない
 // 区間（例: 12:31:00–12:31:30と12:31:30–12:33:00）が同じ表示になり誤読を招く。
 @Composable

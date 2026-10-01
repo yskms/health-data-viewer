@@ -83,10 +83,23 @@ class HealthConnectManager(context: Context) {
     // 行わない（Health Connectのtokenは特定のfilterに基づくため、途中でfilterを切り替える整合性が
     // 取れない。readWithHistoryFallback()とは異なる考え方）。
     //
+    // 履歴読み取り権限がない場合もrecentRangeFilter()（終了側無制限のafter()）は使わず、ここで
+    // 取得したnowを両端に固定したbetween()にする（レビュー指摘）。recentRangeFilter()のまま複数回
+    // 読み直すと、ページング中にHealth Connectへ新しいレコードが書き込まれた場合、その都度クエリの
+    // 実質的な終了側が広がり、破棄後のprepend再読込で「ページ0」の内容が最初と変わってtokenの境界が
+    // ずれ、initialLoadSizeの問題（lessons.md 6.16）と同じ理屈でレコードが静かに欠落しうる。
+    // historyPermissionGranted=trueのbefore(now)は終了側が固定のため、この問題は起きない。
+    //
     // recordType = WeightRecord::classの形式でReadRecordsRequestを構築すると、deduplicateStrategyは
     // 指定しなくてもDISABLED（重複排除なし）になる（D-007と整合。CLAUDE.md・lessons.md 6.3参照）。
-    fun weightRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, WeightRecord> {
-        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+    fun weightRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<WeightRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
         return HealthRecordsPagingSource { pageToken, pageSize ->
             val response =
                 client.readRecords(
@@ -270,11 +283,18 @@ class HealthConnectManager(context: Context) {
         }
 
     // WBS 6.3: 詳細画面のRecordsタブ用。weightRecordsPagingSource()と同じ考え方（入り口で一度だけ
-    // filterを決め、ページング中の自動フォールバック再試行は行わない）。readStepsRecords()
-    // （Raw/Aggregate比較PoC専用、D-029。filterの決め方を呼び出し元に委ねる設計）とは別物で、
-    // poc/StepsScreenはこの関数を使わず引き続きreadStepsRecords()を使う。
-    fun stepsRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, StepsRecord> {
-        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+    // filterを決め、ページング中の自動フォールバック再試行は行わない。履歴読み取り権限がない場合も
+    // nowを両端に固定したbetween()にする理由はweightRecordsPagingSource()のコメント参照）。
+    // readStepsRecords()（Raw/Aggregate比較PoC専用、D-029。filterの決め方を呼び出し元に委ねる設計）
+    // とは別物で、poc/StepsScreenはこの関数を使わず引き続きreadStepsRecords()を使う。
+    fun stepsRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<StepsRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
         return HealthRecordsPagingSource { pageToken, pageSize ->
             val response =
                 client.readRecords(
@@ -329,9 +349,16 @@ class HealthConnectManager(context: Context) {
     // 分だけ保持する設計に変えたことで、サンプル数上限による打ち切り（旧HEART_RATE_RAW_SAMPLE_LIMIT・
     // HeartRateRecordsResult.LimitReached）という粗い安全弁は不要になった。
     // weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の
-    // 自動フォールバック再試行は行わない）。
-    fun heartRateRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, HeartRateRecord> {
-        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+    // 自動フォールバック再試行は行わない。履歴読み取り権限がない場合もnowを両端に固定した
+    // between()にする理由はweightRecordsPagingSource()のコメント参照）。
+    fun heartRateRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<HeartRateRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
         return HealthRecordsPagingSource { pageToken, pageSize ->
             val response =
                 client.readRecords(
@@ -522,10 +549,17 @@ class HealthConnectManager(context: Context) {
 
     // WBS 6.3: 詳細画面のRecordsタブ用。readSleepSessionRecords()（全件を1つのListに溜め込む旧実装）を
     // 置き換える。weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の
-    // 自動フォールバック再試行は行わない）。Sleep Sessionは1日1〜数件程度で記録頻度が低く、Heart Rateの
-    // ようなOOMの実例は確認されていないが、一貫性のため他3型と同じPaging3のラップにする。
-    fun sleepSessionRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, SleepSessionRecord> {
-        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+    // 自動フォールバック再試行は行わない。履歴読み取り権限がない場合もnowを両端に固定したbetween()に
+    // する理由はweightRecordsPagingSource()のコメント参照）。Sleep Sessionは1日1〜数件程度で記録頻度が
+    // 低く、Heart RateのようなOOMの実例は確認されていないが、一貫性のため他3型と同じPaging3のラップにする。
+    fun sleepSessionRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<SleepSessionRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
         return HealthRecordsPagingSource { pageToken, pageSize ->
             val response =
                 client.readRecords(

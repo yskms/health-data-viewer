@@ -91,6 +91,7 @@
     <string name="detail_tab_chart">Chart</string>
     <string name="detail_tab_records">Records</string>
     <string name="detail_records_empty">No records found in the readable range.</string>
+    <string name="detail_error_permission">Health Connect permission may have changed. Check the permission, then retry.</string>
     <string name="detail_heart_rate_record_summary">%1$s  %2$d samples  avg %3$s bpm</string>
     <string name="detail_heart_rate_record_summary_no_samples">%1$s  %2$d samples</string>
     <string name="detail_sleep_no_stage_data">No stage data.</string>

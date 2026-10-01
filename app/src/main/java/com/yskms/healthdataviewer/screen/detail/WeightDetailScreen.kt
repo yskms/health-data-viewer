@@ -221,8 +221,8 @@ fun WeightDetailScreen(
                 DetailTab.RECORDS -> {
                     // タブ切替ごとにPagerを作り直す（＝Records再訪時はページ0から再表示）。このremember
                     // はDetailTab.RECORDSがコンポジションに存在する間だけ生存し、Chartタブに切り替えると
-                    // 破棄される（画面回転時に状態を保持せず再取得する既存の前例と一貫した、最も単純な選択。
-                    // poc/WeightRawRecordsScreenのコメント参照）。
+                    // 破棄される（画面回転時に状態を保持せず再取得する既存の前例（旧poc/WeightRawRecordsScreen、
+                    // WBS 6.3で削除）と一貫した、最も単純な選択。D-035(4)参照）。
                     val pagingItems =
                         remember {
                             Pager(
@@ -253,7 +253,7 @@ fun WeightDetailScreen(
     }
 }
 
-// poc/WeightRawRecordsScreen.WeightRecordsList()の行表示と同じフォーマット（既存PoCから移植）。
+// 旧poc/WeightRawRecordsScreen.WeightRecordsList()の行表示と同じフォーマット（WBS 6.3で移植、元のPoC画面は削除）。
 @Composable
 private fun WeightRecordRow(record: WeightRecord) {
     val context = LocalContext.current

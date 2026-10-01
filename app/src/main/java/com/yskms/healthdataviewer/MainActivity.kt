@@ -48,8 +48,9 @@ class MainActivity : AppCompatActivity() {
 
 // WBS 6.2: ホーム画面（screen/home/HomeScreen.kt）を起点にし、指標カードのタップ先を
 // screen/detail配下の正式なDetail画面へ接続する（D-033のpoc/各Graph画面への暫定的なブリッジを
-// 置き換えた。Rawレコード一覧＝WeightRawRecordsScreen等・Steps比較PoC＝poc/StepsScreenは
-// 引き続きどこからも遷移させない。WBS 6.3/6.4で扱う）。
+// 置き換えた）。WBS 6.3で各Detail画面にRecordsタブ（ページング生レコード一覧）を追加し、旧Raw一覧
+// PoC画面（WeightRawRecordsScreen等）は削除した。Steps比較PoC＝poc/StepsScreenは、ソース別件数の
+// 仕様を確定するWBS 6.4まで引き続きどこからも遷移させない。
 private const val ROUTE_HOME = "home"
 private const val ROUTE_WEIGHT_DETAIL = "weight_detail"
 private const val ROUTE_STEPS_DETAIL = "steps_detail"

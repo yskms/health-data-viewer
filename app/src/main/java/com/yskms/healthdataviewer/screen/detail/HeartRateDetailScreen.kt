@@ -244,7 +244,7 @@ fun HeartRateDetailScreen(
     }
 }
 
-// poc/HeartRateRawRecordsScreen.HeartRateRecordRow()と同じフォーマット（既存PoCから移植）。
+// 旧poc/HeartRateRawRecordsScreen.HeartRateRecordRow()と同じフォーマット（WBS 6.3で移植、元のPoC画面は削除）。
 @Composable
 private fun HeartRateRecordRow(record: HeartRateRecord) {
     val context = LocalContext.current
@@ -260,12 +260,14 @@ private fun HeartRateRecordRow(record: HeartRateRecord) {
         remember(record.metadata.dataOrigin.packageName) {
             DataOriginNameResolver.resolve(context, record.metadata.dataOrigin.packageName)
         }
+    // WBS 6.3コードレビュー指摘: remember()していないと、再コンポーズ（スクロールでの再利用等）の
+    // たびにsamples全件のaverage()を計算し直す。サンプル数が多いレコードではスクロールの負荷になりうる。
+    val averageBpm = remember(record) { if (record.samples.isNotEmpty()) Math.round(record.samples.map { it.beatsPerMinute }.average()) else null }
 
     Column {
         Text(
             text =
-                if (record.samples.isNotEmpty()) {
-                    val averageBpm = Math.round(record.samples.map { it.beatsPerMinute }.average())
+                if (averageBpm != null) {
                     stringResource(
                         id = R.string.detail_heart_rate_record_summary,
                         timeRangeText,
