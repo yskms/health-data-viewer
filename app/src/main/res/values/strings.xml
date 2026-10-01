@@ -1,11 +1,12 @@
 <resources>
     <string name="app_name">Health Data Viewer</string>
     <string name="health_connect_checking">Checking…</string>
-    <string name="health_connect_not_installed">Health Connect is not available on this device.</string>
-    <string name="health_connect_update_required">Health Connect needs to be updated.</string>
+    <string name="health_connect_unavailable">Health Connect is not available on this device.</string>
+    <string name="health_connect_update_required">Health Connect needs to be installed or updated.</string>
     <string name="health_connect_history_not_supported">This device\'s Health Connect does not support reading history data older than 30 days.</string>
     <string name="health_connect_request_permission">Request permission</string>
     <string name="health_connect_open_play_store">Open in Play Store</string>
+    <string name="health_connect_open_play_store_failed">Couldn\'t open the Play Store.</string>
     <string name="health_connect_check_failed">Couldn\'t check.</string>
     <string name="health_connect_check_failed_notice">Couldn\'t check Health Connect permissions.</string>
     <string name="health_connect_retry">Retry</string>

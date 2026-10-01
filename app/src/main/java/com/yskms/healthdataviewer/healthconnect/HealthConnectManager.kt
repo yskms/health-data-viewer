@@ -48,13 +48,20 @@ class HealthConnectManager(context: Context) {
 
     private val appContext = context.applicationContext
 
+    // WBS 6.9（コードレビュー指摘）: getSdkStatus()の戻り値とAndroidバージョンの対応をbytecode
+    // レベルで確認した結果（lessons.md 6.23）、SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED(2)はAPI
+    // 28〜33限定でしか返らず（34以降は内部実装がこのコードを返す分岐自体を持たない）、SDK_UNAVAILABLE(1)は
+    // minSdk 28のこのアプリでは実質的にAPI 34以降のwork profile／system service不在でしか発生しない。
+    // 「未インストールだからPlayストアへ誘導する」という判断はUPDATE_REQUIRED側でのみ成立し、
+    // UNAVAILABLE側では成立しない（HealthConnectAvailability.kt・screen/common/
+    // HealthConnectUnavailableNotice.ktのコメント参照）。
     val availability: HealthConnectAvailability
         get() =
             when (HealthConnectClient.getSdkStatus(appContext)) {
                 HealthConnectClient.SDK_AVAILABLE -> HealthConnectAvailability.INSTALLED
                 HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED ->
                     HealthConnectAvailability.UPDATE_REQUIRED
-                else -> HealthConnectAvailability.NOT_INSTALLED
+                else -> HealthConnectAvailability.UNAVAILABLE
             }
 
     private val client: HealthConnectClient by lazy { HealthConnectClient.getOrCreate(appContext) }
@@ -84,10 +91,11 @@ class HealthConnectManager(context: Context) {
     fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> =
         PermissionController.createRequestPermissionResultContract()
 
-    // WBS 6.9: Health Connect未インストール・要アップデート時の案内（要件§5「Health Connect未対応
-    // 端末への案内」）から使う。公式のHealth Connect codelab/サンプルと同じ形のPlayストア導線で、
-    // NOT_INSTALLED（新規インストール）・UPDATE_REQUIRED（要アップデート）のどちらでも同じインテントで
-    // よい（Playストア側が端末の状態に応じて「インストール」「アップデート」ボタンを出し分ける）。
+    // WBS 6.9: Health Connect要アップデート時の案内（要件§5「Health Connect未対応端末への案内」）から
+    // 使う。HealthConnectAvailability.UPDATE_REQUIRED（API 28〜33限定、未インストール・無効化・バージョン
+    // 古いのいずれか）でのみ呼ばれる想定。公式のHealth Connect codelab/サンプルと同じ形のPlayストア
+    // 導線で、インストール・更新のどちらであってもPlayストア側が端末の状態に応じて「インストール」
+    // 「アップデート」ボタンを出し分けるため、呼び出し側で状態を判定する必要はない。
     // url=healthconnect://onboardingは、インストール後にHealth Connect自身のオンボーディング画面まで
     // 直接開かせるための公式パラメータ。
     fun createOpenInPlayStoreIntent(): Intent {
@@ -98,6 +106,14 @@ class HealthConnectManager(context: Context) {
             putExtra("overlay", true)
             putExtra("callerId", appContext.packageName)
         }
+    }
+
+    // コードレビュー指摘: createOpenInPlayStoreIntent()はsetPackage()でPlayストアアプリを明示的に
+    // 指定しており、Playストアが無効化・未搭載の端末では解決に失敗する（lessons.md 6.22のパッケージ
+    // 可視性の話とは別の問題）。setPackage()を指定しないブラウザ経由のフォールバック用。
+    fun createOpenInPlayStoreWebIntent(): Intent {
+        val uri = Uri.parse("https://play.google.com/store/apps/details?id=$PROVIDER_PACKAGE_NAME")
+        return Intent(Intent.ACTION_VIEW, uri)
     }
 
     // WBS 6.3: 詳細画面のRecordsタブ用。readAllWeightRecords()（全件を1つのListに溜め込む旧実装、

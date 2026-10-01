@@ -35,7 +35,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -58,6 +57,7 @@ import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
 import com.yskms.healthdataviewer.ui.theme.WeightAccent
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import java.time.DayOfWeek
 import java.time.Duration
@@ -159,7 +159,6 @@ fun HomeScreen(
 ) {
     // StateFlow（常に最新値を持つ）のためinitialは不要（UserSettingsRepository.kt参照）。
     val settings by userSettingsRepository.settingsFlow.collectAsState()
-    val context = LocalContext.current
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
     var permissionsCheckState by remember { mutableStateOf<PermissionsCheckState>(PermissionsCheckState.Loading) }
     var historyFeatureAvailable by remember { mutableStateOf<Boolean?>(null) }
@@ -174,15 +173,28 @@ fun HomeScreen(
     // WBS 6.9: 権限確認（IPC呼び出し）の失敗を「まだ確認していない」と区別して伝えるため、
     // 結果をnullではなくPermissionsCheckStateで保持する（lessons.md 4.1、Failureはnull時）。
     // 画面復帰時の自動実行と、確認失敗時の案内に付ける「再試行」ボタンの両方から呼ぶ。
-    fun refreshPermissions() =
-        coroutineScope.launch {
-            permissionsCheckState =
-                when (val result = healthConnectManager.getGrantedPermissions()) {
-                    null -> PermissionsCheckState.Failure
-                    else -> PermissionsCheckState.Success(result)
-                }
-            resumeKey++
-        }
+    //
+    // コードレビュー指摘: 再試行ボタンから呼んだJobを画面復帰時のJobと別々に管理していなかったため、
+    // 両方が並行して走ると後から完了した方が結果を上書きしてしまい得た（新しいSuccessを古いFailureが
+    // 上書きする等）。`refreshJob`に直近のJobだけを保持し、新しく始める前に必ず前のJobをキャンセルする。
+    // `resetToLoading`は再試行の手動実行時のみtrueにする: 画面復帰時の自動実行までLoadingへ戻すと、
+    // 確認済みの状態が一瞬「確認中…」にちらつく（4つのLaunchedEffectで対応済みの問題、D-039(10)）を
+    // 権限確認でも再現してしまう。手動再試行は明示的な操作のフィードバックとして許容する。
+    var refreshJob by remember { mutableStateOf<Job?>(null) }
+
+    fun refreshPermissions(resetToLoading: Boolean = false) {
+        refreshJob?.cancel()
+        if (resetToLoading) permissionsCheckState = PermissionsCheckState.Loading
+        refreshJob =
+            coroutineScope.launch {
+                permissionsCheckState =
+                    when (val result = healthConnectManager.getGrantedPermissions()) {
+                        null -> PermissionsCheckState.Failure
+                        else -> PermissionsCheckState.Success(result)
+                    }
+                resumeKey++
+            }
+    }
 
     LifecycleResumeEffect(Unit) {
         availability = healthConnectManager.availability
@@ -192,8 +204,8 @@ fun HomeScreen(
             } else {
                 null
             }
-        val job = if (availability == HealthConnectAvailability.INSTALLED) refreshPermissions() else null
-        onPauseOrDispose { job?.cancel() }
+        if (availability == HealthConnectAvailability.INSTALLED) refreshPermissions()
+        onPauseOrDispose { refreshJob?.cancel() }
     }
 
     Column(
@@ -208,13 +220,8 @@ fun HomeScreen(
         }
 
         when (availability) {
-            HealthConnectAvailability.NOT_INSTALLED, HealthConnectAvailability.UPDATE_REQUIRED ->
-                HealthConnectUnavailableNotice(
-                    availability = availability,
-                    onOpenPlayStoreClick = {
-                        runCatching { context.startActivity(healthConnectManager.createOpenInPlayStoreIntent()) }
-                    },
-                )
+            HealthConnectAvailability.UNAVAILABLE, HealthConnectAvailability.UPDATE_REQUIRED ->
+                HealthConnectUnavailableNotice(availability = availability, healthConnectManager = healthConnectManager)
             HealthConnectAvailability.INSTALLED -> {
                 val weightGranted = permissionsCheckState.isGranted(HealthConnectPermissions.WEIGHT_READ)
                 val stepsGranted = permissionsCheckState.isGranted(HealthConnectPermissions.STEPS_READ)
@@ -243,7 +250,7 @@ fun HomeScreen(
                 // ことが分かっている場合（isGranted() == false）ではなく、許可状態そのものが
                 // 分からない場合に出す。
                 if (permissionsCheckState is PermissionsCheckState.Failure) {
-                    PermissionsCheckFailedNotice(onRetryClick = { refreshPermissions() })
+                    PermissionsCheckFailedNotice(onRetryClick = { refreshPermissions(resetToLoading = true) })
                 }
 
                 // 旧HealthConnectStatusScreenが表示していた「この端末は履歴読み取りに対応していない」
@@ -400,10 +407,12 @@ fun HomeScreen(
     }
 }
 
+// コードレビュー指摘（PermissionsCheckFailedNoticeと同じ理由）: Modifier.fillMaxWidth(0.6f)でTextの幅を
+// 固定していたため、ボタン側が残り約40%に窮屈になり得た。RowScope.weight(1f)に変更した。
 @Composable
 private fun PermissionBanner(onRequestClick: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(text = stringResource(id = R.string.home_permission_banner), modifier = Modifier.fillMaxWidth(0.6f))
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(text = stringResource(id = R.string.home_permission_banner), modifier = Modifier.weight(1f))
         Button(onClick = onRequestClick) {
             Text(text = stringResource(id = R.string.health_connect_request_permission))
         }

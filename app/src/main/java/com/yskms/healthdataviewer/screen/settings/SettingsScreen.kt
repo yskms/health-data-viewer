@@ -45,6 +45,7 @@ import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.ThemeMode
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val GITHUB_REPOSITORY_URL = "https://github.com/yskms/health-data-viewer"
@@ -114,14 +115,22 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
 
     // WBS 6.9: HomeScreenのrefreshPermissions()と同じ理由（lessons.md 4.1）。権限確認のIPC呼び出し
     // 自体の失敗を、まだ確認していない状態と区別してPermissionsCheckStateで保持する。
-    fun refreshPermissions() =
-        coroutineScope.launch {
-            permissionsCheckState =
-                when (val result = healthConnectManager.getGrantedPermissions()) {
-                    null -> PermissionsCheckState.Failure
-                    else -> PermissionsCheckState.Success(result)
-                }
-        }
+    // コードレビュー指摘への対応（HomeScreen.ktのrefreshPermissions()と同じ理由）: 直近のJobだけを
+    // `refreshJob`に保持し、新しく始める前に前のJobをキャンセルする。`resetToLoading`は手動再試行時のみ。
+    var refreshJob by remember { mutableStateOf<Job?>(null) }
+
+    fun refreshPermissions(resetToLoading: Boolean = false) {
+        refreshJob?.cancel()
+        if (resetToLoading) permissionsCheckState = PermissionsCheckState.Loading
+        refreshJob =
+            coroutineScope.launch {
+                permissionsCheckState =
+                    when (val result = healthConnectManager.getGrantedPermissions()) {
+                        null -> PermissionsCheckState.Failure
+                        else -> PermissionsCheckState.Success(result)
+                    }
+            }
+    }
 
     // HomeScreenと同じ理由（lessons.md 3.1）: 権限状態はこの画面を離れている間にHealth Connect側
     // （本セクションが案内する「Health Connectで管理」からの遷移を含む）で変わり得るため、画面復帰の
@@ -130,23 +139,18 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
         availability = healthConnectManager.availability
         historyFeatureAvailable =
             if (availability == HealthConnectAvailability.INSTALLED) healthConnectManager.isHistoryReadFeatureAvailable else null
-        val job = if (availability == HealthConnectAvailability.INSTALLED) refreshPermissions() else null
-        onPauseOrDispose { job?.cancel() }
+        if (availability == HealthConnectAvailability.INSTALLED) refreshPermissions()
+        onPauseOrDispose { refreshJob?.cancel() }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle(text = stringResource(id = R.string.settings_section_permissions))
         when (availability) {
-            HealthConnectAvailability.NOT_INSTALLED, HealthConnectAvailability.UPDATE_REQUIRED ->
-                HealthConnectUnavailableNotice(
-                    availability = availability,
-                    onOpenPlayStoreClick = {
-                        runCatching { context.startActivity(healthConnectManager.createOpenInPlayStoreIntent()) }
-                    },
-                )
+            HealthConnectAvailability.UNAVAILABLE, HealthConnectAvailability.UPDATE_REQUIRED ->
+                HealthConnectUnavailableNotice(availability = availability, healthConnectManager = healthConnectManager)
             HealthConnectAvailability.INSTALLED -> {
                 if (permissionsCheckState is PermissionsCheckState.Failure) {
-                    PermissionsCheckFailedNotice(onRetryClick = { refreshPermissions() })
+                    PermissionsCheckFailedNotice(onRetryClick = { refreshPermissions(resetToLoading = true) })
                 }
 
                 PermissionStatusRow(

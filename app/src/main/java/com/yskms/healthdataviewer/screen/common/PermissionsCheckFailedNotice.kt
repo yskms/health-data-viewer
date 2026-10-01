@@ -16,6 +16,11 @@ import com.yskms.healthdataviewer.R
 // HomeScreen・SettingsScreenで同じ見た目だったため共通化した（HealthConnectUnavailableNoticeと同じ理由）。
 // 再試行の実処理（refreshPermissions()）は画面ごとに異なる（HomeScreenは他カードの再取得トリガーである
 // resumeKeyの更新も伴う）ため、ここでは持たずonRetryClickで呼び出し元に委ねる。
+//
+// コードレビュー指摘: TextにModifier.fillMaxWidth(0.6f)を付けていたため、ボタンが使える幅が残りの
+// 約40%に固定されていた。フォント拡大設定やボタン文言が長い言語では窮屈になり得るため、Text側は
+// RowScope.weight(1f)で「残り領域」を使う形にし、ボタンは内容の幅に合わせる（PermissionBannerも
+// 同じ修正をHomeScreen.ktで行った）。
 @Composable
 fun PermissionsCheckFailedNotice(onRetryClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
@@ -25,7 +30,7 @@ fun PermissionsCheckFailedNotice(onRetryClick: () -> Unit, modifier: Modifier = 
     ) {
         Text(
             text = stringResource(id = R.string.health_connect_check_failed_notice),
-            modifier = Modifier.fillMaxWidth(0.6f),
+            modifier = Modifier.weight(1f),
         )
         Button(onClick = onRetryClick) {
             Text(text = stringResource(id = R.string.health_connect_retry))
