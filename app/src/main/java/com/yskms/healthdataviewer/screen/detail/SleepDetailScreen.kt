@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
@@ -168,26 +167,29 @@ fun SleepDetailScreen(
         }
     }
 
+    // WBS 6.5: WeightDetailScreenと同じ理由・同じ条件でChartタブのみ全画面化する（isLandscapeOrientation()
+    // 参照）。
+    val fullScreenChart = isLandscapeOrientation() && tab == DetailTab.CHART
+
     // WBS 6.3: WeightDetailScreenと同じ理由でルートをタブ＋Box(weight)構造にする。
     Column(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            TextButton(onClick = onBack) {
-                Text(text = stringResource(id = R.string.detail_back))
+        if (!fullScreenChart) {
+            Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                TextButton(onClick = onBack) {
+                    Text(text = stringResource(id = R.string.detail_back))
+                }
+                Text(text = stringResource(id = R.string.detail_sleep_title), style = MaterialTheme.typography.titleLarge)
+
+                OldestRecordInfo(oldestResult)
+
+                DetailTabs(tab = tab, onTabChange = { tab = it })
             }
-            Text(text = stringResource(id = R.string.detail_sleep_title), style = MaterialTheme.typography.titleLarge)
-
-            OldestRecordInfo(oldestResult)
-
-            DetailTabs(tab = tab, onTabChange = { tab = it })
         }
 
         Box(modifier = Modifier.weight(1f)) {
             when (tab) {
                 DetailTab.CHART ->
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
+                    ChartTabColumn(fullScreenChart = fullScreenChart) {
                         PeriodTabs(period = period, onPeriodChange = { period = it })
                         if (period == GraphPeriod.CUSTOM) {
                             CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
@@ -225,15 +227,20 @@ fun SleepDetailScreen(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
                                     denominatorFloor = currentSleepLoad.denominatorFloor,
+                                    modifier = if (fullScreenChart) Modifier.weight(1f) else Modifier.height(240.dp),
                                 )
-                                // WBS 5.1: 日付境界をまたぐSessionがbucketにどう配分されるかを、グラフの折れ線
-                                // だけでなく数値でも確認できるようにする（既存PoCから引き続き。Vicoのマーカーは
-                                // 長押し操作が必要）。
-                                SleepBucketList(
-                                    buckets = currentResult.buckets,
-                                    granularity = granularity,
-                                    denominatorFloor = currentSleepLoad.denominatorFloor,
-                                )
+                                // WBS 6.5: 全画面表示時はグラフの縦幅最大化を優先し、補足の数値一覧は表示しない
+                                // （非スクロールColumnのため、残しても画面からあふれる）。
+                                if (!fullScreenChart) {
+                                    // WBS 5.1: 日付境界をまたぐSessionがbucketにどう配分されるかを、グラフの折れ線
+                                    // だけでなく数値でも確認できるようにする（既存PoCから引き続き。Vicoのマーカーは
+                                    // 長押し操作が必要）。
+                                    SleepBucketList(
+                                        buckets = currentResult.buckets,
+                                        granularity = granularity,
+                                        denominatorFloor = currentSleepLoad.denominatorFloor,
+                                    )
+                                }
                             }
                         }
                     }
@@ -393,7 +400,10 @@ private fun SleepAggregateChart(
         }
 
     if (points.isEmpty()) {
-        Text(text = stringResource(id = R.string.detail_empty))
+        // WeightDetailScreen.WeightAggregateChart()と同じ理由（レビュー指摘）。
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(text = stringResource(id = R.string.detail_empty))
+        }
         return
     }
 
@@ -421,7 +431,7 @@ private fun SleepAggregateChart(
                     marker = rememberDefaultCartesianMarker(label = rememberTextComponent()),
                 ),
             modelProducer = modelProducer,
-            modifier = modifier.fillMaxWidth().height(240.dp),
+            modifier = modifier.fillMaxWidth(),
         )
     }
 }

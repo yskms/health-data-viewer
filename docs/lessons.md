@@ -383,6 +383,13 @@
 -   **根拠**: 公式（Jetpack Composeの一般的な非同期状態管理の注意点。`LaunchedEffect`のキー変更から状態更新までの間に古い状態でUIが再コンポーズされ得ることは、Health Connect固有ではなくCompose全般の性質）／実機確認（Pixel 11、実データ。1M/1Y/ALLを連続して何度も切り替えてもクラッシュ・描画崩れが起きないことを確認、2026-09-30。修正前の挙動（x値重複時にVicoがクラッシュするか描画が崩れるだけか）はタグ付けの導入により再現条件自体がなくなったため未確認のまま）
 -   **確認日**: 2026-09-30
 
+### 7.7 横画面判定は`LocalConfiguration.current.orientation`で足りるが、グラフを画面の残り領域いっぱいに広げるには親Columnを`verticalScroll()`から外す必要がある
+
+-   **知見**: (1) MainActivityは`configChanges`を宣言していないため、画面回転のたびにActivityごと再生成される（既存の前例、D-035(4)等と同じ前提）。そのため、画面の向きの判定は`LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE`を再コンポーズのたびに読むだけで足り、`OrientationEventListener`等の追加の仕組みは不要。(2) `Modifier.verticalScroll()`を付けたColumnは子に無限大の高さ制約を与えるため、子に`Modifier.weight(1f)`を指定しても「残り領域いっぱいに広げる」効果が成立しない（6.17のLazyColumnとverticalScrollが同居できない制約と同じ理由の、別の形での再現）。WBS 6.5で横画面時にグラフを画面の残り領域いっぱいに広げようとした際、既存のChartタブは常にverticalScroll付きColumnだったため、そのままではweight()が効かない
+-   **Viewerへの適用**: 横向き＋Chartタブのときだけ、親Columnをスクロールなし（`Modifier.fillMaxSize()`のみ）に切り替え、グラフ本体に`Modifier.weight(1f)`を渡す（screen/detail配下の各DetailScreen、`isLandscapeOrientation()`はDetailCommon.kt）。この条件下でスクロールを外しても内容があふれないよう、全画面化時は付随要素（ヘッダー・最古レコード情報・Chart/Records/Sourcesタブ切替・Sleepのbucket別数値一覧）を非表示にしている
+-   **根拠**: 公式（Jetpack Composeの一般的なレイアウト制約・Activity再生成の仕組み。いずれもHealth Connect固有ではない）／実機確認（Pixel 11、実データ。Weight/Steps/HeartRate/Sleepの4データ型×横画面でグラフが画面の残り領域いっぱいに表示され、期間タブ切替・システムの戻る操作・Records/Sourcesタブでの非全画面維持を含めクラッシュ・レイアウト崩れがないことを確認、2026-10-01）
+-   **確認日**: 2026-10-01
+
 ------------------------------------------------------------------------
 
 ## 8. テスト観点チェックリスト
@@ -406,6 +413,7 @@
 -   [x] 1M/1YからALLへ（またはその逆へ）period切り替えを素早く繰り返しても、グラフが崩れず・クラッシュしないか（7.6。Pixel 11で確認、2026-09-30）
 -   [x] `pm revoke`で履歴読み取り権限を外した状態で1Mを開き、`SecurityException`から直近30日へのフォールバック（`recentRangeFilterLocal()`）が実際に発生するか、発生した場合にbucket境界が正しく日初区切りになっているか（7.5。Pixel 11で確認、2026-09-30）
 -   [x] 日付境界をまたぐSleep Sessionが、グラフのbucket（公式Aggregate）とRaw一覧（Session区間そのまま）でそれぞれどう扱われるかを実データで確認する（6.9。Pixel 11で確認、2026-09-30）
+-   [x] Detail画面を横画面にした際、Chartタブのみ全画面化され、期間タブ切替・システムの戻る操作が機能し、Records/Sourcesタブでは全画面化されないか（7.7。Pixel 11、4データ型で確認、2026-10-01）
 
 ------------------------------------------------------------------------
 

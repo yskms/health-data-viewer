@@ -7,8 +7,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -22,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
@@ -164,30 +163,35 @@ fun WeightDetailScreen(
         }
     }
 
+    // WBS 6.5: 要件§11「横向きにすると画面幅を最大限使った長期グラフを表示する」の対象はChartタブに
+    // 限定する（Records/Sourcesタブは横向きでも現状のヘッダー付きレイアウトのまま）。ヘッダー
+    // （戻るボタン・タイトル・最古レコード情報・タブ切替）を畳んで戻る手段を失うが、Android標準の
+    // システム戻る操作（ジェスチャー／ボタン）で画面を抜けられるため、専用の戻るUIは設けない。
+    val fullScreenChart = isLandscapeOrientation() && tab == DetailTab.CHART
+
     // WBS 6.3: Chart（verticalScroll付きColumn）とRecords（LazyColumn）はスクロール戦略が異なるため、
     // 同じColumnに両方を入れられない（verticalScrollの親は子に無限大の高さ制約を与え、内側の
     // LazyColumnが測定できずクラッシュ、または全件を一度にコンポーズしてしまいPaging3の目的が
     // 無効化される）。タブ切替部分の下をBox(Modifier.weight(1f))で高さ確定した領域にし、
     // タブごとに別のスクロール可能コンポーザブルを切り替えて配置する。
     Column(modifier = modifier.fillMaxSize()) {
-        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            TextButton(onClick = onBack) {
-                Text(text = stringResource(id = R.string.detail_back))
+        if (!fullScreenChart) {
+            Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                TextButton(onClick = onBack) {
+                    Text(text = stringResource(id = R.string.detail_back))
+                }
+                Text(text = stringResource(id = R.string.detail_weight_title), style = MaterialTheme.typography.titleLarge)
+
+                OldestRecordInfo(oldestResult)
+
+                DetailTabs(tab = tab, onTabChange = { tab = it })
             }
-            Text(text = stringResource(id = R.string.detail_weight_title), style = MaterialTheme.typography.titleLarge)
-
-            OldestRecordInfo(oldestResult)
-
-            DetailTabs(tab = tab, onTabChange = { tab = it })
         }
 
         Box(modifier = Modifier.weight(1f)) {
             when (tab) {
                 DetailTab.CHART ->
-                    Column(
-                        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                    ) {
+                    ChartTabColumn(fullScreenChart = fullScreenChart) {
                         PeriodTabs(period = period, onPeriodChange = { period = it })
                         if (period == GraphPeriod.CUSTOM) {
                             CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
@@ -221,7 +225,11 @@ fun WeightDetailScreen(
                                 if (currentResult.historyLimited) {
                                     Text(text = stringResource(id = R.string.detail_history_limited_notice))
                                 }
-                                WeightAggregateChart(buckets = currentResult.buckets, granularity = granularity)
+                                WeightAggregateChart(
+                                    buckets = currentResult.buckets,
+                                    granularity = granularity,
+                                    modifier = if (fullScreenChart) Modifier.weight(1f) else Modifier.height(240.dp),
+                                )
                             }
                         }
                     }
@@ -289,7 +297,11 @@ private data class ChartPoint(val x: Long, val average: Double, val min: Double,
 // WBS 2.2: 同日複数レコードのグラフ上の扱いはD-027の通り、平均を主系列、最小・最大を補助的な折れ線
 // として重ねて描画し、値がないbucketはプロットしない（前後の点が線でつながる）。
 @Composable
-private fun WeightAggregateChart(buckets: List<WeightAggregateBucket>, granularity: BucketGranularity, modifier: Modifier = Modifier) {
+private fun WeightAggregateChart(
+    buckets: List<WeightAggregateBucket>,
+    granularity: BucketGranularity,
+    modifier: Modifier = Modifier,
+) {
     val locale = LocalLocale.current.platformLocale
     val modelProducer = remember { CartesianChartModelProducer() }
     val points =
@@ -307,7 +319,11 @@ private fun WeightAggregateChart(buckets: List<WeightAggregateBucket>, granulari
         }
 
     if (points.isEmpty()) {
-        Text(text = stringResource(id = R.string.detail_empty))
+        // fullScreenChart時に呼び出し元から渡されるModifier.weight(1f)を、データなし表示でも
+        // 適用する（レビュー指摘。適用しないと全画面時に残り領域が空白のまま埋まらない）。
+        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+            Text(text = stringResource(id = R.string.detail_empty))
+        }
         return
     }
 
@@ -338,7 +354,7 @@ private fun WeightAggregateChart(buckets: List<WeightAggregateBucket>, granulari
                     marker = rememberDefaultCartesianMarker(label = rememberTextComponent()),
                 ),
             modelProducer = modelProducer,
-            modifier = modifier.fillMaxWidth().height(240.dp),
+            modifier = modifier.fillMaxWidth(),
         )
     }
 }

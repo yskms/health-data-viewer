@@ -1,5 +1,13 @@
 package com.yskms.healthdataviewer.screen.detail
 
+import android.content.res.Configuration
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
@@ -12,8 +20,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import java.time.ZoneId
@@ -44,6 +55,26 @@ fun OldestRecordInfo(oldestResult: OldestRecordResult?) {
             }
         }
     Text(text = text, style = MaterialTheme.typography.bodySmall)
+}
+
+// WBS 6.5: 要件§11（横画面で画面幅を最大限使った長期グラフを表示する）の判定に使う。
+// MainActivityはconfigChangesを宣言していないため、回転時はActivityごと再生成される
+// （タブ・期間選択がrememberSaveableで保持される前提も含め、既存の前例と一貫した設計）。
+@Composable
+fun isLandscapeOrientation(): Boolean = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+// WBS 6.5（レビュー指摘への対応）: Chartタブの外側Column（全画面時はpaddingを狭めverticalScrollを
+// 外し、グラフ本体がModifier.weight(1f)で残り領域を使えるようにする。通常時はverticalScroll付き）は
+// 4データ型のDetailScreenで同一のため共通化した。
+@Composable
+fun ChartTabColumn(fullScreenChart: Boolean, content: @Composable ColumnScope.() -> Unit) {
+    val horizontalPadding = if (fullScreenChart) 8.dp else 24.dp
+    val baseModifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding)
+    Column(
+        modifier = if (fullScreenChart) baseModifier else baseModifier.verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        content = content,
+    )
 }
 
 // WBS 6.3/6.4: Metric Detail画面のChart/Records/Sources（requirements.md §18）の3タブ。
