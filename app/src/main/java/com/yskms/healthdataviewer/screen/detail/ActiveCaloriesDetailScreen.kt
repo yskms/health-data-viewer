@@ -58,7 +58,10 @@ import java.time.format.FormatStyle
 // WBS 6.10（D-043）: DistanceDetailScreenと同じ形（Active Caloriesも合計1系列のみのsum系メトリクス、
 // requirements.md §22.2）。ActiveCaloriesBurnedRecordはStepsと同じActivity系の継続記録ソースから
 // 書き込まれると見込まれるため、同じMetricDensity.HIGHを仮に当てる。Distance（WBS 6.10）とは異なり、
-// Pixel 11実機でこの想定（記録頻度）自体はまだ確認していない（要検証、D-043(3)）。
+// Pixel 11実機でこの想定（記録頻度）自体はまだ確認していない（この端末にActiveCaloriesBurnedRecordの
+// データを書き込むソースがないため。要検証、D-043(4)）。TotalCaloriesBurnedRecord（同じ端末で実データ
+// あり）は15分間隔とStepsよりはるかに疎だったが（TotalCaloriesDetailScreen.kt参照）、Activeも同じ
+// ソースが書き込む場合は同程度に疎な可能性がある
 private val ACTIVE_CALORIES_DENSITY = MetricDensity.HIGH
 
 // WBS 6.10: RecordsタブのPagingConfig。DistanceDetailScreen.DISTANCE_RECORDS_PAGE_SIZE等と同じ値。
@@ -269,12 +272,14 @@ fun ActiveCaloriesDetailScreen(
     }
 }
 
-// WBS 6.10（D-043(3)）: Distance（DistanceRecordRow）がkm表示で実機確認の結果「0.00 km」に潰れる
+// WBS 6.10（D-043(4)）: Distance（DistanceRecordRow）がkm表示で実機確認の結果「0.00 km」に潰れる
 // 問題（D-042(2)）に気付いたのと異なり、Active Caloriesの個々のレコードの大きさ（30秒前後の区間ごとか
-// どうか含む）はまだPixel 11実機で確認していない。暫定でkcalのまま小数1桁（NumberFormatの
-// minimumFractionDigits/maximumFractionDigits = 1）にしているが、実機で記録頻度・1件あたりの値を
-// 確認した結果、Distanceと同じように単位を使い分ける（例: cal表示）必要が出てくる可能性がある
-// （要検証）。
+// どうか含む）はまだPixel 11実機で確認していない（この端末にActiveCaloriesBurnedRecordのデータがない
+// ため）。暫定でkcalのまま小数1桁（NumberFormatのminimumFractionDigits/maximumFractionDigits = 1）に
+// している。同じ端末のTotalCaloriesBurnedRecord（15分間隔・1件あたり約10〜60kcal）ではこの小数1桁で
+// 潰れないことを確認できた（TotalCaloriesDetailScreen.kt参照）が、Activeが同程度の粒度で記録される
+// 保証はなく、実機で記録頻度・1件あたりの値を確認した結果、Distanceと同じように単位を使い分ける
+// （例: cal表示）必要が出てくる可能性がある（要検証）。
 @Composable
 private fun ActiveCaloriesRecordRow(record: ActiveCaloriesBurnedRecord) {
     val context = LocalContext.current

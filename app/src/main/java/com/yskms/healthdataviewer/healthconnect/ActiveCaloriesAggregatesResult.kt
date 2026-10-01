@@ -7,6 +7,9 @@ import java.time.LocalDateTime
 // WEEK/MONTH bucketの「1日あたり平均」正規化はSumMetricNormalization.daysCoveredBy()を使う
 // （決定事項5）。ACTIVE_CALORIES_TOTALはEnergy型のため、DistanceAggregateBucket（Length→
 // inKilometers）と同じ考え方でマネージャー層でkcalへ変換済みの値を保持する。
+// totalKilocalories: TotalCaloriesAggregateBucketで、レコードのないbucketでも非nullの推計値らしき
+// 値が返る挙動を確認している。ACTIVE_CALORIES_TOTALで同じことが起きるかは未確認（要検証、
+// ActiveCaloriesAggregateTotalResult.kt参照）。
 data class ActiveCaloriesAggregateBucket(
     val periodStart: LocalDateTime,
     val periodEnd: LocalDateTime,

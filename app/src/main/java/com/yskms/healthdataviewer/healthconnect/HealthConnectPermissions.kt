@@ -15,9 +15,11 @@ import androidx.health.connect.client.records.WeightRecord
 //
 // ACTIVE_CALORIES_READ/TOTAL_CALORIES_READ（WBS 6.10、D-043）: ActiveCaloriesBurnedRecord/
 // TotalCaloriesBurnedRecordはHealth Connect上で別々のRecord型のため、getReadPermission()が
-// 返す権限文字列もREAD_ACTIVE_CALORIES_BURNED/READ_TOTAL_CALORIES_BURNEDとそれぞれ別になる
-// （HealthPermission.getReadPermission()内部のRECORD_TYPE_TO_PERMISSIONマップをjavap逆コンパイルで
-// 確認、D-043(4)）。
+// 返す権限文字列もREAD_ACTIVE_CALORIES_BURNED/READ_TOTAL_CALORIES_BURNEDとそれぞれ別になる。
+// 「android.permission.health.READ_」+内部のRECORD_TYPE_TO_PERMISSIONマップから引いた接尾辞、
+// という組み立てロジック自体はjavap逆コンパイルで確認できたが、接尾辞の値自体はマップの初期化コードが
+// javapのメソッド逆アセンブル出力に現れず、.classバイナリの文字列直接検索（grep -a）で確認した
+// （D-043(5)）。
 object HealthConnectPermissions {
     val WEIGHT_READ: String = HealthPermission.getReadPermission(WeightRecord::class)
     val STEPS_READ: String = HealthPermission.getReadPermission(StepsRecord::class)

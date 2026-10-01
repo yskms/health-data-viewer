@@ -929,13 +929,28 @@ class HealthConnectManager(context: Context) {
     //
     // Energy型の実際のKotlinプロパティ名はinKilocalories（javap逆コンパイルが示すgetKilocalories()とは
     // 異なる。CLAUDE.md「SDK調査（逆コンパイル）で誤解しやすい点」のLength/Massと同じ落とし穴で、
-    // .classバイナリの文字列直接検索で確認、D-043(2)）。表示単位はkcalに統一する（Distanceのkmのように
-    // 1件あたりの値が小さく潰れて見える問題が実機で起きるかは未確認。D-042(2)のような単位の使い分けが
-    // 必要かは実機確認後に判断する、要検証、D-043(3)）。
+    // .classバイナリの文字列直接検索で確認、D-043(3)）。表示単位はkcalに統一する（D-043(4)）。
+    // Distanceのkmのように1件あたりの値が小さく潰れて見える問題（D-042(2)）は、TotalCaloriesBurnedRecord
+    // の実データ（「Health」ソース、15分間隔・1件あたり約10〜60kcal）では起きないことを実機で確認済み。
+    // ActiveCaloriesBurnedRecordはこの端末にデータがなく未確認のまま（要検証）。
     //
-    // 権限文字列（READ_ACTIVE_CALORIES_BURNED/READ_TOTAL_CALORIES_BURNED）はHealthPermission.
-    // getReadPermission()が内部のRECORD_TYPE_TO_PERMISSIONマップから組み立てる固定の接尾辞を
-    // javap逆コンパイルで確認した（HealthConnectPermissions.kt参照、D-043(4)）。
+    // 権限文字列（READ_ACTIVE_CALORIES_BURNED/READ_TOTAL_CALORIES_BURNED）は、HealthPermission.
+    // getReadPermission()が「android.permission.health.READ_」+内部のRECORD_TYPE_TO_PERMISSIONマップ
+    // から引いた接尾辞、という組み立てロジック自体はjavap逆コンパイルで確認できたが、肝心の接尾辞の値
+    // （ACTIVE_CALORIES_BURNED/TOTAL_CALORIES_BURNED）はそのマップの初期化コードがjavapのメソッド
+    // 逆アセンブル出力には現れず、.classバイナリの文字列直接検索（grep -a）で確認した
+    // （HealthConnectPermissions.kt参照、D-043(5)）。
+    //
+    // **要検証（レビュー指摘、2026-10-01に簡易確認）**: TotalCaloriesBurnedRecord.ENERGY_TOTALは、
+    // 実際のレコードが1件も存在しない期間（2010年の1日分でAggregateを試した）でもnullではなく
+    // 非null値（約1,565kcal）を返した。これは「レコードが無ければnull」（他のAggregateMetricと
+    // 共通の前提、readDistanceAggregateTotal()等のコメント参照）が本メトリクスには当てはまらない
+    // 可能性を示す。Android 14+のプラットフォーム側でActive Calories・基礎代謝（BMR）等から
+    // 推計値を補っていると見られるが、根拠資料は未確認。一方、実際にレコードがある日（単一ソース）
+    // ではAggregateとRaw合計が完全に一致することも確認した（按分・重複処理らしき差分はこの1日・
+    // 1ソースの範囲では見られなかった）。この挙動により、「データがない項目は非表示」設定
+    // （isTotalCaloriesCardHidden()）が意図通りに機能しない可能性がある（totalKilocalories==null
+    // にならないため）。詳細はlessons.md 6.25、requirements.md §27参照
 
     // findOldestDistanceRecordTime()と同じ理由・同じ形。
     suspend fun findOldestActiveCaloriesRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
@@ -1176,10 +1191,11 @@ class HealthConnectManager(context: Context) {
     // lessons.md 6.7）。DistanceRecord/ActiveCaloriesBurnedRecord/TotalCaloriesBurnedRecordもStepsと
     // 同じ単純な区間+数値1個の構造で該当しないと判断した。Pixel 11実機（実データ、Fit 212,095件・
     // Health 20,202件の計約23万件規模）で実際に全件走査してもクラッシュ・メモリ増大が起きないことを
-    // 確認済み（WBS 6.10、D-042）だが、これはDistanceRecordでの確認であり、ActiveCaloriesBurnedRecord/
-    // TotalCaloriesBurnedRecordでの全件走査自体は未確認のまま（構造が同じという理由による判断、
-    // 要検証、D-043(3)）。Stepsの全期間全件走査もWBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・
-    // メモリ増大なしを確認済み。
+    // 確認済み（WBS 6.10、D-042）。TotalCaloriesBurnedRecordについても、Pixel 11実機の実データ
+    // （Health 90,722件・Fit 81,738件の計約17万件規模）で同様にクラッシュ・メモリ増大が起きないことを
+    // 確認済み（WBS 6.10、D-043）。一方ActiveCaloriesBurnedRecordはこの端末にデータを書き込むソースが
+    // なく、構造が同じという理由による判断のまま、全件走査自体は未確認（要検証）。Stepsの全期間全件
+    // 走査もWBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・メモリ増大なしを確認済み。
     //
     // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
     // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の

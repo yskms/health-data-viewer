@@ -56,8 +56,12 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 // WBS 6.10（D-043）: ActiveCaloriesDetailScreenと同じ形（Total Caloriesも合計1系列のみのsum系
-// メトリクス、requirements.md §22.2）。記録頻度の想定・要検証の扱いもActiveCaloriesDetailScreenと
-// 同じ（D-043(3)）。
+// メトリクス、requirements.md §22.2）。MetricDensity.HIGHはStepsと同じ「仮」の設定だったが、
+// Pixel 11実機の実データ（「Health」ソース）で確認したところ、TotalCaloriesBurnedRecordの実際の
+// 記録頻度は15分間隔で、Steps/Distance（Fitソースで約30秒間隔）よりはるかに疎だった（D-043(4)、
+// lessons.md 6.25）。1ヶ月期間（DAY bucket）でChart/Records/Sourcesが問題なく動作することは確認した
+// が、HIGHが3M以上で切り替えるWEEK/MONTH bucketへの粗粒度化が、この記録頻度でも必要か（LOWのまま
+// DAY bucketを保っても問題ない可能性がある）は実際に3M以上の期間で試しておらず未確認のまま（要検証）。
 private val TOTAL_CALORIES_DENSITY = MetricDensity.HIGH
 
 // WBS 6.10: RecordsタブのPagingConfig。ActiveCaloriesDetailScreenと同じ値。
@@ -268,7 +272,9 @@ fun TotalCaloriesDetailScreen(
     }
 }
 
-// ActiveCaloriesDetailScreen.ActiveCaloriesRecordRow()と同じ理由・同じ形（D-043(3)、要検証）。
+// ActiveCaloriesDetailScreen.ActiveCaloriesRecordRow()と同じ形（D-043(4)）。小数1桁のkcal表示は
+// Pixel 11実機の実データ（「Health」ソース、1件あたり約10〜60kcal）で潰れが起きないことを確認済み
+// （lessons.md 6.25）。ActiveCaloriesRecordRowとは異なり、こちらは要検証のまま残っていない。
 @Composable
 private fun TotalCaloriesRecordRow(record: TotalCaloriesBurnedRecord) {
     val context = LocalContext.current
