@@ -383,11 +383,11 @@
 -   **根拠**: 公式（Jetpack Composeの一般的な非同期状態管理の注意点。`LaunchedEffect`のキー変更から状態更新までの間に古い状態でUIが再コンポーズされ得ることは、Health Connect固有ではなくCompose全般の性質）／実機確認（Pixel 11、実データ。1M/1Y/ALLを連続して何度も切り替えてもクラッシュ・描画崩れが起きないことを確認、2026-09-30。修正前の挙動（x値重複時にVicoがクラッシュするか描画が崩れるだけか）はタグ付けの導入により再現条件自体がなくなったため未確認のまま）
 -   **確認日**: 2026-09-30
 
-### 7.7 横画面判定は`LocalConfiguration.current.orientation`で足りるが、グラフを画面の残り領域いっぱいに広げるには親Columnを`verticalScroll()`から外す必要がある
+### 7.7 横画面判定は`LocalConfiguration.current.orientation`で足りるが、「全画面」にするグラフの高さは`Modifier.weight(1f)`ではなく`BoxWithConstraints`から動的に決め、スクロールは残しておく
 
--   **知見**: (1) MainActivityは`configChanges`を宣言していないため、画面回転のたびにActivityごと再生成される（既存の前例、D-035(4)等と同じ前提）。そのため、画面の向きの判定は`LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE`を再コンポーズのたびに読むだけで足り、`OrientationEventListener`等の追加の仕組みは不要。(2) `Modifier.verticalScroll()`を付けたColumnは子に無限大の高さ制約を与えるため、子に`Modifier.weight(1f)`を指定しても「残り領域いっぱいに広げる」効果が成立しない（6.17のLazyColumnとverticalScrollが同居できない制約と同じ理由の、別の形での再現）。WBS 6.5で横画面時にグラフを画面の残り領域いっぱいに広げようとした際、既存のChartタブは常にverticalScroll付きColumnだったため、そのままではweight()が効かない
--   **Viewerへの適用**: 横向き＋Chartタブのときだけ、親Columnをスクロールなし（`Modifier.fillMaxSize()`のみ）に切り替え、グラフ本体に`Modifier.weight(1f)`を渡す（screen/detail配下の各DetailScreen、`isLandscapeOrientation()`はDetailCommon.kt）。この条件下でスクロールを外しても内容があふれないよう、全画面化時は付随要素（ヘッダー・最古レコード情報・Chart/Records/Sourcesタブ切替・Sleepのbucket別数値一覧）を非表示にしている
--   **根拠**: 公式（Jetpack Composeの一般的なレイアウト制約・Activity再生成の仕組み。いずれもHealth Connect固有ではない）／実機確認（Pixel 11、実データ。Weight/Steps/HeartRate/Sleepの4データ型×横画面でグラフが画面の残り領域いっぱいに表示され、期間タブ切替・システムの戻る操作・Records/Sourcesタブでの非全画面維持を含めクラッシュ・レイアウト崩れがないことを確認、2026-10-01）
+-   **知見**: (1) MainActivityは`configChanges`を宣言していないため、画面回転のたびにActivityごと再生成される（既存の前例、D-035(4)等と同じ前提）。そのため、画面の向きの判定は`LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE`を再コンポーズのたびに読むだけで足り、`OrientationEventListener`等の追加の仕組みは不要。(2) `Modifier.verticalScroll()`を付けたColumnは子に無限大の高さ制約を与えるため、子に`Modifier.weight(1f)`を指定しても「残り領域いっぱいに広げる」効果が成立しない（6.17のLazyColumnとverticalScrollが同居できない制約と同じ理由の、別の形での再現）。**初版はこの制約を避けるため、全画面時に親Columnから`verticalScroll`を外し、グラフ本体に`Modifier.weight(1f)`を渡す設計にしていたが、コードレビューで次の問題を指摘された**: 横向きのスマホで使える高さはシステムバーを除くと300dp台程度しかなく、スクロールが無い状態で期間タブ・Custom選択時の`CustomRangePicker`・集計方法の注記・`historyLimited`の注記・（HeartRateのみ）計測数`Text`が増えると、`weight(1f)`に回る高さが0近くまで潰れ得る。しかもスクロールで確認する手段もないため、潰れた分は完全に見えなくなる
+-   **Viewerへの適用**: `ChartTabColumn`（DetailCommon.kt）は全画面時も含め常に`verticalScroll`を付けたままにする（高さの見積もりが外れた場合の安全弁）。グラフ本体の高さは、呼び出し元が`Box`ではなく`BoxWithConstraints`を使い、そのスコープで得られる実際の利用可能高さ（`maxHeight`）を`val`に一度代入してから（Composeの`@LayoutScopeMarker`により、`ColumnScope`等ネストしたスコープの中から外側の`BoxWithConstraintsScope.maxHeight`を暗黙レシーバで直接参照できないため、明示的に変数へ取り出す必要がある）、`detailChartHeight(fullScreenChart, availableHeight)`に渡して動的に決める。全画面時は`availableHeight`から付随要素のおおよその高さ（140dp固定、Composeの実際の測定はしない概算値）を差し引き、下限（160dp）を設ける。見積もりが多少外れても、スクロールが効くため内容が完全に見えなくなることはない
+-   **根拠**: 公式（Jetpack Composeの一般的なレイアウト制約・Activity再生成の仕組み。いずれもHealth Connect固有ではない）／実機確認（Pixel 11、実データ。Weight/Steps/HeartRate/Sleepの4データ型×横画面でグラフが画面の大部分を使って表示され、Customピッカー表示時・HeartRateの計測数テキスト付き表示時を含めレイアウト崩れがないこと、期間タブ切替・システムの戻る操作・Records/Sourcesタブでの非全画面維持を確認、2026-10-01）
 -   **確認日**: 2026-10-01
 
 ------------------------------------------------------------------------
@@ -414,6 +414,7 @@
 -   [x] `pm revoke`で履歴読み取り権限を外した状態で1Mを開き、`SecurityException`から直近30日へのフォールバック（`recentRangeFilterLocal()`）が実際に発生するか、発生した場合にbucket境界が正しく日初区切りになっているか（7.5。Pixel 11で確認、2026-09-30）
 -   [x] 日付境界をまたぐSleep Sessionが、グラフのbucket（公式Aggregate）とRaw一覧（Session区間そのまま）でそれぞれどう扱われるかを実データで確認する（6.9。Pixel 11で確認、2026-09-30）
 -   [x] Detail画面を横画面にした際、Chartタブのみ全画面化され、期間タブ切替・システムの戻る操作が機能し、Records/Sourcesタブでは全画面化されないか（7.7。Pixel 11、4データ型で確認、2026-10-01）
+-   [x] 横画面の全画面グラフで、Custom選択時の日付ピッカー表示や（HeartRateのみ）計測数テキストなど付随要素が増えても、グラフの高さが潰れず・レイアウトが崩れないか（7.7。Pixel 11で確認、2026-10-01）
 
 ------------------------------------------------------------------------
 

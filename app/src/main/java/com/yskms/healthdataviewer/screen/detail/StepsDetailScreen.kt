@@ -2,6 +2,7 @@ package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -187,7 +188,8 @@ fun StepsDetailScreen(
             }
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val availableHeight = maxHeight
             when (tab) {
                 DetailTab.CHART ->
                     ChartTabColumn(fullScreenChart = fullScreenChart) {
@@ -228,7 +230,7 @@ fun StepsDetailScreen(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
                                     denominatorFloor = currentStepsLoad.denominatorFloor,
-                                    modifier = if (fullScreenChart) Modifier.weight(1f) else Modifier.height(240.dp),
+                                    modifier = Modifier.fillMaxWidth().height(detailChartHeight(fullScreenChart, availableHeight)),
                                 )
                             }
                         }
@@ -317,7 +319,7 @@ private fun StepsAggregateChart(
 
     if (points.isEmpty()) {
         // WeightDetailScreen.WeightAggregateChart()と同じ理由（レビュー指摘）。
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(text = stringResource(id = R.string.detail_empty))
         }
         return

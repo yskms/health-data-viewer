@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
@@ -63,19 +64,38 @@ fun OldestRecordInfo(oldestResult: OldestRecordResult?) {
 @Composable
 fun isLandscapeOrientation(): Boolean = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-// WBS 6.5（レビュー指摘への対応）: Chartタブの外側Column（全画面時はpaddingを狭めverticalScrollを
-// 外し、グラフ本体がModifier.weight(1f)で残り領域を使えるようにする。通常時はverticalScroll付き）は
-// 4データ型のDetailScreenで同一のため共通化した。
+// WBS 6.5（レビュー指摘への対応）: Chartタブの外側Column（全画面時はpaddingを狭める）は4データ型の
+// DetailScreenで同一のため共通化した。全画面時も含め常にverticalScrollを付けたままにする（後述の
+// 高さ見積もりが外れた場合の安全弁。verticalScrollとModifier.weight()は同居できないため、グラフ本体の
+// 高さは`detailChartHeight()`で明示的に計算する方式にしている）。
 @Composable
 fun ChartTabColumn(fullScreenChart: Boolean, content: @Composable ColumnScope.() -> Unit) {
     val horizontalPadding = if (fullScreenChart) 8.dp else 24.dp
-    val baseModifier = Modifier.fillMaxSize().padding(horizontal = horizontalPadding)
     Column(
-        modifier = if (fullScreenChart) baseModifier else baseModifier.verticalScroll(rememberScrollState()),
+        modifier =
+            Modifier.fillMaxSize()
+                .padding(horizontal = horizontalPadding)
+                .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         content = content,
     )
 }
+
+private val PORTRAIT_CHART_HEIGHT = 240.dp
+private val FULLSCREEN_CHART_MIN_HEIGHT = 160.dp
+
+// WBS 6.5（レビュー指摘への対応）: 全画面時、初版は`Modifier.weight(1f)`でグラフ本体を残り領域
+// いっぱいに広げていたが、`ChartTabColumn`はverticalScroll付きのため`weight()`とは同居できず、採用でき
+// ない（Composeの制約。ChartTabColumnのコメント参照）。代わりに、呼び出し元の`BoxWithConstraints`から
+// 渡される実際の利用可能高さ`availableHeight`から、期間タブ・Custom選択時のピッカー・集計方法の注記・
+// 履歴制限の注記・（HeartRateのみ）計測数テキストなどグラフ以外の要素が使うおおよその高さを差し引いて
+// グラフの高さを決める。この見積もり（140dp）は固定値で、実際の内訳（要素の有無・フォントサイズ設定）
+// によって過不足が出るが、ChartTabColumnのverticalScrollが安全弁になるため、正確な値である必要はない
+// （見積もりが小さすぎて余ればグラフの下に余白ができるだけ、大きすぎて足りなければスクロールすれば
+// 見える）。下限（160dp）も設け、極端に低い横画面（分割画面等）でもグラフの高さが0近くまで潰れることが
+// ないようにしている。
+fun detailChartHeight(fullScreenChart: Boolean, availableHeight: Dp): Dp =
+    if (fullScreenChart) (availableHeight - 140.dp).coerceAtLeast(FULLSCREEN_CHART_MIN_HEIGHT) else PORTRAIT_CHART_HEIGHT
 
 // WBS 6.3/6.4: Metric Detail画面のChart/Records/Sources（requirements.md §18）の3タブ。
 enum class DetailTab { CHART, RECORDS, SOURCES }

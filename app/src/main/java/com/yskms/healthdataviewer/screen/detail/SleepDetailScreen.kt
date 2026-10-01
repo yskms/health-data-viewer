@@ -2,6 +2,7 @@ package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -186,7 +187,8 @@ fun SleepDetailScreen(
             }
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val availableHeight = maxHeight
             when (tab) {
                 DetailTab.CHART ->
                     ChartTabColumn(fullScreenChart = fullScreenChart) {
@@ -227,10 +229,12 @@ fun SleepDetailScreen(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
                                     denominatorFloor = currentSleepLoad.denominatorFloor,
-                                    modifier = if (fullScreenChart) Modifier.weight(1f) else Modifier.height(240.dp),
+                                    modifier = Modifier.fillMaxWidth().height(detailChartHeight(fullScreenChart, availableHeight)),
                                 )
-                                // WBS 6.5: 全画面表示時はグラフの縦幅最大化を優先し、補足の数値一覧は表示しない
-                                // （非スクロールColumnのため、残しても画面からあふれる）。
+                                // WBS 6.5: 全画面表示時はグラフの高さ見積もり（DetailCommon.detailChartHeight()）が
+                                // 補足の数値一覧の分までは考慮していないため、優先度の低いこの一覧は非表示にする
+                                // （ChartTabColumnのverticalScrollで見えなくなるわけではないが、全画面の主目的である
+                                // グラフ自体をできるだけ大きく保つため）。
                                 if (!fullScreenChart) {
                                     // WBS 5.1: 日付境界をまたぐSessionがbucketにどう配分されるかを、グラフの折れ線
                                     // だけでなく数値でも確認できるようにする（既存PoCから引き続き。Vicoのマーカーは
@@ -401,7 +405,7 @@ private fun SleepAggregateChart(
 
     if (points.isEmpty()) {
         // WeightDetailScreen.WeightAggregateChart()と同じ理由（レビュー指摘）。
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(text = stringResource(id = R.string.detail_empty))
         }
         return

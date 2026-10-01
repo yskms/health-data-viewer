@@ -2,6 +2,7 @@ package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -188,7 +189,8 @@ fun WeightDetailScreen(
             }
         }
 
-        Box(modifier = Modifier.weight(1f)) {
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val availableHeight = maxHeight
             when (tab) {
                 DetailTab.CHART ->
                     ChartTabColumn(fullScreenChart = fullScreenChart) {
@@ -228,7 +230,7 @@ fun WeightDetailScreen(
                                 WeightAggregateChart(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
-                                    modifier = if (fullScreenChart) Modifier.weight(1f) else Modifier.height(240.dp),
+                                    modifier = Modifier.fillMaxWidth().height(detailChartHeight(fullScreenChart, availableHeight)),
                                 )
                             }
                         }
@@ -319,9 +321,10 @@ private fun WeightAggregateChart(
         }
 
     if (points.isEmpty()) {
-        // fullScreenChart時に呼び出し元から渡されるModifier.weight(1f)を、データなし表示でも
-        // 適用する（レビュー指摘。適用しないと全画面時に残り領域が空白のまま埋まらない）。
-        Box(modifier = modifier, contentAlignment = Alignment.Center) {
+        // 呼び出し元から渡されるmodifier（高さ指定）をデータなし表示にも適用し、グラフと同じ領域の
+        // 中央に表示する（レビュー指摘。fillMaxWidth()が無いと文字列の幅だけのBoxになり、
+        // contentAlignment=Centerが縦方向にしか効かず左寄りに見えてしまう）。
+        Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(text = stringResource(id = R.string.detail_empty))
         }
         return
