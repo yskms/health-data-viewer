@@ -1,6 +1,7 @@
 package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,9 +23,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.records.HeartRateRecord
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
@@ -38,6 +44,7 @@ import com.patrykandpatrick.vico.compose.common.ProvideVicoTheme
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.compose.m3.common.rememberM3VicoTheme
 import com.yskms.healthdataviewer.R
+import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregatesResult
@@ -46,6 +53,8 @@ import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 // WBS 6.2: poc/HeartRateGraphScreen（PoC 3）を置き換える正式なDetail画面。WeightDetailScreenと同じ
 // 共通基盤を使う。HeartRateはMetricDensity.HIGH（1W/1Mは日bucket、3M/6M/1Yは週bucket、ALLは月bucket）。
@@ -57,6 +66,13 @@ import java.time.ZoneId
 // 受け入れている（読み込み中はメインスレッドをブロックせず、クラッシュもしない）。
 private val HEART_RATE_DENSITY = MetricDensity.HIGH
 
+// WBS 6.3: RecordsタブのPagingConfig。Heart Rateは1レコードに複数サンプルを含み、継続記録する
+// ソースではRaw全件読み込みが実機のヒープを枯渇させてOutOfMemoryErrorを起こした実例がある
+// （lessons.md 6.7）。他3型より小さいpageSize/maxSizeにし、1回あたりの変換コストとメモリ上限を
+// より保守的に抑える。具体的な値は実機で検証して調整する（docs/wbs.md 6.3の未決事項）。
+private const val HEART_RATE_RECORDS_PAGE_SIZE = 20
+private const val HEART_RATE_RECORDS_MAX_SIZE = 100
+
 private data class HeartRateLoad(val result: HeartRateAggregatesResult, val granularity: BucketGranularity)
 
 @Composable
@@ -66,6 +82,7 @@ fun HeartRateDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var tab by rememberSaveable { mutableStateOf(DetailTab.CHART) }
     var period by rememberSaveable { mutableStateOf(GraphPeriod.MONTH) }
     var retryKey by remember { mutableIntStateOf(0) }
     var customRange by rememberSaveable { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
@@ -143,53 +160,123 @@ fun HeartRateDetailScreen(
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        TextButton(onClick = onBack) {
-            Text(text = stringResource(id = R.string.detail_back))
-        }
-        Text(text = stringResource(id = R.string.detail_heart_rate_title), style = MaterialTheme.typography.titleLarge)
+    // WBS 6.3: WeightDetailScreenと同じ理由でルートをタブ＋Box(weight)構造にする。
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            TextButton(onClick = onBack) {
+                Text(text = stringResource(id = R.string.detail_back))
+            }
+            Text(text = stringResource(id = R.string.detail_heart_rate_title), style = MaterialTheme.typography.titleLarge)
 
-        OldestRecordInfo(oldestResult)
+            OldestRecordInfo(oldestResult)
 
-        PeriodTabs(period = period, onPeriodChange = { period = it })
-        if (period == GraphPeriod.CUSTOM) {
-            CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
+            DetailTabs(tab = tab, onTabChange = { tab = it })
         }
 
-        val currentLoad = aggregatesLoad
-        val currentHeartRateLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
-        when (val currentResult = currentHeartRateLoad?.result) {
-            null ->
-                if (period == GraphPeriod.CUSTOM && customRange == null) {
-                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+        Box(modifier = Modifier.weight(1f)) {
+            when (tab) {
+                DetailTab.CHART ->
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        PeriodTabs(period = period, onPeriodChange = { period = it })
+                        if (period == GraphPeriod.CUSTOM) {
+                            CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
+                        }
+
+                        val currentLoad = aggregatesLoad
+                        val currentHeartRateLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
+                        when (val currentResult = currentHeartRateLoad?.result) {
+                            null ->
+                                if (period == GraphPeriod.CUSTOM && customRange == null) {
+                                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+                                } else {
+                                    CircularProgressIndicator()
+                                    Text(text = stringResource(id = R.string.detail_loading))
+                                }
+                            HeartRateAggregatesResult.Failure -> {
+                                Text(text = stringResource(id = R.string.detail_error))
+                                Button(onClick = { retryKey++ }) {
+                                    Text(text = stringResource(id = R.string.detail_retry))
+                                }
+                            }
+                            is HeartRateAggregatesResult.Success -> {
+                                val granularity = currentHeartRateLoad.granularity
+                                Text(
+                                    text =
+                                        stringResource(
+                                            id = R.string.detail_heart_rate_aggregation_avg,
+                                            stringResource(id = granularity.granularityLabelRes()),
+                                        ),
+                                )
+                                if (currentResult.historyLimited) {
+                                    Text(text = stringResource(id = R.string.detail_history_limited_notice))
+                                }
+                                HeartRateAggregateChart(buckets = currentResult.buckets, granularity = granularity)
+                            }
+                        }
+                    }
+                DetailTab.RECORDS -> {
+                    val pagingItems =
+                        remember {
+                            Pager(
+                                PagingConfig(
+                                    pageSize = HEART_RATE_RECORDS_PAGE_SIZE,
+                                    // WeightDetailScreenのPagingConfigコメント参照（初回loadの既定値
+                                    // pageSize * 3とページ境界をpageSizeに揃える理由、レビュー指摘）。
+                                    initialLoadSize = HEART_RATE_RECORDS_PAGE_SIZE,
+                                    maxSize = HEART_RATE_RECORDS_MAX_SIZE,
+                                    enablePlaceholders = false,
+                                ),
+                            ) {
+                                healthConnectManager.heartRateRecordsPagingSource(historyPermissionGranted)
+                            }.flow
+                        }.collectAsLazyPagingItems()
+                    RecordsTab(
+                        pagingItems = pagingItems,
+                        historyLimited = !historyPermissionGranted,
+                        rowContent = { record -> HeartRateRecordRow(record = record) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+// poc/HeartRateRawRecordsScreen.HeartRateRecordRow()と同じフォーマット（既存PoCから移植）。
+@Composable
+private fun HeartRateRecordRow(record: HeartRateRecord) {
+    val context = LocalContext.current
+    val locale = LocalLocale.current.platformLocale
+    val numberFormat = remember(locale) { NumberFormat.getIntegerInstance(locale) }
+    val startZone = record.startZoneOffset ?: ZoneId.systemDefault()
+    val endZone = record.endZoneOffset ?: ZoneId.systemDefault()
+    val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale)
+    val formattedStart = formatter.format(record.startTime.atZone(startZone))
+    val formattedEnd = formatter.format(record.endTime.atZone(endZone))
+    val timeRangeText = "$formattedStart – $formattedEnd"
+    val sourceName =
+        remember(record.metadata.dataOrigin.packageName) {
+            DataOriginNameResolver.resolve(context, record.metadata.dataOrigin.packageName)
+        }
+
+    Column {
+        Text(
+            text =
+                if (record.samples.isNotEmpty()) {
+                    val averageBpm = Math.round(record.samples.map { it.beatsPerMinute }.average())
+                    stringResource(
+                        id = R.string.detail_heart_rate_record_summary,
+                        timeRangeText,
+                        record.samples.size,
+                        numberFormat.format(averageBpm),
+                    )
                 } else {
-                    CircularProgressIndicator()
-                    Text(text = stringResource(id = R.string.detail_loading))
-                }
-            HeartRateAggregatesResult.Failure -> {
-                Text(text = stringResource(id = R.string.detail_error))
-                Button(onClick = { retryKey++ }) {
-                    Text(text = stringResource(id = R.string.detail_retry))
-                }
-            }
-            is HeartRateAggregatesResult.Success -> {
-                val granularity = currentHeartRateLoad.granularity
-                Text(
-                    text =
-                        stringResource(
-                            id = R.string.detail_heart_rate_aggregation_avg,
-                            stringResource(id = granularity.granularityLabelRes()),
-                        ),
-                )
-                if (currentResult.historyLimited) {
-                    Text(text = stringResource(id = R.string.detail_history_limited_notice))
-                }
-                HeartRateAggregateChart(buckets = currentResult.buckets, granularity = granularity)
-            }
-        }
+                    stringResource(id = R.string.detail_heart_rate_record_summary_no_samples, timeRangeText, record.samples.size)
+                },
+        )
+        Text(text = sourceName, style = MaterialTheme.typography.bodySmall)
     }
 }
 

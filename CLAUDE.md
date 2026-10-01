@@ -39,6 +39,7 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 -   `app/build.gradle.kts` に `org.jetbrains.kotlin.android` プラグインを**適用しない**。抜けているように見えるが意図的（D-020）。AGP 9.0以降はKotlinサポートがAGPに組み込まれ（built-in Kotlin）、このプラグインを追加するとビルドエラーになる。Composeコンパイラの `org.jetbrains.kotlin.plugin.compose` は引き続き必要
 -   Kotlin用の `kotlinOptions { jvmTarget = ... }` DSLも同じ理由で使えない。JVMターゲットは `compileOptions` のJavaVersionで揃える
 -   compileSdk・targetSdkは37（Android 17）。Compose BOM 2026.09.00がcompileSdk 37を要求するため、36には戻せない。ローカルSDKには `build-tools;37.0.0` の追加導入が必要だった
+-   `app/build.gradle.kts`の`vico.compose`/`vico.compose.m3`依存に付けている`exclude(group = "org.jetbrains.compose.*")`は削除しないこと。vicoはKotlin Multiplatform対応アーティファクトで、Android targetでもBOM管理下の`androidx.compose.*`と同じパッケージ名・別バージョンの`org.jetbrains.compose.*`を推移的に持ち込み、`Modifier.weight()`等の解決が壊れる（除外しても実体はandroidx側の依存から得られるため安全。D-035、[docs/wbs.md](docs/wbs.md)）
 
 ## UI基盤で誤解しやすい点
 

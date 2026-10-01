@@ -1,6 +1,7 @@
 package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,9 +23,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
@@ -38,6 +44,7 @@ import com.patrykandpatrick.vico.compose.common.ProvideVicoTheme
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
 import com.patrykandpatrick.vico.compose.m3.common.rememberM3VicoTheme
 import com.yskms.healthdataviewer.R
+import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateBucket
@@ -46,6 +53,8 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.util.Locale
 
 // WBS 6.2: poc/SleepGraphScreen（PoC 4）を置き換える正式なDetail画面。SleepはMetricDensity.LOW
@@ -55,6 +64,11 @@ import java.util.Locale
 // 正規化して表示する。これが要件§27「Sleepの月bucket（ALL）の集計方法が未定」の決着＝月合計ではなく
 // 1日あたり平均にする（記録開始月・当月のような日数不足月が不自然に低く見える問題を解消する）。
 private val SLEEP_DENSITY = MetricDensity.LOW
+
+// WBS 6.3: RecordsタブのPagingConfig。WeightDetailScreen.WEIGHT_RECORDS_PAGE_SIZE等と同じ理由
+// （具体的な値は実機で検証して調整する、docs/wbs.md 6.3の未決事項）。
+private const val SLEEP_RECORDS_PAGE_SIZE = 50
+private const val SLEEP_RECORDS_MAX_SIZE = 200
 
 // denominatorFloorはbucketの日数按分クランプに使う（resolveDetailGraphRange()が解決する。
 // perDayDuration()参照）。クランプ不要な場合はnull。
@@ -67,6 +81,7 @@ fun SleepDetailScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var tab by rememberSaveable { mutableStateOf(DetailTab.CHART) }
     var period by rememberSaveable { mutableStateOf(GraphPeriod.MONTH) }
     var retryKey by remember { mutableIntStateOf(0) }
     var customRange by rememberSaveable { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
@@ -146,51 +161,167 @@ fun SleepDetailScreen(
         }
     }
 
-    Column(
-        modifier = modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        TextButton(onClick = onBack) {
-            Text(text = stringResource(id = R.string.detail_back))
-        }
-        Text(text = stringResource(id = R.string.detail_sleep_title), style = MaterialTheme.typography.titleLarge)
+    // WBS 6.3: WeightDetailScreenと同じ理由でルートをタブ＋Box(weight)構造にする。
+    Column(modifier = modifier.fillMaxSize()) {
+        Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            TextButton(onClick = onBack) {
+                Text(text = stringResource(id = R.string.detail_back))
+            }
+            Text(text = stringResource(id = R.string.detail_sleep_title), style = MaterialTheme.typography.titleLarge)
 
-        OldestRecordInfo(oldestResult)
+            OldestRecordInfo(oldestResult)
 
-        PeriodTabs(period = period, onPeriodChange = { period = it })
-        if (period == GraphPeriod.CUSTOM) {
-            CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
+            DetailTabs(tab = tab, onTabChange = { tab = it })
         }
 
-        val currentLoad = aggregatesLoad
-        val currentSleepLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
-        when (val currentResult = currentSleepLoad?.result) {
-            null ->
-                if (period == GraphPeriod.CUSTOM && customRange == null) {
-                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
-                } else {
-                    CircularProgressIndicator()
-                    Text(text = stringResource(id = R.string.detail_loading))
-                }
-            SleepAggregatesResult.Failure -> {
-                Text(text = stringResource(id = R.string.detail_error))
-                Button(onClick = { retryKey++ }) {
-                    Text(text = stringResource(id = R.string.detail_retry))
+        Box(modifier = Modifier.weight(1f)) {
+            when (tab) {
+                DetailTab.CHART ->
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp).verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        PeriodTabs(period = period, onPeriodChange = { period = it })
+                        if (period == GraphPeriod.CUSTOM) {
+                            CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
+                        }
+
+                        val currentLoad = aggregatesLoad
+                        val currentSleepLoad = if (currentLoad != null && currentLoad.period == period) currentLoad.result else null
+                        when (val currentResult = currentSleepLoad?.result) {
+                            null ->
+                                if (period == GraphPeriod.CUSTOM && customRange == null) {
+                                    Text(text = stringResource(id = R.string.detail_custom_pick_prompt))
+                                } else {
+                                    CircularProgressIndicator()
+                                    Text(text = stringResource(id = R.string.detail_loading))
+                                }
+                            SleepAggregatesResult.Failure -> {
+                                Text(text = stringResource(id = R.string.detail_error))
+                                Button(onClick = { retryKey++ }) {
+                                    Text(text = stringResource(id = R.string.detail_retry))
+                                }
+                            }
+                            is SleepAggregatesResult.Success -> {
+                                val granularity = currentSleepLoad.granularity
+                                val aggregationLabelRes =
+                                    if (granularity == BucketGranularity.DAY) {
+                                        R.string.detail_sleep_aggregation_total
+                                    } else {
+                                        R.string.detail_sleep_aggregation_avg_per_day
+                                    }
+                                Text(text = stringResource(id = aggregationLabelRes, stringResource(id = granularity.granularityLabelRes())))
+                                if (currentResult.historyLimited) {
+                                    Text(text = stringResource(id = R.string.detail_history_limited_notice))
+                                }
+                                SleepAggregateChart(
+                                    buckets = currentResult.buckets,
+                                    granularity = granularity,
+                                    denominatorFloor = currentSleepLoad.denominatorFloor,
+                                )
+                                // WBS 5.1: 日付境界をまたぐSessionがbucketにどう配分されるかを、グラフの折れ線
+                                // だけでなく数値でも確認できるようにする（既存PoCから引き続き。Vicoのマーカーは
+                                // 長押し操作が必要）。
+                                SleepBucketList(
+                                    buckets = currentResult.buckets,
+                                    granularity = granularity,
+                                    denominatorFloor = currentSleepLoad.denominatorFloor,
+                                )
+                            }
+                        }
+                    }
+                DetailTab.RECORDS -> {
+                    val pagingItems =
+                        remember {
+                            Pager(
+                                PagingConfig(
+                                    pageSize = SLEEP_RECORDS_PAGE_SIZE,
+                                    // WeightDetailScreenのPagingConfigコメント参照（初回loadの既定値
+                                    // pageSize * 3とページ境界をpageSizeに揃える理由、レビュー指摘）。
+                                    initialLoadSize = SLEEP_RECORDS_PAGE_SIZE,
+                                    maxSize = SLEEP_RECORDS_MAX_SIZE,
+                                    enablePlaceholders = false,
+                                ),
+                            ) {
+                                healthConnectManager.sleepSessionRecordsPagingSource(historyPermissionGranted)
+                            }.flow
+                        }.collectAsLazyPagingItems()
+                    RecordsTab(
+                        pagingItems = pagingItems,
+                        historyLimited = !historyPermissionGranted,
+                        rowContent = { record -> SleepRecordRow(record = record) },
+                    )
                 }
             }
-            is SleepAggregatesResult.Success -> {
-                val granularity = currentSleepLoad.granularity
-                val aggregationLabelRes =
-                    if (granularity == BucketGranularity.DAY) R.string.detail_sleep_aggregation_total else R.string.detail_sleep_aggregation_avg_per_day
-                Text(text = stringResource(id = aggregationLabelRes, stringResource(id = granularity.granularityLabelRes())))
-                if (currentResult.historyLimited) {
-                    Text(text = stringResource(id = R.string.detail_history_limited_notice))
-                }
-                SleepAggregateChart(buckets = currentResult.buckets, granularity = granularity, denominatorFloor = currentSleepLoad.denominatorFloor)
-                // WBS 5.1: 日付境界をまたぐSessionがbucketにどう配分されるかを、グラフの折れ線だけでなく
-                // 数値でも確認できるようにする（既存PoCから引き続き。Vicoのマーカーは長押し操作が必要）。
-                SleepBucketList(buckets = currentResult.buckets, granularity = granularity, denominatorFloor = currentSleepLoad.denominatorFloor)
-            }
+        }
+    }
+}
+
+// poc/SleepRawRecordsScreen.stageTypeLabelRes()と同じ対応（既存PoCから移植）。
+private fun stageTypeLabelRes(stageType: Int): Int =
+    when (stageType) {
+        SleepSessionRecord.STAGE_TYPE_AWAKE -> R.string.detail_sleep_stage_awake
+        SleepSessionRecord.STAGE_TYPE_SLEEPING -> R.string.detail_sleep_stage_sleeping
+        SleepSessionRecord.STAGE_TYPE_OUT_OF_BED -> R.string.detail_sleep_stage_out_of_bed
+        SleepSessionRecord.STAGE_TYPE_LIGHT -> R.string.detail_sleep_stage_light
+        SleepSessionRecord.STAGE_TYPE_DEEP -> R.string.detail_sleep_stage_deep
+        SleepSessionRecord.STAGE_TYPE_REM -> R.string.detail_sleep_stage_rem
+        SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED -> R.string.detail_sleep_stage_awake_in_bed
+        else -> R.string.detail_sleep_stage_unknown
+    }
+
+// poc/SleepRawRecordsScreen.STAGE_DISPLAY_ORDERと同じ順序（既存PoCから移植）。
+private val STAGE_DISPLAY_ORDER =
+    listOf(
+        SleepSessionRecord.STAGE_TYPE_AWAKE,
+        SleepSessionRecord.STAGE_TYPE_AWAKE_IN_BED,
+        SleepSessionRecord.STAGE_TYPE_OUT_OF_BED,
+        SleepSessionRecord.STAGE_TYPE_SLEEPING,
+        SleepSessionRecord.STAGE_TYPE_LIGHT,
+        SleepSessionRecord.STAGE_TYPE_DEEP,
+        SleepSessionRecord.STAGE_TYPE_REM,
+        SleepSessionRecord.STAGE_TYPE_UNKNOWN,
+    )
+
+// poc/SleepRawRecordsScreen.stageTotals()と同じ（既存PoCから移植）。
+private fun stageTotals(stages: List<SleepSessionRecord.Stage>): Map<Int, Duration> =
+    stages
+        .groupBy { it.stage }
+        .mapValues { (_, list) -> list.fold(Duration.ZERO) { acc, stage -> acc + Duration.between(stage.startTime, stage.endTime) } }
+
+// poc/SleepRawRecordsScreen.SleepRecordRow()と同じフォーマット（既存PoCから移植）。formatDuration()は
+// このファイル内の既存定義をそのまま使う。
+@Composable
+private fun SleepRecordRow(record: SleepSessionRecord) {
+    val context = LocalContext.current
+    val locale = LocalLocale.current.platformLocale
+    val startZone = record.startZoneOffset ?: ZoneId.systemDefault()
+    val endZone = record.endZoneOffset ?: ZoneId.systemDefault()
+    val formatter = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale)
+    val formattedStart = formatter.format(record.startTime.atZone(startZone))
+    val formattedEnd = formatter.format(record.endTime.atZone(endZone))
+    val duration = Duration.between(record.startTime, record.endTime)
+    val stages = remember(record) { stageTotals(record.stages) }
+    val sourceName =
+        remember(record.metadata.dataOrigin.packageName) {
+            DataOriginNameResolver.resolve(context, record.metadata.dataOrigin.packageName)
+        }
+
+    Column {
+        Text(text = "$formattedStart – $formattedEnd  ${formatDuration(duration)}")
+        Text(text = sourceName, style = MaterialTheme.typography.bodySmall)
+        if (stages.isEmpty()) {
+            Text(text = stringResource(id = R.string.detail_sleep_no_stage_data), style = MaterialTheme.typography.bodySmall)
+        } else {
+            // joinToString(transform = ...)は非inline関数のため、渡したラムダの中で@Composableな
+            // stringResource()を直接呼べない（コンパイルエラーになる）。mapNotNull（inline）側でラベルを
+            // 文字列に解決してから、transformなしのjoinToStringで連結する（既存PoCから踏襲）。
+            val stageText =
+                STAGE_DISPLAY_ORDER
+                    .mapNotNull { stageType ->
+                        stages[stageType]?.let { stageDuration -> "${stringResource(id = stageTypeLabelRes(stageType))} ${formatDuration(stageDuration)}" }
+                    }.joinToString(separator = " ・ ")
+            Text(text = stageText, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

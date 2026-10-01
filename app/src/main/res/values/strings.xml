@@ -26,18 +26,6 @@
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="home_sleep_title">Sleep</string>
     <string name="home_sleep_average_per_day_notice">Average per day for this period</string>
-    <string name="poc_weight_open_button">PoC: Show weight raw records</string>
-    <string name="poc_weight_title">Weight raw records (PoC)</string>
-    <string name="poc_weight_back">Back</string>
-    <string name="poc_weight_loading">Loading…</string>
-    <string name="poc_weight_error">Failed to load records.</string>
-    <string name="poc_weight_retry">Retry</string>
-    <string name="poc_weight_empty">No weight records found.</string>
-    <string name="poc_weight_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
-    <plurals name="poc_weight_record_count">
-        <item quantity="one">%1$d record</item>
-        <item quantity="other">%1$d records</item>
-    </plurals>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
     <string name="poc_steps_period_today">Today</string>
@@ -63,56 +51,6 @@
     <plurals name="poc_steps_record_count">
         <item quantity="one">%1$d record</item>
         <item quantity="other">%1$d records</item>
-    </plurals>
-    <string name="poc_heart_rate_open_button">PoC: Show heart rate raw records</string>
-    <string name="poc_heart_rate_title">Heart rate raw records (PoC)</string>
-    <string name="poc_heart_rate_period_today">Today</string>
-    <string name="poc_heart_rate_period_week">7 days</string>
-    <string name="poc_heart_rate_period_all">ALL</string>
-    <string name="poc_heart_rate_back">Back</string>
-    <string name="poc_heart_rate_loading">Loading…</string>
-    <string name="poc_heart_rate_error">Failed to load records.</string>
-    <string name="poc_heart_rate_retry">Retry</string>
-    <string name="poc_heart_rate_empty">No heart rate records found.</string>
-    <string name="poc_heart_rate_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
-    <string name="poc_heart_rate_limit_reached_notice">Too many samples in range — loading was stopped early to avoid an out-of-memory crash. This is not the full record set.</string>
-    <string name="poc_heart_rate_sample_count">Samples: %1$s</string>
-    <string name="poc_heart_rate_elapsed_time">Load time: %1$s ms</string>
-    <string name="poc_heart_rate_by_source_title">By source</string>
-    <string name="poc_heart_rate_source_summary">Records: %1$s · Samples: %2$s</string>
-    <string name="poc_heart_rate_raw_records_title">Raw records</string>
-    <string name="poc_heart_rate_record_summary">%1$s  %2$d samples  avg %3$s bpm</string>
-    <string name="poc_heart_rate_record_summary_no_samples">%1$s  %2$d samples</string>
-    <plurals name="poc_heart_rate_record_count">
-        <item quantity="one">%1$d record</item>
-        <item quantity="other">%1$d records</item>
-    </plurals>
-    <string name="poc_sleep_open_button">PoC: Show sleep raw records</string>
-    <string name="poc_sleep_title">Sleep raw records (PoC)</string>
-    <string name="poc_sleep_period_today">Today</string>
-    <string name="poc_sleep_period_week">7 days</string>
-    <string name="poc_sleep_period_all">ALL</string>
-    <string name="poc_sleep_back">Back</string>
-    <string name="poc_sleep_loading">Loading…</string>
-    <string name="poc_sleep_error">Failed to load records.</string>
-    <string name="poc_sleep_retry">Retry</string>
-    <string name="poc_sleep_empty">No sleep records found.</string>
-    <string name="poc_sleep_history_limited_notice">History permission isn\'t granted, so only the last 30 days are shown.</string>
-    <string name="poc_sleep_by_source_title">By source</string>
-    <string name="poc_sleep_source_summary">Sessions: %1$d · Raw total, no dedup: %2$s</string>
-    <string name="poc_sleep_raw_records_title">Raw records</string>
-    <string name="poc_sleep_no_stage_data">No stage data.</string>
-    <string name="poc_sleep_stage_unknown">Unknown</string>
-    <string name="poc_sleep_stage_awake">Awake</string>
-    <string name="poc_sleep_stage_sleeping">Sleeping (unspecified)</string>
-    <string name="poc_sleep_stage_out_of_bed">Out of bed</string>
-    <string name="poc_sleep_stage_light">Light</string>
-    <string name="poc_sleep_stage_deep">Deep</string>
-    <string name="poc_sleep_stage_rem">REM</string>
-    <string name="poc_sleep_stage_awake_in_bed">Awake in bed</string>
-    <plurals name="poc_sleep_record_count">
-        <item quantity="one">%1$d session</item>
-        <item quantity="other">%1$d sessions</item>
     </plurals>
     <!-- WBS 6.2: Detail screen (graph view), shared across Weight/Steps/Heart rate/Sleep. -->
     <string name="detail_period_week">1W</string>
@@ -149,4 +87,19 @@
     <string name="detail_sleep_aggregation_total">Aggregation: %1$s total sleep duration (official Aggregate API, Sleep dedup applies)</string>
     <string name="detail_sleep_aggregation_avg_per_day">Aggregation: %1$s average sleep duration per day (official Aggregate API, Sleep dedup applies)</string>
     <string name="detail_sleep_bucket_list_title">Bucket values (date : duration h:mm)</string>
+    <!-- WBS 6.3: Records tab (paged raw record list), shared across Weight/Steps/Heart rate/Sleep. -->
+    <string name="detail_tab_chart">Chart</string>
+    <string name="detail_tab_records">Records</string>
+    <string name="detail_records_empty">No records found in the readable range.</string>
+    <string name="detail_heart_rate_record_summary">%1$s  %2$d samples  avg %3$s bpm</string>
+    <string name="detail_heart_rate_record_summary_no_samples">%1$s  %2$d samples</string>
+    <string name="detail_sleep_no_stage_data">No stage data.</string>
+    <string name="detail_sleep_stage_unknown">Unknown</string>
+    <string name="detail_sleep_stage_awake">Awake</string>
+    <string name="detail_sleep_stage_sleeping">Sleeping (unspecified)</string>
+    <string name="detail_sleep_stage_out_of_bed">Out of bed</string>
+    <string name="detail_sleep_stage_light">Light</string>
+    <string name="detail_sleep_stage_deep">Deep</string>
+    <string name="detail_sleep_stage_rem">REM</string>
+    <string name="detail_sleep_stage_awake_in_bed">Awake in bed</string>
 </resources>

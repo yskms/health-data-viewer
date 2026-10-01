@@ -532,7 +532,7 @@ PoC 1〜4（Weight・Steps・Heart Rate・Sleep）で解決した事項（Weight
 -   タイムゾーン変更・夏時間の扱い（bucket境界。§10/§22.5。D-027・D-032で、確認できたデータが単一タイムゾーンでの記録のみだったため引き続き要検証と分かっている）
 -   Sleepの複数ソース重複時の扱い（Source priority）。PoC 4（WBS 5.1）は単一ソースの実データのみで検証しており、複数ソースが同じ夜（またはその一部）を重ねて記録した場合に`SLEEP_DURATION_TOTAL`がどう重複処理するかは未確認（lessons.md 6.9）
 -   Sleepの日付境界をまたぐSessionの按分の正確な計算根拠。両日のbucketに実時間の重なりに応じて按分されることはPoC 4で確認できたが（lessons.md 6.9）、Health Connectが実際にどう計算しているか（Stage単位で計算しているか、Session全体を一様分布とみなす近似的な計算か）は、UI表示の分単位切り捨てを読み取る検証方法の精度の限界で断定できていない
--   SleepのRaw画面で「今日」を選んだ場合、前日夜に始まり日付境界をまたぐSessionが一覧に含まれるかどうか。PoC 4の検証時点では対象となる実例が手元になく未検証（`SleepRawRecordsScreen.kt`のコメント参照）
+-   Sleepで「今日」の範囲を問い合わせた場合、前日夜に始まり日付境界をまたぐSessionが含まれるかどうか。PoC 4（`poc/SleepRawRecordsScreen`、WBS 6.3で削除）の検証時点では対象となる実例が手元になく未検証のまま残っている。ホーム画面のSleep「今日」カード（D-033、Aggregateのbucket境界に依存）に関わる疑問のため引き続き残す
 -   ~~Sleepの月bucket（ALL表示）の集計方法~~ → WBS 6.2で解決済み（D-034）。月合計ではなく、実カバー日数で割った「1日あたり平均」にする（Stepsの週/月bucketにも同じ規則を適用）
 -   ~~データ型×期間のグラフ集計ルールの残り（Stepsのグラフ集計ルール自体が未定）~~ → WBS 6.2でStepsの詳細画面グラフを新規実装し解決済み（D-034）。ただしHeart Rateの週bucket化（D-031の仮説）は実機で効果が限定的と判明した（次項参照）
 -   ~~短期間（1Wなど）のグラフでRawの全点を使うかどうか~~ → WBS 6.2で解決済み（D-034）。1Wを含む全期間でHealth Connect公式Aggregateのbucket集計を使い、独自のRaw全点描画は行わない

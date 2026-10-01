@@ -26,17 +26,6 @@
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="home_sleep_title">睡眠</string>
     <string name="home_sleep_average_per_day_notice">この期間の1日あたり平均</string>
-    <string name="poc_weight_open_button">PoC: 体重の生データを表示</string>
-    <string name="poc_weight_title">体重 生データ（PoC）</string>
-    <string name="poc_weight_back">戻る</string>
-    <string name="poc_weight_loading">読み込み中…</string>
-    <string name="poc_weight_error">読み込みに失敗しました。</string>
-    <string name="poc_weight_retry">再試行</string>
-    <string name="poc_weight_empty">体重のレコードがありません。</string>
-    <string name="poc_weight_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
-    <plurals name="poc_weight_record_count">
-        <item quantity="other">%1$d件</item>
-    </plurals>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
     <string name="poc_steps_period_today">今日</string>
@@ -60,54 +49,6 @@
     <string name="poc_steps_overlapping">同じソース内の他レコードとInstant精度で重なっているレコード: %1$s件、合計%2$s歩</string>
     <string name="poc_steps_estimated_official">推定公式合計（区間の和集合による時間按分）: %1$s歩</string>
     <plurals name="poc_steps_record_count">
-        <item quantity="other">%1$d件</item>
-    </plurals>
-    <string name="poc_heart_rate_open_button">PoC: 心拍数の生データを表示</string>
-    <string name="poc_heart_rate_title">心拍数 生データ（PoC）</string>
-    <string name="poc_heart_rate_period_today">今日</string>
-    <string name="poc_heart_rate_period_week">過去7日間</string>
-    <string name="poc_heart_rate_period_all">全期間</string>
-    <string name="poc_heart_rate_back">戻る</string>
-    <string name="poc_heart_rate_loading">読み込み中…</string>
-    <string name="poc_heart_rate_error">読み込みに失敗しました。</string>
-    <string name="poc_heart_rate_retry">再試行</string>
-    <string name="poc_heart_rate_empty">心拍数のレコードがありません。</string>
-    <string name="poc_heart_rate_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
-    <string name="poc_heart_rate_limit_reached_notice">対象期間のサンプル数が多すぎるため、メモリ不足によるクラッシュを避けて読み込みを打ち切りました。全件ではありません。</string>
-    <string name="poc_heart_rate_sample_count">測定数（サンプル数）: %1$s</string>
-    <string name="poc_heart_rate_elapsed_time">読み込み時間: %1$sミリ秒</string>
-    <string name="poc_heart_rate_by_source_title">ソース別</string>
-    <string name="poc_heart_rate_source_summary">%1$s件、測定数 %2$s</string>
-    <string name="poc_heart_rate_raw_records_title">生レコード一覧</string>
-    <string name="poc_heart_rate_record_summary">%1$s  %2$d件のサンプル  平均%3$s bpm</string>
-    <string name="poc_heart_rate_record_summary_no_samples">%1$s  %2$d件のサンプル</string>
-    <plurals name="poc_heart_rate_record_count">
-        <item quantity="other">%1$d件</item>
-    </plurals>
-    <string name="poc_sleep_open_button">PoC: 睡眠の生データを表示</string>
-    <string name="poc_sleep_title">睡眠 生データ（PoC）</string>
-    <string name="poc_sleep_period_today">今日</string>
-    <string name="poc_sleep_period_week">過去7日間</string>
-    <string name="poc_sleep_period_all">全期間</string>
-    <string name="poc_sleep_back">戻る</string>
-    <string name="poc_sleep_loading">読み込み中…</string>
-    <string name="poc_sleep_error">読み込みに失敗しました。</string>
-    <string name="poc_sleep_retry">再試行</string>
-    <string name="poc_sleep_empty">睡眠のレコードがありません。</string>
-    <string name="poc_sleep_history_limited_notice">履歴読み取り権限がないため、直近30日分のみ表示しています。</string>
-    <string name="poc_sleep_by_source_title">ソース別</string>
-    <string name="poc_sleep_source_summary">%1$d件、単純合計・重複排除なし: %2$s</string>
-    <string name="poc_sleep_raw_records_title">生レコード一覧</string>
-    <string name="poc_sleep_no_stage_data">段階データなし。</string>
-    <string name="poc_sleep_stage_unknown">不明</string>
-    <string name="poc_sleep_stage_awake">覚醒</string>
-    <string name="poc_sleep_stage_sleeping">睡眠（詳細不明）</string>
-    <string name="poc_sleep_stage_out_of_bed">離床</string>
-    <string name="poc_sleep_stage_light">浅い睡眠</string>
-    <string name="poc_sleep_stage_deep">深い睡眠</string>
-    <string name="poc_sleep_stage_rem">レム睡眠</string>
-    <string name="poc_sleep_stage_awake_in_bed">覚醒（ベッド内）</string>
-    <plurals name="poc_sleep_record_count">
         <item quantity="other">%1$d件</item>
     </plurals>
     <!-- WBS 6.2: 詳細画面（グラフビュー）。Weight/Steps/心拍数/Sleepで共通。 -->
@@ -145,4 +86,19 @@
     <string name="detail_sleep_aggregation_total">集計方法: %1$s合計睡眠時間（Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
     <string name="detail_sleep_aggregation_avg_per_day">集計方法: %1$s平均睡眠時間（1日あたり、Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
     <string name="detail_sleep_bucket_list_title">Bucketの値一覧（日付: 時間 h:mm）</string>
+    <!-- WBS 6.3: Recordsタブ（ページング生レコード一覧）。Weight/Steps/心拍数/Sleepで共通。 -->
+    <string name="detail_tab_chart">グラフ</string>
+    <string name="detail_tab_records">レコード</string>
+    <string name="detail_records_empty">読み取れる範囲にレコードがありません。</string>
+    <string name="detail_heart_rate_record_summary">%1$s  %2$d件のサンプル  平均%3$s bpm</string>
+    <string name="detail_heart_rate_record_summary_no_samples">%1$s  %2$d件のサンプル</string>
+    <string name="detail_sleep_no_stage_data">段階データなし。</string>
+    <string name="detail_sleep_stage_unknown">不明</string>
+    <string name="detail_sleep_stage_awake">覚醒</string>
+    <string name="detail_sleep_stage_sleeping">睡眠（詳細不明）</string>
+    <string name="detail_sleep_stage_out_of_bed">離床</string>
+    <string name="detail_sleep_stage_light">浅い睡眠</string>
+    <string name="detail_sleep_stage_deep">深い睡眠</string>
+    <string name="detail_sleep_stage_rem">レム睡眠</string>
+    <string name="detail_sleep_stage_awake_in_bed">覚醒（ベッド内）</string>
 </resources>

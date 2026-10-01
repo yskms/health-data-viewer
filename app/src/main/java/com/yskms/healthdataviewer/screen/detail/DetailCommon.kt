@@ -3,6 +3,7 @@ package com.yskms.healthdataviewer.screen.detail
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +39,30 @@ fun OldestRecordInfo(oldestResult: OldestRecordResult?) {
             }
         }
     Text(text = text, style = MaterialTheme.typography.bodySmall)
+}
+
+// WBS 6.3: Metric Detail画面のChart/Records/Sources（requirements.md §18）のうち、Chart/Recordsの
+// 2つを先に実装する（Sourcesタブ自体はWBS 6.4）。
+enum class DetailTab { CHART, RECORDS }
+
+private fun DetailTab.labelRes(): Int =
+    when (this) {
+        DetailTab.CHART -> R.string.detail_tab_chart
+        DetailTab.RECORDS -> R.string.detail_tab_records
+    }
+
+@Composable
+fun DetailTabs(tab: DetailTab, onTabChange: (DetailTab) -> Unit) {
+    val tabs = DetailTab.entries
+    PrimaryTabRow(selectedTabIndex = tabs.indexOf(tab)) {
+        tabs.forEach { entry ->
+            Tab(
+                selected = entry == tab,
+                onClick = { onTabChange(entry) },
+                text = { Text(text = stringResource(id = entry.labelRes())) },
+            )
+        }
+    }
 }
 
 // 7期間（1W/1M/3M/6M/1Y/ALL/Custom）は既存のSingleChoiceSegmentedButtonRow（3項目用）では

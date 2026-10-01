@@ -297,6 +297,13 @@
     2.  **ALLで最古レコードの取得自体が失敗し、かつ履歴権限もない場合**: `oldestStart`がnull（`findOldestXxxRecordTime()`自体の失敗、既存の別経路）のときは開始無制限（`before(now)`）にフォールバックする設計だったが、これは履歴権限の有無を考慮していなかった。権限がない場合は、`oldestStart`が分からなくても直近30日floorを開始日として使うよう修正した（権限がある場合は従来通り開始無制限のまま、lessons.md 7.4の既存の考え方を維持）
 -   **確認日（2回目）**: 2026-10-01
 
+### 6.16 Jetpack Paging3の`PagingConfig.initialLoadSize`は既定で`pageSize`の3倍。Health Connectのpageトークンのように前方向限定のtokenを扱う自前`PagingSource`では、揃えないとページ境界がずれてレコードが欠落する
+
+-   **知見**: `PagingConfig`の`pageSize`と`initialLoadSize`は別のパラメータで、`initialLoadSize`の既定値は`pageSize * 3`。初回load（REFRESH、ページ0）だけこの大きいサイズで読み込まれ、2回目以降のappend/prependは`pageSize`で読み込まれる。`HealthRecordsPagingSource`（WBS 6.3）はページ番号（Int）をkeyにし、「そのページを読むために渡したHealth Connectのtoken」を`pageStartTokens`に記録する設計だが、`initialLoadSize`を`pageSize`に揃えないと、「ページ0」の実際の件数（`pageSize * 3`件）と、`PagingConfig.maxSize`でページ0がUIから破棄された後にprependで再読み込みする際の件数（`pageSize`件）が食い違う。その結果、両者の差分に当たるレコード（例: pageSize=20なら21〜60件目）が、エラーも出さず静かに表示から欠落する
+-   **Viewerへの適用**: `screen/detail/*DetailScreen.kt`のRecordsタブ用`PagingConfig`は、必ず`initialLoadSize`を`pageSize`と同じ値に明示する（`HealthRecordsPagingSource.kt`のコメント参照）。WBS 6.4以降で新たにPaging3を使う画面を追加する場合も同様に指定すること
+-   **根拠**: 公式（Jetpack Paging3の`PagingConfig`APIリファレンス、`initialLoadSize`の既定値）／実機確認（Pixel 11、Heart Rateの実データ。`initialLoadSize`未指定のままHeart Rateの「全期間」で大きくスクロールしてから先頭へ戻ると、コードレビューの指摘通りレコードが欠落することを確認。`initialLoadSize`指定後は、同じ操作（最新から13時間超・1,000件超を下方向にスクロールしてから先頭まで戻す）を行っても、先頭の21件が1件も欠落せず元の内容と完全に一致することを確認、2026-10-01）
+-   **確認日**: 2026-10-01
+
 ------------------------------------------------------------------------
 
 ## 7. グラフ描画（Vico、WBS 2.4）

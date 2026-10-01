@@ -15,6 +15,7 @@ import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
+import androidx.paging.PagingSource
 import java.io.IOException
 import java.time.Instant
 import java.time.LocalDateTime
@@ -35,13 +36,6 @@ class HealthConnectManager(context: Context) {
         // 履歴読み取り権限がない場合に読める範囲の近似日数（lessons.md 6.1）。recentRangeFilter()・
         // recentRangeFilterLocal()・StepsScreenの直近フォールバック計算で共通して使う。
         const val HISTORY_FALLBACK_DAYS = 30L
-
-        // readHeartRateRecords()のサンプル数上限（lessons.md 6.7）。実データで過去7日間・約24万サンプルは
-        // 問題なく読み込めたため、それより十分大きい値を安全側の上限とする。正確な閾値ではなく、
-        // クラッシュを避けるための粗い安全弁（要件そのものの決定はWBS 4.3で改めて検討する）。
-        // この値自体がクラッシュしないことはPixel 11でのみ確認済み（レビュー指摘）。メモリの少ない端末では
-        // この上限に届く前にOutOfMemoryErrorになる可能性があり、どの端末でも安全な値かは未検証。
-        const val HEART_RATE_RAW_SAMPLE_LIMIT = 2_000_000
     }
 
     private val appContext = context.applicationContext
@@ -82,73 +76,36 @@ class HealthConnectManager(context: Context) {
     fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> =
         PermissionController.createRequestPermissionResultContract()
 
-    // readRecords()のKDocが明記する例外はRemoteException / SecurityException / IOExceptionの3つ
-    // （getGrantedPermissions()のIllegalStateExceptionとは異なるので混同しないこと）。
-    // 履歴読み取り権限がない状態で30日より古いレコードを読もうとするとSecurityExceptionになる
-    // （0件が返るのではなくエラーになる。lessons.md 6.1）。呼び出し元から渡されたhistoryPermissionGrantedを
-    // 信頼して初回の範囲を決めるが、取得中に権限が取り消された場合に備えてSecurityExceptionも
-    // フォールバックとして処理する。
-    //
-    // 公式ドキュメント上、履歴権限なしで読める範囲は「権限を最初に許可した時点から30日前」までで、
-    // 「現在から30日前」ではない。アプリからは最初の許可日時を直接取得する手段がないため、
-    // 安全側（常に許可される範囲のみを要求し、SecurityExceptionを起こさない）に倒して
-    // Instant.now().minus(30日)を使う。時間が経つほど実際に読める範囲より狭く見せる可能性があるが、
-    // エラーにはならない（lessons.md 6.1）。
+    // WBS 6.3: 詳細画面のRecordsタブ用。readAllWeightRecords()（全件を1つのListに溜め込む旧実装、
+    // Heart RateでOutOfMemoryErrorを起こした。lessons.md 6.7）を置き換える。historyPermissionGrantedに
+    // 応じたfilterの決定は入り口で一度だけ行い（readRecords()のKDocが明記する例外はRemoteException /
+    // SecurityException / IOExceptionの3つ。lessons.md 6.1）、ページング中の自動フォールバック再試行は
+    // 行わない（Health Connectのtokenは特定のfilterに基づくため、途中でfilterを切り替える整合性が
+    // 取れない。readWithHistoryFallback()とは異なる考え方）。
     //
     // recordType = WeightRecord::classの形式でReadRecordsRequestを構築すると、deduplicateStrategyは
     // 指定しなくてもDISABLED（重複排除なし）になる（D-007と整合。CLAUDE.md・lessons.md 6.3参照）。
-    suspend fun readAllWeightRecords(historyPermissionGranted: Boolean): WeightRecordsResult {
-        val initialFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
-
-        suspend fun readPaged(filter: TimeRangeFilter): List<WeightRecord> {
-            val records = mutableListOf<WeightRecord>()
-            var pageToken: String? = null
-            do {
-                val response =
-                    client.readRecords(
-                        ReadRecordsRequest(
-                            recordType = WeightRecord::class,
-                            timeRangeFilter = filter,
-                            ascendingOrder = false,
-                            pageToken = pageToken,
-                        ),
-                    )
-                records += response.records
-                pageToken = response.pageToken?.ifEmpty { null }
-            } while (pageToken != null)
-            return records
-        }
-
-        suspend fun readSafely(filter: TimeRangeFilter, historyLimited: Boolean): WeightRecordsResult =
-            try {
-                WeightRecordsResult.Success(records = readPaged(filter), historyLimited = historyLimited)
-            } catch (e: RemoteException) {
-                WeightRecordsResult.Failure
-            } catch (e: IOException) {
-                WeightRecordsResult.Failure
-            } catch (e: SecurityException) {
-                WeightRecordsResult.Failure
-            }
-
-        return try {
-            WeightRecordsResult.Success(
-                records = readPaged(initialFilter),
-                historyLimited = !historyPermissionGranted,
-            )
-        } catch (e: SecurityException) {
-            readSafely(recentRangeFilter(), historyLimited = true)
-        } catch (e: RemoteException) {
-            WeightRecordsResult.Failure
-        } catch (e: IOException) {
-            WeightRecordsResult.Failure
+    fun weightRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, WeightRecord> {
+        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = WeightRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
         }
     }
 
     // WBS 2.3（PoC 1）: ALLの開始日（最古のレコード時刻）を、全件ページングせずに特定する。
     // requirements.md §22.4の見込み通り、昇順（ascendingOrder = true）・pageSize = 1で呼べば
-    // 最古のレコード1件だけを1回のIPCで取得できる（readAllWeightRecords()のような全件ページングは不要）。
-    // 例外・フォールバックの方針はreadAllWeightRecords()と揃える（6.1参照。フォールバック自体の実装は
-    // readWithHistoryFallback()参照）。
+    // 最古のレコード1件だけを1回のIPCで取得できる（全件ページングは不要）。
+    // 例外・フォールバックの方針は6.1参照（フォールバック自体の実装はreadWithHistoryFallback()参照）。
     suspend fun findOldestWeightRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
         suspend fun readOldest(filter: TimeRangeFilter): Instant? =
             client
@@ -222,7 +179,7 @@ class HealthConnectManager(context: Context) {
     // timeRangeFilterはLocalDateTimeベース（TimeRangeFilter.before/after(LocalDateTime)）で渡すこと。
     // Instantベースのfilterを渡すとIllegalArgumentException（"Either use TimeRangeFilter with
     // LocalDateTime or AggregateGroupByDurationRequest"）になる（エミュレータで確認、lessons.md 6.5。
-    // Pixel 11実機では未確認）。readAllWeightRecords() / findOldestWeightRecordTime()が使う
+    // Pixel 11実機では未確認）。weightRecordsPagingSource() / findOldestWeightRecordTime()が使う
     // readRecords()はInstantベースのみ受け付けるため、両者でTimeRangeFilterを使い回せない点に注意。
     suspend fun readWeightAggregates(
         timeRangeFilter: TimeRangeFilter,
@@ -268,8 +225,8 @@ class HealthConnectManager(context: Context) {
     }
 
     // WBS 3.1（PoC 2）: readStepsRecords()とreadStepsAggregateTotal()は、呼び出し元（StepsScreen）が
-    // 期間（Today/直近7日/全期間）ごとに決めたTimeRangeFilterをそのまま受け取るだけで、Weightの
-    // readAllWeightRecords()のようなSecurityException時の直近30日への自動フォールバックは
+    // 期間（Today/直近7日/全期間）ごとに決めたTimeRangeFilterをそのまま受け取るだけで、
+    // readWithHistoryFallback()が行うようなSecurityException時の直近30日への自動フォールバックは
     // どちらも行わない（D-029）。RawとAggregateの合計を突き合わせて公式の重複処理の結果を見ることが
     // このPoCの目的のため、両者に渡すfilterを呼び出し元で完全に一致させることを優先する。
     // 片方だけ内部でフォールバックすると、Raw側とAggregate側で実際に問い合わせた範囲がずれ、
@@ -312,6 +269,27 @@ class HealthConnectManager(context: Context) {
             StepsRecordsResult.Failure
         }
 
+    // WBS 6.3: 詳細画面のRecordsタブ用。weightRecordsPagingSource()と同じ考え方（入り口で一度だけ
+    // filterを決め、ページング中の自動フォールバック再試行は行わない）。readStepsRecords()
+    // （Raw/Aggregate比較PoC専用、D-029。filterの決め方を呼び出し元に委ねる設計）とは別物で、
+    // poc/StepsScreenはこの関数を使わず引き続きreadStepsRecords()を使う。
+    fun stepsRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, StepsRecord> {
+        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = StepsRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
     // WBS 3.1（PoC 2）: RawとAggregateの差、複数Sourceの公式重複処理の結果を確認するための歩数合計。
     // dataOriginFilterを空集合で呼ぶと全ソース合算（Steps=Activity系のため公式の重複処理が適用される、
     // requirements.md §22.2）、単一のDataOriginを指定するとそのソース単体の合計になる（呼び出し元の
@@ -344,58 +322,30 @@ class HealthConnectManager(context: Context) {
             StepsAggregateTotalResult.Failure
         }
 
-    // WBS 4.1〜4.2（PoC 3）: Heart Rateの公式Aggregate（BPM_AVG/BPM_MIN/BPM_MAX/MEASUREMENTS_COUNT）は
-    // Weightと同じく重複処理がなく（requirements.md §22.2）、Stepsのように範囲を完全一致させて
-    // Raw合計と突き合わせる必要がない。そのためreadHeartRateRecords()はreadStepsRecords()と同じ形
-    // （呼び出し元がfilterを完全に決める。内部フォールバックなし）にする。
-    //
-    // ただしHeart Rateは1レコードに複数サンプルを含み、継続記録するソースでは「全期間」のRaw全件読み込みが
-    // 実機のヒープを枯渇させ、Health Connect SDK内部（readRecords()のレコード変換処理）で
-    // OutOfMemoryErrorが発生してアプリごとクラッシュすることを実機で確認した（lessons.md 6.7、
-    // レビュー指摘）。OutOfMemoryErrorはErrorのサブクラスでありtry/catchで防ぐべきものではないため、
-    // 読み込んだサンプル数がHEART_RATE_RAW_SAMPLE_LIMITに達した時点でページングを打ち切り、
-    // 「上限到達」を呼び出し元が区別できるようにする（HeartRateRecordsResult.LimitReached）。
-    // 上限はWeight/Stepsにはない、Heart Rate固有の対策。表示件数を絞るものではなく、あくまで
-    // クラッシュを避けるための安全弁で、上限に達しない範囲ではD-007（重複も含めすべて表示）通り全件を返す。
-    suspend fun readHeartRateRecords(timeRangeFilter: TimeRangeFilter): HeartRateRecordsResult =
-        try {
-            val records = mutableListOf<HeartRateRecord>()
-            var sampleCount = 0
-            var pageToken: String? = null
-            var limitReached = false
-            do {
-                val response =
-                    client.readRecords(
-                        ReadRecordsRequest(
-                            recordType = HeartRateRecord::class,
-                            timeRangeFilter = timeRangeFilter,
-                            ascendingOrder = false,
-                            pageToken = pageToken,
-                        ),
-                    )
-                records += response.records
-                sampleCount += response.records.sumOf { it.samples.size }
-                pageToken = response.pageToken?.ifEmpty { null }
-                // pageToken != nullも確認する（レビュー指摘）。ちょうど最終ページでサンプル数が上限に
-                // 達した場合、次ページが実際には存在しない（＝全件読み終えている）ため、打ち切り扱いに
-                // しない。これを怠ると、全件読めているのに「全件ではない」と誤って表示してしまう。
-                if (pageToken != null && sampleCount >= HEART_RATE_RAW_SAMPLE_LIMIT) {
-                    limitReached = true
-                    break
-                }
-            } while (pageToken != null)
-            if (limitReached) {
-                HeartRateRecordsResult.LimitReached(records = records)
-            } else {
-                HeartRateRecordsResult.Success(records = records)
-            }
-        } catch (e: RemoteException) {
-            HeartRateRecordsResult.Failure
-        } catch (e: IOException) {
-            HeartRateRecordsResult.Failure
-        } catch (e: SecurityException) {
-            HeartRateRecordsResult.Failure
+    // WBS 6.3: 詳細画面のRecordsタブ用。readHeartRateRecords()（全件を1つのListに溜め込む旧実装）を
+    // 置き換える。Heart Rateは1レコードに複数サンプルを含み、継続記録するソースでは「全期間」の
+    // Raw全件読み込みが実機のヒープを枯渇させ、Health Connect SDK内部（readRecords()のレコード変換
+    // 処理）でOutOfMemoryErrorが発生することを確認した（lessons.md 6.7）。Paging3で画面に見えている
+    // 分だけ保持する設計に変えたことで、サンプル数上限による打ち切り（旧HEART_RATE_RAW_SAMPLE_LIMIT・
+    // HeartRateRecordsResult.LimitReached）という粗い安全弁は不要になった。
+    // weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の
+    // 自動フォールバック再試行は行わない）。
+    fun heartRateRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, HeartRateRecord> {
+        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
         }
+    }
 
     // findOldestWeightRecordTime()と同じ理由・同じ形（昇順・pageSize = 1で全件ページング不要）。
     suspend fun findOldestHeartRateRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
@@ -570,39 +520,26 @@ class HealthConnectManager(context: Context) {
             SleepAggregateSummaryResult.Failure
         }
 
-    // WBS 5.1: readStepsRecords()/readHeartRateRecords()と同じく、呼び出し元（SleepRawRecordsScreen）が
-    // 期間（今日／過去7日間／全期間）ごとにTimeRangeFilterを決める。Sleep Sessionは1日1〜数件程度で、
-    // Heart Rateのような大量サンプルを1レコードに抱えないため、HEART_RATE_RAW_SAMPLE_LIMITのような
-    // 安全弁（lessons.md 6.7）は設けていない。
-    private suspend fun readSleepSessionRecordsPaged(filter: TimeRangeFilter): List<SleepSessionRecord> {
-        val records = mutableListOf<SleepSessionRecord>()
-        var pageToken: String? = null
-        do {
+    // WBS 6.3: 詳細画面のRecordsタブ用。readSleepSessionRecords()（全件を1つのListに溜め込む旧実装）を
+    // 置き換える。weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の
+    // 自動フォールバック再試行は行わない）。Sleep Sessionは1日1〜数件程度で記録頻度が低く、Heart Rateの
+    // ようなOOMの実例は確認されていないが、一貫性のため他3型と同じPaging3のラップにする。
+    fun sleepSessionRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, SleepSessionRecord> {
+        val filter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return HealthRecordsPagingSource { pageToken, pageSize ->
             val response =
                 client.readRecords(
                     ReadRecordsRequest(
                         recordType = SleepSessionRecord::class,
                         timeRangeFilter = filter,
                         ascendingOrder = false,
+                        pageSize = pageSize,
                         pageToken = pageToken,
                     ),
                 )
-            records += response.records
-            pageToken = response.pageToken?.ifEmpty { null }
-        } while (pageToken != null)
-        return records
-    }
-
-    suspend fun readSleepSessionRecords(timeRangeFilter: TimeRangeFilter): SleepSessionRecordsResult =
-        try {
-            SleepSessionRecordsResult.Success(records = readSleepSessionRecordsPaged(timeRangeFilter))
-        } catch (e: RemoteException) {
-            SleepSessionRecordsResult.Failure
-        } catch (e: IOException) {
-            SleepSessionRecordsResult.Failure
-        } catch (e: SecurityException) {
-            SleepSessionRecordsResult.Failure
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
         }
+    }
 
     // findOldestWeightRecordTime()/findOldestHeartRateRecordTime()と同じ形。SleepSessionRecordには
     // WeightRecordの.timeのような単一時刻フィールドがないため、IntervalRecord共通のstartTimeを使う。
@@ -738,7 +675,7 @@ class HealthConnectManager(context: Context) {
             HistoryFallbackOutcome.Failure
         }
 
-    // 履歴読み取り権限がない状態で読める範囲の近似（6.1参照）。readAllWeightRecords() /
+    // 履歴読み取り権限がない状態で読める範囲の近似（6.1参照）。weightRecordsPagingSource() /
     // findOldestWeightRecordTime()で使うInstantベースのTimeRangeFilter。Steps側（StepsScreen）は
     // Raw読み取りとAggregate呼び出しの範囲を完全に一致させる必要があるため、この関数は使わず
     // 同じHISTORY_FALLBACK_DAYS定数を使って呼び出し元で独自にfilterを組み立てる（D-029）。
