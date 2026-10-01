@@ -357,6 +357,13 @@
 -   **根拠**: 逆コンパイル（`javap -c -p`で`androidx.health.connect:connect-client:1.1.0`の`HealthConnectClient$Companion.getSdkStatus(Context, String)`・`HealthConnectClient$Api34Impl.getSdkStatus(Context)`のbytecodeを確認。AARは`~/.gradle/caches/modules-2/files-2.1/androidx.health.connect/connect-client/1.1.0/`配下から取得。2026-10-01）。非公開の実装詳細の逆コンパイルに基づくため、将来のライブラリバージョンで分岐が変わる可能性がある点に注意（D-034等、他のバイトコード確認知見と同じ留意点）
 -   **確認日**: 2026-10-01
 
+### 6.24 Health Connect SDKの単位クラス（`Mass`/`Length`等）のKotlinプロパティ名は、`javap`で見えるJVMメソッド名と異なることがある
+
+-   **知見**: WBS 6.10でDistance用のAggregateMetric（`DistanceRecord.DISTANCE_TOTAL`、型は`Length`）をkmへ変換するプロパティ名を確認するため、`connect-client-1.1.0-api.jar`の`Length.class`を`javap -p`で逆コンパイルしたところ、`getKilometers()`/`getMeters()`しか見つからず、既存コード（`WeightAggregateBucket`等）が使っている`Mass.inKilograms`と同じ命名規則（`inXxx`）のメソッドが存在しないように見えた。`strings`コマンドで`.class`ファイルのバイナリを直接検索したところ、`kotlin.Metadata`アノテーションの文字列プール内に`inKilograms`/`inKilometers`/`inMeters`という文字列が実際に埋め込まれていることが分かった。これはKotlinコンパイラが`@JvmName`等でJVM上のメソッド名（`getKilograms()`）とKotlinソース上のプロパティ名（`inKilograms`）を意図的に分けているためで、`javap`はJVMメソッド名しか表示しないためこの分離を見落とす
+-   **Viewerへの適用**: Health Connect SDKの単位クラス（`Mass`/`Length`/`Power`等）のプロパティ名を`javap`だけで調べると誤った結論（「`inXxx`という名前のプロパティは存在しない」）に至る。正しいKotlinプロパティ名を確認するには、(1) 既存コードで同じ系統のクラス（`Mass.inKilograms`等）がどう呼ばれているか確認する、(2) `.class`ファイルのバイナリを`strings`/`grep -a`で直接検索し、`kotlin.Metadata`の文字列プールに含まれる名前を探す、のいずれかを使う。`Length`の場合は`inMeters`/`inKilometers`/`inMiles`/`inInches`/`inFeet`が実際のKotlinプロパティ名だった
+-   **根拠**: 実機非依存の逆コンパイル確認（`androidx.health.connect:connect-client:1.1.0`の`units/Mass.class`・`units/Length.class`を`javap -p`、および`grep -a -o`でバイナリ内の文字列を直接検索。2026-10-01）
+-   **確認日**: 2026-10-01
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる

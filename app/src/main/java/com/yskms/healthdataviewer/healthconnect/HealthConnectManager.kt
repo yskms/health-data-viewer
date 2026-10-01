@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -782,17 +783,143 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // WBS 6.4: 詳細画面のSourcesタブ用（Weight/Steps/Sleep共通。recordType以外の処理が完全に同一のため、
-    // データ型ごとの関数に分けず1つにまとめた。OldestRecordResultを1つに統合した方針（D-034(8)）と
-    // 同じ考え方）。ソース別のレコード件数はAggregateでは取れない（requirements.md §7.2/§22.3）ため、
-    // 全件走査して正確に数える。
+    // WBS 6.10: Distance。要件§22.2の通りSteps同様Activity系の公式重複処理が効く合計値のため、
+    // Steps用の関数群と同じ形で実装する（PoCは行わない。Activity系の重複処理自体はSteps PoC 2で
+    // 既に確認済みのため、requirements.md §16の優先度Aを順に追加していく段階ではPoCを繰り返さない）。
+    // DISTANCE_TOTALはAggregateMetric<Length>のため、WeightAggregateBucketがMassをinKilogramsへ
+    // 変換するのと同じ考え方でkmに変換する（Length.inKilometers/inMeters等はjavapの出力に現れる
+    // JVMメソッド名getKilometers()/getMeters()とは異なり、Kotlin側から見える実際のプロパティ名。
+    // KotlinのJvmName差し替えにより、javap逆コンパイルだけでは正しいプロパティ名が分からない
+    // 落とし穴がある。D-012のMassでも同じ構造）。表示単位はkmに統一する（D-042）。
+
+    // findOldestWeightRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestDistanceRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = DistanceRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の自動
+    // フォールバック再試行は行わない。履歴読み取り権限がない場合もnowを両端に固定したbetween()に
+    // する理由はweightRecordsPagingSource()のコメント参照）。
+    fun distanceRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<DistanceRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = DistanceRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // readStepsAggregates()と同じ形（詳細画面のDistanceグラフ用、aggregateGroupByPeriod()でbucket
+    // 集計、readWithHistoryFallback経由）。
+    suspend fun readDistanceAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): DistanceAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                DistanceAggregateBucket(
+                    periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
+                    totalKilometers = grouped.result[DistanceRecord.DISTANCE_TOTAL]?.inKilometers,
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> DistanceAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> DistanceAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10: ホーム画面のDistanceカード用。readHeartRateAggregateSummary()/readSleepAggregateSummary()と
+    // 同じ形（client.aggregate()、Instantベースのfilter、bucket分割なし、内部フォールバックなし。
+    // 呼び出し元（ホーム画面）が期間ごとのfilterを安全な範囲に事前クランプする設計のため）。
+    suspend fun readDistanceAggregateTotal(timeRangeFilter: TimeRangeFilter): DistanceAggregateTotalResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(DistanceRecord.DISTANCE_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            DistanceAggregateTotalResult.Success(totalKilometers = result[DistanceRecord.DISTANCE_TOTAL]?.inKilometers)
+        } catch (e: RemoteException) {
+            DistanceAggregateTotalResult.Failure
+        } catch (e: IOException) {
+            DistanceAggregateTotalResult.Failure
+        } catch (e: SecurityException) {
+            DistanceAggregateTotalResult.Failure
+        }
+
+    // WBS 6.4（WBS 6.10でDistanceも追加）: 詳細画面のSourcesタブ用（Weight/Steps/Sleep/Distance共通。
+    // recordType以外の処理が完全に同一のため、データ型ごとの関数に分けず1つにまとめた。
+    // OldestRecordResultを1つに統合した方針（D-034(8)）と同じ考え方）。ソース別のレコード件数は
+    // Aggregateでは取れない（requirements.md §7.2/§22.3）ため、全件走査して正確に数える。
     //
-    // **この3データ型で全件走査を選んだ基準は「レコード件数の多寡」ではない**（コードレビュー指摘。
-    // Stepsは全期間で数十万件規模になり得る＝Weight/Sleepより2桁近く多い）。実際の基準は
-    // 「1レコードが大きなサンプル配列を持たず、Health Connect SDK内部の変換コストが低いか」で、
-    // Heart Rateだけがこれに該当しない（1レコードに多数のサンプルを含み、継続記録ソースでは
-    // 全件走査がOutOfMemoryErrorを起こす実例がある。lessons.md 6.7）。Stepsの全期間全件走査は
-    // WBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・メモリ増大なしを確認済み。
+    // **この基準は「レコード件数の多寡」ではない**（コードレビュー指摘。Stepsは全期間で数十万件規模に
+    // なり得る＝Weight/Sleepより2桁近く多い）。実際の基準は「1レコードが大きなサンプル配列を持たず、
+    // Health Connect SDK内部の変換コストが低いか」で、Heart Rateだけがこれに該当しない（1レコードに
+    // 多数のサンプルを含み、継続記録ソースでは全件走査がOutOfMemoryErrorを起こす実例がある。
+    // lessons.md 6.7）。DistanceRecordもStepsと同じ単純な区間+数値1個の構造で該当しないと判断した
+    // （WBS 6.10、実機検証は未実施）。Stepsの全期間全件走査はWBS 3.1・WBS 6.4（lessons.md 6.19）で
+    // クラッシュ・メモリ増大なしを確認済み。
     //
     // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
     // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の

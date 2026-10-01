@@ -19,6 +19,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
+import com.yskms.healthdataviewer.screen.detail.DistanceDetailScreen
 import com.yskms.healthdataviewer.screen.detail.HeartRateDetailScreen
 import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
 import com.yskms.healthdataviewer.screen.detail.StepsDetailScreen
@@ -63,6 +64,7 @@ private const val ROUTE_WEIGHT_DETAIL = "weight_detail"
 private const val ROUTE_STEPS_DETAIL = "steps_detail"
 private const val ROUTE_HEART_RATE_DETAIL = "heart_rate_detail"
 private const val ROUTE_SLEEP_DETAIL = "sleep_detail"
+private const val ROUTE_DISTANCE_DETAIL = "distance_detail"
 private const val ROUTE_SETTINGS = "settings"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
@@ -88,10 +90,10 @@ private fun MainNavHost(
     modifier: Modifier = Modifier,
 ) {
     val navController: NavHostController = rememberNavController()
-    // WeightDetailScreen/StepsDetailScreen/HeartRateDetailScreen/SleepDetailScreenが引数として
-    // 受け取るhistoryPermissionGrantedのスナップショット。遷移直前にHomeScreen側の最新の許可状態を
-    // 書き込む（D-029/D-030はStepsの比較PoC画面専用の設計判断で、Steps Detail画面には適用しない。
-    // 他の3データ型と同じスナップショット方式に揃える）。
+    // WeightDetailScreen/StepsDetailScreen/HeartRateDetailScreen/SleepDetailScreen/DistanceDetailScreenが
+    // 引数として受け取るhistoryPermissionGrantedのスナップショット。遷移直前にHomeScreen側の最新の
+    // 許可状態を書き込む（D-029/D-030はStepsの比較PoC画面専用の設計判断で、Steps Detail画面には
+    // 適用しない。他のデータ型と同じスナップショット方式に揃える）。
     var historyPermissionGrantedSnapshot by rememberSaveable { mutableStateOf(false) }
 
     NavHost(navController = navController, startDestination = ROUTE_HOME, modifier = modifier) {
@@ -114,6 +116,10 @@ private fun MainNavHost(
                 onOpenSleepGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_SLEEP_DETAIL)
+                },
+                onOpenDistance = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_DISTANCE_DETAIL)
                 },
                 onOpenSettings = { navController.navigateOnce(ROUTE_SETTINGS) },
             )
@@ -148,6 +154,13 @@ private fun MainNavHost(
         }
         composable(ROUTE_SLEEP_DETAIL) {
             SleepDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_DISTANCE_DETAIL) {
+            DistanceDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

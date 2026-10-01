@@ -31,6 +31,8 @@
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="home_sleep_title">睡眠</string>
     <string name="home_sleep_average_per_day_notice">この期間の1日あたり平均</string>
+    <string name="home_distance_title">距離</string>
+    <string name="home_distance_value">%1$s km</string>
     <string name="home_all_metrics_hidden_notice">「データがない項目も表示する」の設定により、非表示にしています。</string>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
@@ -92,6 +94,9 @@
     <string name="detail_sleep_aggregation_total">集計方法: %1$s合計睡眠時間（Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
     <string name="detail_sleep_aggregation_avg_per_day">集計方法: %1$s平均睡眠時間（1日あたり、Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
     <string name="detail_sleep_bucket_list_title">Bucketの値一覧（日付: 時間 h:mm）</string>
+    <string name="detail_distance_title">距離</string>
+    <string name="detail_distance_aggregation_total">集計方法: %1$s合計距離（Health Connect公式Aggregate API）</string>
+    <string name="detail_distance_aggregation_avg_per_day">集計方法: %1$s平均距離（1日あたり、Health Connect公式Aggregate API）</string>
     <!-- WBS 6.3: Recordsタブ（ページング生レコード一覧）。Weight/Steps/心拍数/Sleepで共通。 -->
     <string name="detail_tab_chart">グラフ</string>
     <string name="detail_tab_records">レコード</string>

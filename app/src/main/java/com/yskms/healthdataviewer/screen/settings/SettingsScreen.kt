@@ -173,6 +173,11 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                     permissionsCheckState = permissionsCheckState,
                     permission = HealthConnectPermissions.SLEEP_READ,
                 )
+                PermissionStatusRow(
+                    title = stringResource(id = R.string.home_distance_title),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.DISTANCE_READ,
+                )
                 if (historyFeatureAvailable == false) {
                     Text(text = stringResource(id = R.string.health_connect_history_not_supported), style = MaterialTheme.typography.bodySmall)
                 } else {
@@ -191,6 +196,7 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                                 add(HealthConnectPermissions.STEPS_READ)
                                 add(HealthConnectPermissions.HEART_RATE_READ)
                                 add(HealthConnectPermissions.SLEEP_READ)
+                                add(HealthConnectPermissions.DISTANCE_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                             }
                         requestPermissions.launch(permissions)

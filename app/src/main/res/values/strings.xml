@@ -31,6 +31,8 @@
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="home_sleep_title">Sleep</string>
     <string name="home_sleep_average_per_day_notice">Average per day for this period</string>
+    <string name="home_distance_title">Distance</string>
+    <string name="home_distance_value">%1$s km</string>
     <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
@@ -93,6 +95,9 @@
     <string name="detail_sleep_aggregation_total">Aggregation: %1$s total sleep duration (official Aggregate API, Sleep dedup applies)</string>
     <string name="detail_sleep_aggregation_avg_per_day">Aggregation: %1$s average sleep duration per day (official Aggregate API, Sleep dedup applies)</string>
     <string name="detail_sleep_bucket_list_title">Bucket values (date : duration h:mm)</string>
+    <string name="detail_distance_title">Distance</string>
+    <string name="detail_distance_aggregation_total">Aggregation: %1$s total distance (official Aggregate API)</string>
+    <string name="detail_distance_aggregation_avg_per_day">Aggregation: %1$s average distance per day (official Aggregate API)</string>
     <!-- WBS 6.3: Records tab (paged raw record list), shared across Weight/Steps/Heart rate/Sleep. -->
     <string name="detail_tab_chart">Chart</string>
     <string name="detail_tab_records">Records</string>

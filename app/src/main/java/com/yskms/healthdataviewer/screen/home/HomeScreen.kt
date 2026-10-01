@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.R
+import com.yskms.healthdataviewer.healthconnect.DistanceAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
@@ -53,6 +54,7 @@ import com.yskms.healthdataviewer.healthconnect.isGranted
 import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
+import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
@@ -131,6 +133,8 @@ private fun DashboardPeriod.isHistoryLimited(now: Instant, historyPermissionGran
 
 private data class StepsCardLoad(val period: DashboardPeriod, val result: StepsAggregateTotalResult?)
 
+private data class DistanceCardLoad(val period: DashboardPeriod, val result: DistanceAggregateTotalResult?)
+
 private data class HeartRateCardLoad(val period: DashboardPeriod, val result: HeartRateAggregateSummaryResult?)
 
 // 週/月/年タブは「期間合計 ÷ 経過日数」の単純な1日あたり平均（記録のない日も分母に含む近似。
@@ -154,6 +158,7 @@ fun HomeScreen(
     onOpenSteps: (historyPermissionGranted: Boolean) -> Unit,
     onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSleepGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenDistance: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -227,9 +232,10 @@ fun HomeScreen(
                 val stepsGranted = permissionsCheckState.isGranted(HealthConnectPermissions.STEPS_READ)
                 val heartRateGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HEART_RATE_READ)
                 val sleepGranted = permissionsCheckState.isGranted(HealthConnectPermissions.SLEEP_READ)
+                val distanceGranted = permissionsCheckState.isGranted(HealthConnectPermissions.DISTANCE_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
-                if (listOf(weightGranted, stepsGranted, heartRateGranted, sleepGranted).any { it == false }) {
+                if (listOf(weightGranted, stepsGranted, heartRateGranted, sleepGranted, distanceGranted).any { it == false }) {
                     PermissionBanner(
                         onRequestClick = {
                             val permissions =
@@ -238,6 +244,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.STEPS_READ)
                                     add(HealthConnectPermissions.HEART_RATE_READ)
                                     add(HealthConnectPermissions.SLEEP_READ)
+                                    add(HealthConnectPermissions.DISTANCE_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -353,13 +360,22 @@ fun HomeScreen(
                     sleepLoad = SleepCardLoad(period = selectedPeriod, result = result)
                 }
 
-                // period違いの結果を弾くガード（Steps/HeartRate/Sleepで共通）。各Cardの描画と
+                var distanceLoad by remember { mutableStateOf<DistanceCardLoad?>(null) }
+                LaunchedEffect(selectedPeriod, distanceGranted, historyPermissionGranted, resumeKey) {
+                    if (distanceGranted != true) return@LaunchedEffect
+                    val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
+                    distanceLoad =
+                        DistanceCardLoad(period = selectedPeriod, result = healthConnectManager.readDistanceAggregateTotal(filter))
+                }
+
+                // period違いの結果を弾くガード（Steps/HeartRate/Sleep/Distanceで共通）。各Cardの描画と
                 // 「表示指標」での非表示判定（isXxxCardHidden()）の両方がこれを使うため、親で
                 // 一度だけ計算する（コードレビュー指摘: 全カードが非表示になった場合に理由が
                 // 分からず画面が空白になる問題への対応で、両者が同じ値を見る必要があるため）。
                 val stepsResult = if (stepsLoad?.period == selectedPeriod) stepsLoad?.result else null
                 val heartRateResult = if (heartRateLoad?.period == selectedPeriod) heartRateLoad?.result else null
                 val sleepResult = if (sleepLoad?.period == selectedPeriod) sleepLoad?.result else null
+                val distanceResult = if (distanceLoad?.period == selectedPeriod) distanceLoad?.result else null
                 val showMetricsWithoutData = settings.showMetricsWithoutData
 
                 val allCardsHidden =
@@ -367,7 +383,8 @@ fun HomeScreen(
                         isWeightCardHidden(weightGranted, weightLoad, historyFeatureAvailable, showMetricsWithoutData) &&
                         isStepsCardHidden(stepsGranted, stepsResult, showMetricsWithoutData) &&
                         isHeartRateCardHidden(heartRateGranted, heartRateResult, showMetricsWithoutData) &&
-                        isSleepCardHidden(sleepGranted, sleepResult, showMetricsWithoutData)
+                        isSleepCardHidden(sleepGranted, sleepResult, showMetricsWithoutData) &&
+                        isDistanceCardHidden(distanceGranted, distanceResult, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -401,6 +418,13 @@ fun HomeScreen(
                     currentResult = sleepResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenSleepGraph(historyPermissionGranted) },
+                )
+                DistanceCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = distanceGranted,
+                    currentResult = distanceResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenDistance(historyPermissionGranted) },
                 )
             }
         }
@@ -496,6 +520,12 @@ private fun isHeartRateCardHidden(
 
 private fun isSleepCardHidden(granted: Boolean?, currentResult: SleepCardResult?, showMetricsWithoutData: Boolean): Boolean =
     !showMetricsWithoutData && granted == true && currentResult is SleepCardResult.Success && currentResult.value.duration == null
+
+private fun isDistanceCardHidden(granted: Boolean?, currentResult: DistanceAggregateTotalResult?, showMetricsWithoutData: Boolean): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        currentResult is DistanceAggregateTotalResult.Success &&
+        currentResult.totalKilometers == null
 
 @Composable
 private fun WeightCard(
@@ -662,6 +692,43 @@ private fun SleepCard(
                     if (currentResult.value.isAveraged) {
                         Text(text = stringResource(id = R.string.home_sleep_average_per_day_notice), style = MaterialTheme.typography.bodySmall)
                     }
+                }
+            }
+        }
+    }
+}
+
+// StepsCardと同じ形（期間合計をそのまま表示、Sleepのような1日あたり平均化はしない）。
+// DISTANCE_TOTALはkmへ変換済み（HealthConnectManager.readDistanceAggregateTotal()参照）のため、
+// WeightCardと同じ"%.2f"のロケール依存書式を使う。
+@Composable
+private fun DistanceCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    currentResult: DistanceAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isDistanceCardHidden(granted, currentResult, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_distance_title),
+        accentColor = DistanceAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
+            currentResult is DistanceAggregateTotalResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            currentResult is DistanceAggregateTotalResult.Success -> {
+                val total = currentResult.totalKilometers
+                if (total == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_distance_value, String.format(locale, "%.2f", total)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
                 }
             }
         }
