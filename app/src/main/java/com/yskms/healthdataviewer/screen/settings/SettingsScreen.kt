@@ -42,6 +42,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.isGranted
 import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
+import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.ThemeMode
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import kotlinx.coroutines.launch
@@ -145,15 +146,7 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                 )
             HealthConnectAvailability.INSTALLED -> {
                 if (permissionsCheckState is PermissionsCheckState.Failure) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(id = R.string.health_connect_check_failed_notice),
-                            modifier = Modifier.fillMaxWidth(0.6f),
-                        )
-                        Button(onClick = { refreshPermissions() }) {
-                            Text(text = stringResource(id = R.string.health_connect_retry))
-                        }
-                    }
+                    PermissionsCheckFailedNotice(onRetryClick = { refreshPermissions() })
                 }
 
                 PermissionStatusRow(

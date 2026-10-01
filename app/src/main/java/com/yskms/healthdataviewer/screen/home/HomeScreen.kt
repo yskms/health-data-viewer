@@ -52,6 +52,7 @@ import com.yskms.healthdataviewer.healthconnect.StepsAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.WeightRecordsResult
 import com.yskms.healthdataviewer.healthconnect.isGranted
 import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
+import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
@@ -242,15 +243,7 @@ fun HomeScreen(
                 // ことが分かっている場合（isGranted() == false）ではなく、許可状態そのものが
                 // 分からない場合に出す。
                 if (permissionsCheckState is PermissionsCheckState.Failure) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(id = R.string.health_connect_check_failed_notice),
-                            modifier = Modifier.fillMaxWidth(0.6f),
-                        )
-                        Button(onClick = { refreshPermissions() }) {
-                            Text(text = stringResource(id = R.string.health_connect_retry))
-                        }
-                    }
+                    PermissionsCheckFailedNotice(onRetryClick = { refreshPermissions() })
                 }
 
                 // 旧HealthConnectStatusScreenが表示していた「この端末は履歴読み取りに対応していない」
