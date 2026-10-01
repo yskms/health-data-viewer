@@ -750,7 +750,7 @@ class HealthConnectManager(context: Context) {
     // 全件走査して正確に数える。
     //
     // **この3データ型で全件走査を選んだ基準は「レコード件数の多寡」ではない**（コードレビュー指摘。
-    // Stepsは全期間で数十万件規模になり得る、Weight/Sleepより2桁近く多い）。実際の基準は
+    // Stepsは全期間で数十万件規模になり得る＝Weight/Sleepより2桁近く多い）。実際の基準は
     // 「1レコードが大きなサンプル配列を持たず、Health Connect SDK内部の変換コストが低いか」で、
     // Heart Rateだけがこれに該当しない（1レコードに多数のサンプルを含み、継続記録ソースでは
     // 全件走査がOutOfMemoryErrorを起こす実例がある。lessons.md 6.7）。Stepsの全期間全件走査は
