@@ -39,6 +39,9 @@ import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
+import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
+import com.yskms.healthdataviewer.healthconnect.isGranted
+import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.settings.ThemeMode
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import kotlinx.coroutines.launch
@@ -102,11 +105,22 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
-    var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
+    var permissionsCheckState by remember { mutableStateOf<PermissionsCheckState>(PermissionsCheckState.Loading) }
     var historyFeatureAvailable by remember { mutableStateOf<Boolean?>(null) }
 
     val requestPermissions =
         rememberLauncherForActivityResult(contract = healthConnectManager.createPermissionRequestContract()) {}
+
+    // WBS 6.9: HomeScreenのrefreshPermissions()と同じ理由（lessons.md 4.1）。権限確認のIPC呼び出し
+    // 自体の失敗を、まだ確認していない状態と区別してPermissionsCheckStateで保持する。
+    fun refreshPermissions() =
+        coroutineScope.launch {
+            permissionsCheckState =
+                when (val result = healthConnectManager.getGrantedPermissions()) {
+                    null -> PermissionsCheckState.Failure
+                    else -> PermissionsCheckState.Success(result)
+                }
+        }
 
     // HomeScreenと同じ理由（lessons.md 3.1）: 権限状態はこの画面を離れている間にHealth Connect側
     // （本セクションが案内する「Health Connectで管理」からの遷移を含む）で変わり得るため、画面復帰の
@@ -115,43 +129,60 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
         availability = healthConnectManager.availability
         historyFeatureAvailable =
             if (availability == HealthConnectAvailability.INSTALLED) healthConnectManager.isHistoryReadFeatureAvailable else null
-        val job =
-            if (availability == HealthConnectAvailability.INSTALLED) {
-                coroutineScope.launch { grantedPermissions = healthConnectManager.getGrantedPermissions() }
-            } else {
-                null
-            }
+        val job = if (availability == HealthConnectAvailability.INSTALLED) refreshPermissions() else null
         onPauseOrDispose { job?.cancel() }
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         SectionTitle(text = stringResource(id = R.string.settings_section_permissions))
         when (availability) {
-            HealthConnectAvailability.NOT_INSTALLED -> Text(text = stringResource(id = R.string.health_connect_not_installed))
-            HealthConnectAvailability.UPDATE_REQUIRED -> Text(text = stringResource(id = R.string.health_connect_update_required))
+            HealthConnectAvailability.NOT_INSTALLED, HealthConnectAvailability.UPDATE_REQUIRED ->
+                HealthConnectUnavailableNotice(
+                    availability = availability,
+                    onOpenPlayStoreClick = {
+                        runCatching { context.startActivity(healthConnectManager.createOpenInPlayStoreIntent()) }
+                    },
+                )
             HealthConnectAvailability.INSTALLED -> {
+                if (permissionsCheckState is PermissionsCheckState.Failure) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(id = R.string.health_connect_check_failed_notice),
+                            modifier = Modifier.fillMaxWidth(0.6f),
+                        )
+                        Button(onClick = { refreshPermissions() }) {
+                            Text(text = stringResource(id = R.string.health_connect_retry))
+                        }
+                    }
+                }
+
                 PermissionStatusRow(
                     title = stringResource(id = R.string.home_weight_title),
-                    granted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.WEIGHT_READ,
                 )
                 PermissionStatusRow(
                     title = stringResource(id = R.string.home_steps_title),
-                    granted = grantedPermissions?.contains(HealthConnectPermissions.STEPS_READ),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.STEPS_READ,
                 )
                 PermissionStatusRow(
                     title = stringResource(id = R.string.home_heart_rate_title),
-                    granted = grantedPermissions?.contains(HealthConnectPermissions.HEART_RATE_READ),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.HEART_RATE_READ,
                 )
                 PermissionStatusRow(
                     title = stringResource(id = R.string.home_sleep_title),
-                    granted = grantedPermissions?.contains(HealthConnectPermissions.SLEEP_READ),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.SLEEP_READ,
                 )
                 if (historyFeatureAvailable == false) {
                     Text(text = stringResource(id = R.string.health_connect_history_not_supported), style = MaterialTheme.typography.bodySmall)
                 } else {
                     PermissionStatusRow(
                         title = stringResource(id = R.string.settings_permission_history),
-                        granted = grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ),
+                        permissionsCheckState = permissionsCheckState,
+                        permission = HealthConnectPermissions.HISTORY_READ,
                     )
                 }
 
@@ -188,17 +219,24 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
     }
 }
 
+// granted(permission)がnullなのは「読み込み中」だけでなく、権限確認自体の失敗（WBS 6.9、
+// lessons.md 4.1）もあり得るため、permissionsCheckStateを見てテキストを出し分ける。
 @Composable
-private fun PermissionStatusRow(title: String, granted: Boolean?) {
+private fun PermissionStatusRow(title: String, permissionsCheckState: PermissionsCheckState, permission: String) {
+    val granted = permissionsCheckState.isGranted(permission)
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(text = title)
         Text(
             text =
-                when (granted) {
-                    null -> stringResource(id = R.string.health_connect_checking)
-                    true -> stringResource(id = R.string.settings_permission_granted)
-                    false -> stringResource(id = R.string.home_permission_not_granted)
-                },
+                stringResource(
+                    id =
+                        when {
+                            granted == true -> R.string.settings_permission_granted
+                            granted == false -> R.string.home_permission_not_granted
+                            permissionsCheckState is PermissionsCheckState.Failure -> R.string.health_connect_check_failed
+                            else -> R.string.health_connect_checking
+                        },
+                ),
             style = MaterialTheme.typography.bodyMedium,
         )
     }

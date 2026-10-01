@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Health ConnectアプリのPackageManager可視性（Android 11+のパッケージ可視性制限）。 -->
+    <!-- Health ConnectアプリのPackageManager可視性（Android 11+のパッケージ可視性制限）。
+         パッケージ名はHealthConnectManager.PROVIDER_PACKAGE_NAME（Playストア誘導Intentの構築に使用、
+         WBS 6.9）と同じもの。変更時は両方揃えて直すこと。 -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />
         <!-- DataOriginのアプリ名解決（PackageManager経由、healthconnect/DataOriginNameResolver.kt）用。

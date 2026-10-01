@@ -335,6 +335,14 @@
 -   **根拠**: 逆コンパイル（`javap -c`でconnect-client 1.1.0の`ExceptionConverterKt.toKtException()`のtableswitchを確認。errorCodeの整数値は`android-37.0/android.jar`の`android.health.connect.HealthConnectException`のconstant poolから取得: UNKNOWN=1, INTERNAL=2, INVALID_ARGUMENT=3, IO=4, SECURITY=5, REMOTE=6, RATE_LIMIT_EXCEEDED=7, UNSUPPORTED_OPERATION=9。`wrapPlatformException()`の呼び出し箇所をbytecodeで確認、2026-10-01）。非公開の実装詳細の逆コンパイルに基づくため、将来のライブラリバージョンで変換ロジックが変わる可能性がある点に注意
 -   **確認日**: 2026-10-01
 
+### 6.21 Health Connect未インストール・要アップデートへの誘導は、状態ごとにIntentを出し分けず、公式サンプルと同じ1つの`market://`Intentで足りる
+
+-   **知見**: Health Connect本体（`com.google.android.apps.healthdata`）が未インストール・要アップデートの場合にPlayストアへ誘導するUI（要件§5「Health Connect未対応端末への案内」）の実装にあたり、公式のHealth Connect codelab/サンプルで使われているIntentの形（`Intent(Intent.ACTION_VIEW)`に`setPackage("com.android.vending")`、`data`に`market://details?id=com.google.android.apps.healthdata&url=healthconnect%3A%2F%2Fonboarding`、`putExtra("overlay", true)`、`putExtra("callerId", 自アプリのpackageName)`）を使うと、NOT_INSTALLED（未インストール）・UPDATE_REQUIRED（要アップデート）のどちらでも同じIntentでよい。Playストア自身が遷移先アプリの端末上の状態を見て「インストール」「アップデート」「開く」のボタンを出し分けるため、アプリ側で状態を判定して別のIntentや文言を用意する必要がない
+-   **Viewerへの適用**: `HealthConnectManager.createOpenInPlayStoreIntent()`として実装し、NOT_INSTALLED/UPDATE_REQUIRED共通の`screen/common/HealthConnectUnavailableNotice.kt`から呼ぶ（WBS 6.9、D-040）。`market://`のパッケージ名（`com.google.android.apps.healthdata`）は`AndroidManifest.xml`の`<queries>`宣言と同じ値のため、変更時は両方揃えて直す（manifest側にコメントで相互参照を追記済み）
+-   **根拠**: 公式（Android公式のHealth Connect codelab/サンプルで広く使われている実装パターン）／実機確認（Pixel 11はAndroid 17でHealth Connectがプリインストール済みのため、アプリ内のNOT_INSTALLED/UPDATE_REQUIRED状態そのものは再現できなかったが、アプリが発行するのと同じIntentを`adb shell am start -a android.intent.action.VIEW -p com.android.vending -d "market://details?id=com.google.android.apps.healthdata&url=healthconnect%3A%2F%2Fonboarding"`で直接起動し、Playストアの該当ページ（ヘルスコネクト、インストール済みのため「開く」「アンインストール」表示）が正しく開くことを確認した。2026-10-01）
+-   **確認日**: 2026-10-01
+-   **注意**: Android 13以前かつGoogle Playが使える環境でのNOT_INSTALLED/UPDATE_REQUIRED状態そのものの実機確認（ボタン表示・タップ後の遷移）は、手元に該当環境がなく未確認のまま残る（チェックリスト8参照）
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる
@@ -398,7 +406,8 @@
 
 -   [ ] 権限未付与／一部のデータ型だけ許可／履歴読み取り権限なし
 -   [ ] アプリ使用中にHealth Connectの設定から権限を取り消し、アプリに戻る
--   [ ] Health Connect未インストール・要アップデート（Android 13以前）
+-   [ ] Health Connect未インストール・要アップデート（Android 13以前）。WBS 6.9でPlayストア誘導ボタンを実装済みだが、Intent自体の動作確認（6.21）にとどまり、この状態自体の実機確認はできていない
+-   [ ] 権限確認（`getGrantedPermissions()`）のIPC呼び出しが失敗した場合に、「読み込み中」と区別した案内・再試行ボタンが実際に出るか（WBS 6.9、D-040。実機でIPC失敗を再現する手段がなく未確認のまま）
 -   [ ] Android 9〜13 と 14以降の両方
 -   [ ] 権限説明画面を両方の経路（Android 13以前・14以降）から開く
 -   [ ] データが0件のデータ型／読み込み失敗（データなしと区別できるか）

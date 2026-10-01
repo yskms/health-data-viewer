@@ -35,6 +35,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -45,9 +46,12 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
+import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.WeightRecordsResult
+import com.yskms.healthdataviewer.healthconnect.isGranted
+import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
@@ -154,8 +158,9 @@ fun HomeScreen(
 ) {
     // StateFlow（常に最新値を持つ）のためinitialは不要（UserSettingsRepository.kt参照）。
     val settings by userSettingsRepository.settingsFlow.collectAsState()
+    val context = LocalContext.current
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
-    var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
+    var permissionsCheckState by remember { mutableStateOf<PermissionsCheckState>(PermissionsCheckState.Loading) }
     var historyFeatureAvailable by remember { mutableStateOf<Boolean?>(null) }
     var selectedPeriod by rememberSaveable { mutableStateOf(DashboardPeriod.TODAY) }
     // 画面復帰のたびに各カードのデータを再取得させるためのキー（lessons.md 3.1と同じ理由）。
@@ -165,6 +170,19 @@ fun HomeScreen(
     val requestPermissions =
         rememberLauncherForActivityResult(contract = healthConnectManager.createPermissionRequestContract()) {}
 
+    // WBS 6.9: 権限確認（IPC呼び出し）の失敗を「まだ確認していない」と区別して伝えるため、
+    // 結果をnullではなくPermissionsCheckStateで保持する（lessons.md 4.1、Failureはnull時）。
+    // 画面復帰時の自動実行と、確認失敗時の案内に付ける「再試行」ボタンの両方から呼ぶ。
+    fun refreshPermissions() =
+        coroutineScope.launch {
+            permissionsCheckState =
+                when (val result = healthConnectManager.getGrantedPermissions()) {
+                    null -> PermissionsCheckState.Failure
+                    else -> PermissionsCheckState.Success(result)
+                }
+            resumeKey++
+        }
+
     LifecycleResumeEffect(Unit) {
         availability = healthConnectManager.availability
         historyFeatureAvailable =
@@ -173,15 +191,7 @@ fun HomeScreen(
             } else {
                 null
             }
-        val job =
-            if (availability == HealthConnectAvailability.INSTALLED) {
-                coroutineScope.launch {
-                    grantedPermissions = healthConnectManager.getGrantedPermissions()
-                    resumeKey++
-                }
-            } else {
-                null
-            }
+        val job = if (availability == HealthConnectAvailability.INSTALLED) refreshPermissions() else null
         onPauseOrDispose { job?.cancel() }
     }
 
@@ -197,14 +207,19 @@ fun HomeScreen(
         }
 
         when (availability) {
-            HealthConnectAvailability.NOT_INSTALLED -> Text(text = stringResource(id = R.string.health_connect_not_installed))
-            HealthConnectAvailability.UPDATE_REQUIRED -> Text(text = stringResource(id = R.string.health_connect_update_required))
+            HealthConnectAvailability.NOT_INSTALLED, HealthConnectAvailability.UPDATE_REQUIRED ->
+                HealthConnectUnavailableNotice(
+                    availability = availability,
+                    onOpenPlayStoreClick = {
+                        runCatching { context.startActivity(healthConnectManager.createOpenInPlayStoreIntent()) }
+                    },
+                )
             HealthConnectAvailability.INSTALLED -> {
-                val weightGranted = grantedPermissions?.contains(HealthConnectPermissions.WEIGHT_READ)
-                val stepsGranted = grantedPermissions?.contains(HealthConnectPermissions.STEPS_READ)
-                val heartRateGranted = grantedPermissions?.contains(HealthConnectPermissions.HEART_RATE_READ)
-                val sleepGranted = grantedPermissions?.contains(HealthConnectPermissions.SLEEP_READ)
-                val historyPermissionGranted = grantedPermissions?.contains(HealthConnectPermissions.HISTORY_READ) == true
+                val weightGranted = permissionsCheckState.isGranted(HealthConnectPermissions.WEIGHT_READ)
+                val stepsGranted = permissionsCheckState.isGranted(HealthConnectPermissions.STEPS_READ)
+                val heartRateGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HEART_RATE_READ)
+                val sleepGranted = permissionsCheckState.isGranted(HealthConnectPermissions.SLEEP_READ)
+                val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(weightGranted, stepsGranted, heartRateGranted, sleepGranted).any { it == false }) {
                     PermissionBanner(
@@ -220,6 +235,22 @@ fun HomeScreen(
                             requestPermissions.launch(permissions)
                         },
                     )
+                }
+
+                // WBS 6.9: 権限確認のIPC呼び出し自体が失敗した場合（Health Connect側の更新中など、
+                // lessons.md 4.1）の案内。上のPermissionBannerとは区別する: こちらは「許可されていない」
+                // ことが分かっている場合（isGranted() == false）ではなく、許可状態そのものが
+                // 分からない場合に出す。
+                if (permissionsCheckState is PermissionsCheckState.Failure) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = stringResource(id = R.string.health_connect_check_failed_notice),
+                            modifier = Modifier.fillMaxWidth(0.6f),
+                        )
+                        Button(onClick = { refreshPermissions() }) {
+                            Text(text = stringResource(id = R.string.health_connect_retry))
+                        }
+                    }
                 }
 
                 // 旧HealthConnectStatusScreenが表示していた「この端末は履歴読み取りに対応していない」
@@ -343,6 +374,7 @@ fun HomeScreen(
                 }
 
                 WeightCard(
+                    permissionsCheckState = permissionsCheckState,
                     granted = weightGranted,
                     load = weightLoad,
                     historyFeatureAvailable = historyFeatureAvailable,
@@ -350,18 +382,21 @@ fun HomeScreen(
                     onClick = { onOpenWeightGraph(historyPermissionGranted) },
                 )
                 StepsCard(
+                    permissionsCheckState = permissionsCheckState,
                     granted = stepsGranted,
                     currentResult = stepsResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenSteps(historyPermissionGranted) },
                 )
                 HeartRateCard(
+                    permissionsCheckState = permissionsCheckState,
                     granted = heartRateGranted,
                     currentResult = heartRateResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenHeartRateGraph(historyPermissionGranted) },
                 )
                 SleepCard(
+                    permissionsCheckState = permissionsCheckState,
                     granted = sleepGranted,
                     currentResult = sleepResult,
                     showMetricsWithoutData = showMetricsWithoutData,
@@ -411,14 +446,18 @@ private fun MetricCardContainer(
     }
 }
 
+// granted == nullは「読み込み中」「未許可」以外にも、権限確認自体が失敗した場合（lessons.md 4.1）
+// があり得る。permissionsCheckStateで3つ目の状態として区別し、確認中のまま戻らない誤解を避ける
+// （WBS 6.9）。
 @Composable
-private fun PermissionNotGrantedOrLoadingText(granted: Boolean?) {
-    Text(
-        text =
-            stringResource(
-                id = if (granted == null) R.string.health_connect_checking else R.string.home_permission_not_granted,
-            ),
-    )
+private fun PermissionNotGrantedOrLoadingText(permissionsCheckState: PermissionsCheckState, granted: Boolean?) {
+    val textRes =
+        when {
+            granted == false -> R.string.home_permission_not_granted
+            permissionsCheckState is PermissionsCheckState.Failure -> R.string.health_connect_check_failed
+            else -> R.string.health_connect_checking
+        }
+    Text(text = stringResource(id = textRes))
 }
 
 // 要件§6「データがない項目」の表示設定（WBS 6.6）。権限が未許可・未確認のカードは
@@ -458,6 +497,7 @@ private fun isSleepCardHidden(granted: Boolean?, currentResult: SleepCardResult?
 
 @Composable
 private fun WeightCard(
+    permissionsCheckState: PermissionsCheckState,
     granted: Boolean?,
     load: WeightRecordsResult?,
     historyFeatureAvailable: Boolean?,
@@ -472,7 +512,7 @@ private fun WeightCard(
         onClick = if (granted == true) onClick else null,
     ) {
         when {
-            granted != true -> PermissionNotGrantedOrLoadingText(granted)
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
             load == null -> Text(text = stringResource(id = R.string.home_loading))
             load is WeightRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
             load is WeightRecordsResult.Success -> {
@@ -519,6 +559,7 @@ private fun WeightCard(
 
 @Composable
 private fun StepsCard(
+    permissionsCheckState: PermissionsCheckState,
     granted: Boolean?,
     currentResult: StepsAggregateTotalResult?,
     showMetricsWithoutData: Boolean,
@@ -533,7 +574,7 @@ private fun StepsCard(
         onClick = if (granted == true) onClick else null,
     ) {
         when {
-            granted != true -> PermissionNotGrantedOrLoadingText(granted)
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
             currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
             currentResult is StepsAggregateTotalResult.Failure -> Text(text = stringResource(id = R.string.home_error))
             currentResult is StepsAggregateTotalResult.Success -> {
@@ -553,6 +594,7 @@ private fun StepsCard(
 
 @Composable
 private fun HeartRateCard(
+    permissionsCheckState: PermissionsCheckState,
     granted: Boolean?,
     currentResult: HeartRateAggregateSummaryResult?,
     showMetricsWithoutData: Boolean,
@@ -565,7 +607,7 @@ private fun HeartRateCard(
         onClick = if (granted == true) onClick else null,
     ) {
         when {
-            granted != true -> PermissionNotGrantedOrLoadingText(granted)
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
             currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
             currentResult is HeartRateAggregateSummaryResult.Failure -> Text(text = stringResource(id = R.string.home_error))
             currentResult is HeartRateAggregateSummaryResult.Success -> {
@@ -593,6 +635,7 @@ private fun HeartRateCard(
 
 @Composable
 private fun SleepCard(
+    permissionsCheckState: PermissionsCheckState,
     granted: Boolean?,
     currentResult: SleepCardResult?,
     showMetricsWithoutData: Boolean,
@@ -605,7 +648,7 @@ private fun SleepCard(
         onClick = if (granted == true) onClick else null,
     ) {
         when {
-            granted != true -> PermissionNotGrantedOrLoadingText(granted)
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
             currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
             currentResult is SleepCardResult.Failure -> Text(text = stringResource(id = R.string.home_error))
             currentResult is SleepCardResult.Success -> {

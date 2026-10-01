@@ -1,6 +1,8 @@
 package com.yskms.healthdataviewer.healthconnect
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.RemoteException
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
@@ -38,6 +40,10 @@ class HealthConnectManager(context: Context) {
         // 履歴読み取り権限がない場合に読める範囲の近似日数（lessons.md 6.1）。recentRangeFilter()・
         // recentRangeFilterLocal()・StepsScreenの直近フォールバック計算で共通して使う。
         const val HISTORY_FALLBACK_DAYS = 30L
+
+        // AndroidManifest.xmlの<queries>で宣言済みのパッケージ名と同じもの（変更時は両方揃えて直す）。
+        private const val PROVIDER_PACKAGE_NAME = "com.google.android.apps.healthdata"
+        private const val PLAY_STORE_PACKAGE_NAME = "com.android.vending"
     }
 
     private val appContext = context.applicationContext
@@ -77,6 +83,22 @@ class HealthConnectManager(context: Context) {
 
     fun createPermissionRequestContract(): ActivityResultContract<Set<String>, Set<String>> =
         PermissionController.createRequestPermissionResultContract()
+
+    // WBS 6.9: Health Connect未インストール・要アップデート時の案内（要件§5「Health Connect未対応
+    // 端末への案内」）から使う。公式のHealth Connect codelab/サンプルと同じ形のPlayストア導線で、
+    // NOT_INSTALLED（新規インストール）・UPDATE_REQUIRED（要アップデート）のどちらでも同じインテントで
+    // よい（Playストア側が端末の状態に応じて「インストール」「アップデート」ボタンを出し分ける）。
+    // url=healthconnect://onboardingは、インストール後にHealth Connect自身のオンボーディング画面まで
+    // 直接開かせるための公式パラメータ。
+    fun createOpenInPlayStoreIntent(): Intent {
+        val uri = Uri.parse("market://details?id=$PROVIDER_PACKAGE_NAME&url=healthconnect%3A%2F%2Fonboarding")
+        return Intent(Intent.ACTION_VIEW).apply {
+            setPackage(PLAY_STORE_PACKAGE_NAME)
+            data = uri
+            putExtra("overlay", true)
+            putExtra("callerId", appContext.packageName)
+        }
+    }
 
     // WBS 6.3: 詳細画面のRecordsタブ用。readAllWeightRecords()（全件を1つのListに溜め込む旧実装、
     // Heart RateでOutOfMemoryErrorを起こした。lessons.md 6.7）を置き換える。historyPermissionGrantedに
