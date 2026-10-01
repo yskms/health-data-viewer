@@ -709,10 +709,14 @@ class HealthConnectManager(context: Context) {
             HistoryFallbackOutcome.Failure
         }
 
-    // 履歴読み取り権限がない状態で読める範囲の近似（6.1参照）。weightRecordsPagingSource() /
-    // findOldestWeightRecordTime()で使うInstantベースのTimeRangeFilter。Steps側（StepsScreen）は
-    // Raw読み取りとAggregate呼び出しの範囲を完全に一致させる必要があるため、この関数は使わず
-    // 同じHISTORY_FALLBACK_DAYS定数を使って呼び出し元で独自にfilterを組み立てる（D-029）。
+    // 履歴読み取り権限がない状態で読める範囲の近似（6.1参照）。findOldestWeightRecordTime()等の
+    // find*系関数（1回限りの問い合わせで、フォールバック先として再読み直しを気にしなくてよい）が使う
+    // Instantベースの終了側無制限TimeRangeFilter。weightRecordsPagingSource()等の*RecordsPagingSource()は
+    // 同じ終了側無制限のままだとページング中の新規書き込みでtoken境界がずれるため、この関数を使わず
+    // 自前でnowを両端に固定したbetween()を組み立てる（レビュー指摘、weightRecordsPagingSource()の
+    // コメント参照）。Steps側（StepsScreen）も同じ理由（Raw読み取りとAggregate呼び出しの範囲を完全に
+    // 一致させる必要がある）でこの関数を使わず、同じHISTORY_FALLBACK_DAYS定数を使って呼び出し元で
+    // 独自にfilterを組み立てる（D-029）。
     private fun recentRangeFilter(): TimeRangeFilter =
         TimeRangeFilter.after(Instant.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS))
 

@@ -27,13 +27,16 @@ import com.yskms.healthdataviewer.healthconnect.PagedRecord
 // で共通のComposableにし、型固有の行表示だけrowContentに委譲する。
 //
 // LazyColumnのitems()には(pageIndex, indexInPage)を組み合わせたキーを渡す（レコードの中身に頼らない、
-// PagedRecord.kt参照）。重複も含めて全件表示するD-007の原則上、ページをまたいで同じmetadata.idが
-// 現れうるため、metadata.idそのものをkeyにはできない。一方でkeyを完全に省略すると、PagingConfig.maxSize
-// による先頭ページの破棄やprependでの挿入が起きるたびに、Compose側がindexだけでスクロール位置を
-// 保持してしまい、画面内の表示内容が静かに入れ替わって一部のレコードを見ないまま通過しうる
-// （レビュー指摘。LazyColumnのkeyは、追加・削除があってもスクロール位置を正しい要素に追従させる
-// ための仕組み）。(pageIndex, indexInPage)はtoken境界が固定されている限り破棄・再読込をまたいでも
-// 安定するため、この両方を満たせる。
+// healthconnect/HealthRecordsPagingSource.ktのPagedRecord参照）。重複も含めて全件表示するD-007の原則上、
+// ページをまたいで同じmetadata.idが現れうるため、metadata.idそのものをkeyにはできない。一方でkeyを
+// 完全に省略すると、PagingConfig.maxSizeによる先頭ページの破棄やprependでの挿入が起きるたびに、
+// Compose側がindexだけでスクロール位置を保持してしまい、画面内の表示内容が静かに入れ替わって
+// 一部のレコードを見ないまま通過しうる（レビュー指摘。LazyColumnのkeyは、追加・削除があっても
+// スクロール位置を正しい要素に追従させるための仕組み）。(pageIndex, indexInPage)はtoken境界が
+// 固定されている限り破棄・再読込をまたいでも安定するため、この両方を満たせる。ただし「token境界が
+// 固定されている限り」が前提で、閲覧中に過去時刻のレコードが後から同期・削除された場合はこの前提が
+// 崩れ、prependで読み直したページの中身が最初と変わりうる（同じキーの行に別のレコードが表示される。
+// 未対応、要検証）。
 @Composable
 fun <T : Any> RecordsTab(
     pagingItems: LazyPagingItems<PagedRecord<T>>,
