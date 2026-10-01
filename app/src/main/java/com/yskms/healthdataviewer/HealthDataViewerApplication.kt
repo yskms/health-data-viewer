@@ -4,21 +4,27 @@ import android.app.Application
 import androidx.appcompat.app.AppCompatDelegate
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.settings.toAppCompatNightMode
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 
-// WBS 6.6: 保存済みテーマ設定（System/Light/Dark）をMainActivity起動より前に反映する。
-// AppCompatDelegateの夜間モードは、言語設定（AppLocalesMetadataHolderServiceによる自動永続化）とは
-// 違いプロセス再起動をまたいで永続化されない（実装はsDefaultNightModeというインメモリのstatic intの
-// みで、SharedPreferences等への保存コードは持たない。javapでの逆コンパイルで確認済み）。そのため、
-// 保存先であるDataStoreをここで一度だけ読み、Application.onCreate()（必ずどのActivityのonCreate()より
-// 先に完了する）の中で明示的に適用する。DataStoreの読み取りはサスペンド関数だが、ここでのrunBlocking
-// （ローカルファイル1つの読み取りのみで、実機で通常数ms以内に完了する）は、MainActivityの最初の
-// フレームより前にテーマを確定させるための意図的な措置。
+// WBS 6.6: `userSettingsRepository`をプロセス生存期間中ただ1つのインスタンスとして保持する
+// （`MainActivity.onCreate()`のたびに作り直さない。UserSettingsRepository.ktのコメント参照。
+// コードレビュー指摘: Activityごとに作り直す設計では、テーマ変更・言語変更によるActivity再生成の
+// たびに新しいrepositoryインスタンスが`collectAsState`の既定値から再スタートし、実際の保存値に
+// 切り替わるまで一瞬ちらつく問題があった）。
+//
+// 保存済みテーマ設定（System/Light/Dark）をMainActivity起動より前に反映する。AppCompatDelegateの
+// 夜間モードは、言語設定（AppLocalesMetadataHolderServiceによる自動永続化）とは違いプロセス再起動を
+// またいで永続化されない（実装はsDefaultNightModeというインメモリのstatic intのみで、
+// SharedPreferences等への保存コードは持たない。javapでの逆コンパイルで確認済み）。そのため、
+// repositoryの初期化（内部でDataStoreを一度だけブロッキング読み取りする）をApplication.onCreate()
+// （必ずどのActivityのonCreate()より先に完了する）の中で行い、MainActivityの最初のフレームより前に
+// テーマを確定させる。
 class HealthDataViewerApplication : Application() {
+    lateinit var userSettingsRepository: UserSettingsRepository
+        private set
+
     override fun onCreate() {
         super.onCreate()
-        val themeMode = runBlocking { UserSettingsRepository(this@HealthDataViewerApplication).settingsFlow.first().themeMode }
-        AppCompatDelegate.setDefaultNightMode(themeMode.toAppCompatNightMode())
+        userSettingsRepository = UserSettingsRepository(this)
+        AppCompatDelegate.setDefaultNightMode(userSettingsRepository.settingsFlow.value.themeMode.toAppCompatNightMode())
     }
 }

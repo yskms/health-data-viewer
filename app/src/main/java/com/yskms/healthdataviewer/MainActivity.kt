@@ -35,7 +35,9 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val healthConnectManager = HealthConnectManager(applicationContext)
-        val userSettingsRepository = UserSettingsRepository(applicationContext)
+        // プロセス生存期間中ただ1つのインスタンス（HealthDataViewerApplication参照）。
+        // Activity再生成のたびに作り直さない。
+        val userSettingsRepository = (application as HealthDataViewerApplication).userSettingsRepository
         setContent {
             HealthDataViewerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->

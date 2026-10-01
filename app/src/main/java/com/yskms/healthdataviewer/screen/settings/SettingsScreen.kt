@@ -42,7 +42,6 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.settings.AppSettings
 import com.yskms.healthdataviewer.settings.ThemeMode
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
-import com.yskms.healthdataviewer.settings.toAppCompatNightMode
 import kotlinx.coroutines.launch
 
 private const val GITHUB_REPOSITORY_URL = "https://github.com/yskms/health-data-viewer"
@@ -56,8 +55,10 @@ fun SettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val coroutineScope = rememberCoroutineScope()
-    val settings by userSettingsRepository.settingsFlow.collectAsState(initial = AppSettings())
+    // userSettingsRepository.settingsFlowはStateFlow（常に最新値を持つ）のため、
+    // collectAsState()にinitialを渡す必要がない（UserSettingsRepository.kt参照。
+    // 渡していた初版は、Activity再生成のたびにハードコードした既定値から一瞬始まる問題があった）。
+    val settings by userSettingsRepository.settingsFlow.collectAsState()
 
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
@@ -73,28 +74,15 @@ fun SettingsScreen(
 
         VisibleMetricsSection(
             showMetricsWithoutData = settings.showMetricsWithoutData,
-            onShowMetricsWithoutDataChange = { show ->
-                coroutineScope.launch { userSettingsRepository.setShowMetricsWithoutData(show) }
-            },
+            onShowMetricsWithoutDataChange = { show -> userSettingsRepository.setShowMetricsWithoutData(show) },
         )
         HorizontalDivider()
 
         ThemeSection(
             themeMode = settings.themeMode,
-            onThemeModeChange = { mode ->
-                coroutineScope.launch {
-                    // DataStoreへの書き込みを必ずAppCompatDelegate.setDefaultNightMode()より先に
-                    // 完了させる（await）。setDefaultNightMode()はActivityの再生成を引き起こし、
-                    // このComposition（とrememberCoroutineScope()）が再生成の過程でキャンセルされる
-                    // ため、先にvisual反映だけ行って書き込みをlaunch内の後続処理に任せると、再生成が
-                    // 書き込み完了より先に走った場合にDataStoreへの保存がキャンセルされてしまう
-                    // （見た目だけ切り替わり、プロセス再起動後は保存されず元に戻る実機確認済みの不具合。
-                    // HealthDataViewerApplication.onCreate()が次回起動時に読み直す値と、実際に
-                    // 表示されているテーマが食い違う）。
-                    userSettingsRepository.setThemeMode(mode)
-                    AppCompatDelegate.setDefaultNightMode(mode.toAppCompatNightMode())
-                }
-            },
+            // 書き込み・AppCompatDelegateへの適用は`UserSettingsRepository`自身のスコープで行う
+            // （呼び出し元のComposition/rememberCoroutineScope()に依存しない。lessons.md 10.2・10.3参照）。
+            onThemeModeChange = { mode -> userSettingsRepository.setThemeModeAndApply(mode) },
         )
         HorizontalDivider()
 
@@ -183,11 +171,14 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                         Text(text = stringResource(id = R.string.health_connect_request_permission))
                     }
                     TextButton(onClick = {
-                        // Health Connectアプリ自体でこのアプリの権限を取り消す/確認する導線
-                        // （公式API、androidx.health.connect.client.HealthConnectClient.
-                        // getHealthConnectManageDataIntent()）。Health Connectが利用可能な場合のみ
-                        // 表示するセクション内のボタンのため、起動に失敗するケースは想定していないが、
-                        // IPC越しの操作のため念のためtry/catchする。
+                        // 公式API（androidx.health.connect.client.HealthConnectClient.
+                        // getHealthConnectManageDataIntent()）でHealth Connect本体の「データと
+                        // アクセス」画面（全アプリ共通のトップ画面）を開く。このアプリ個別の権限行へ
+                        // 直接遷移する意図ではない（コードレビュー指摘：そうしたAPIはconnect-client
+                        // 1.1.0にはなく、プラットフォーム側のAPI 34+限定intentに頼ると対応範囲が
+                        // minSdk 28と食い違う）。ユーザーはこの画面から対象アプリを自分で探す必要がある。
+                        // Health Connectが利用可能な場合のみ表示するセクション内のボタンのため、
+                        // 起動に失敗するケースは想定していないが、IPC越しの操作のため念のためtry/catchする。
                         runCatching { context.startActivity(HealthConnectClient.getHealthConnectManageDataIntent(context)) }
                     }) {
                         Text(text = stringResource(id = R.string.settings_open_health_connect))

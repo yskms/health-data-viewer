@@ -48,7 +48,6 @@ import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.WeightRecordsResult
-import com.yskms.healthdataviewer.settings.AppSettings
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
@@ -153,7 +152,8 @@ fun HomeScreen(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val settings by userSettingsRepository.settingsFlow.collectAsState(initial = AppSettings())
+    // StateFlow（常に最新値を持つ）のためinitialは不要（UserSettingsRepository.kt参照）。
+    val settings by userSettingsRepository.settingsFlow.collectAsState()
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
     var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
     var historyFeatureAvailable by remember { mutableStateOf<Boolean?>(null) }
@@ -250,17 +250,21 @@ fun HomeScreen(
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
+                // 4つのLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
+                // 戻すと、表示指標トグルがOFFの状態で「データなし」と確定していたカードが、画面復帰
+                // （resumeKeyの変化）や期間タブ切り替えのたびに一瞬「読み込み中」として出現してから
+                // また消える、というちらつきが起きる。前回の結果を表示したまま裏で再取得し、新しい
+                // 結果が届いた時点でだけ置き換える（period違いの結果はcurrentResult側のガードで
+                // 弾かれるため、期間タブ切替時に古い期間の値が誤って見え続けることはない）。
                 var weightLoad by remember { mutableStateOf<WeightRecordsResult?>(null) }
                 LaunchedEffect(weightGranted, historyPermissionGranted, resumeKey) {
                     if (weightGranted != true) return@LaunchedEffect
-                    weightLoad = null
                     weightLoad = healthConnectManager.findLatestWeightRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
                 LaunchedEffect(selectedPeriod, stepsGranted, historyPermissionGranted, resumeKey) {
                     if (stepsGranted != true) return@LaunchedEffect
-                    stepsLoad = StepsCardLoad(period = selectedPeriod, result = null)
                     val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
                     stepsLoad = StepsCardLoad(period = selectedPeriod, result = healthConnectManager.readStepsAggregateTotal(filter))
                 }
@@ -268,7 +272,6 @@ fun HomeScreen(
                 var heartRateLoad by remember { mutableStateOf<HeartRateCardLoad?>(null) }
                 LaunchedEffect(selectedPeriod, heartRateGranted, historyPermissionGranted, resumeKey) {
                     if (heartRateGranted != true) return@LaunchedEffect
-                    heartRateLoad = HeartRateCardLoad(period = selectedPeriod, result = null)
                     val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
                     heartRateLoad =
                         HeartRateCardLoad(period = selectedPeriod, result = healthConnectManager.readHeartRateAggregateSummary(filter))
@@ -277,7 +280,6 @@ fun HomeScreen(
                 var sleepLoad by remember { mutableStateOf<SleepCardLoad?>(null) }
                 LaunchedEffect(selectedPeriod, sleepGranted, historyPermissionGranted, resumeKey) {
                     if (sleepGranted != true) return@LaunchedEffect
-                    sleepLoad = SleepCardLoad(period = selectedPeriod, result = null)
                     val effectNow = Instant.now()
                     val actualStart = selectedPeriod.actualStart(effectNow, historyPermissionGranted)
                     val filter = TimeRangeFilter.between(actualStart, effectNow)
@@ -320,32 +322,49 @@ fun HomeScreen(
                     sleepLoad = SleepCardLoad(period = selectedPeriod, result = result)
                 }
 
+                // period違いの結果を弾くガード（Steps/HeartRate/Sleepで共通）。各Cardの描画と
+                // 「表示指標」での非表示判定（isXxxCardHidden()）の両方がこれを使うため、親で
+                // 一度だけ計算する（コードレビュー指摘: 全カードが非表示になった場合に理由が
+                // 分からず画面が空白になる問題への対応で、両者が同じ値を見る必要があるため）。
+                val stepsResult = if (stepsLoad?.period == selectedPeriod) stepsLoad?.result else null
+                val heartRateResult = if (heartRateLoad?.period == selectedPeriod) heartRateLoad?.result else null
+                val sleepResult = if (sleepLoad?.period == selectedPeriod) sleepLoad?.result else null
+                val showMetricsWithoutData = settings.showMetricsWithoutData
+
+                val allCardsHidden =
+                    !showMetricsWithoutData &&
+                        isWeightCardHidden(weightGranted, weightLoad, historyFeatureAvailable, showMetricsWithoutData) &&
+                        isStepsCardHidden(stepsGranted, stepsResult, showMetricsWithoutData) &&
+                        isHeartRateCardHidden(heartRateGranted, heartRateResult, showMetricsWithoutData) &&
+                        isSleepCardHidden(sleepGranted, sleepResult, showMetricsWithoutData)
+
+                if (allCardsHidden) {
+                    Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
+                }
+
                 WeightCard(
                     granted = weightGranted,
                     load = weightLoad,
                     historyFeatureAvailable = historyFeatureAvailable,
-                    showMetricsWithoutData = settings.showMetricsWithoutData,
+                    showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenWeightGraph(historyPermissionGranted) },
                 )
                 StepsCard(
-                    period = selectedPeriod,
                     granted = stepsGranted,
-                    load = stepsLoad,
-                    showMetricsWithoutData = settings.showMetricsWithoutData,
+                    currentResult = stepsResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenSteps(historyPermissionGranted) },
                 )
                 HeartRateCard(
-                    period = selectedPeriod,
                     granted = heartRateGranted,
-                    load = heartRateLoad,
-                    showMetricsWithoutData = settings.showMetricsWithoutData,
+                    currentResult = heartRateResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenHeartRateGraph(historyPermissionGranted) },
                 )
                 SleepCard(
-                    period = selectedPeriod,
                     granted = sleepGranted,
-                    load = sleepLoad,
-                    showMetricsWithoutData = settings.showMetricsWithoutData,
+                    currentResult = sleepResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenSleepGraph(historyPermissionGranted) },
                 )
             }
@@ -402,6 +421,41 @@ private fun PermissionNotGrantedOrLoadingText(granted: Boolean?) {
     )
 }
 
+// 要件§6「データがない項目」の表示設定（WBS 6.6）。権限が未許可・未確認のカードは
+// 「データがない」ではなく別の案件（許可すれば解決する）のため、この設定の対象外にする
+// （granted == trueを要求する）。HomeScreen本体（全カード非表示時の案内）とCard自身の両方が
+// 同じ判定を使うための共有の純粋関数（コードレビュー指摘）。
+//
+// Weightのみ、records.isEmpty()だけで即座に隠さない。load.historyLimited（履歴読み取り権限が
+// ないため直近30日しか見ていない）がtrueで、かつ端末が履歴読み取りに対応している
+// （historyFeatureAvailable != false、つまり権限を許可すれば解決する余地がある）場合は、
+// 「データがない」のではなく「権限を許可すればデータが見える可能性がある」状態なので隠さない
+// （コードレビュー指摘: 隠すとhistoryLimitedの案内ごと消え、ユーザーが気付く手段がなくなる）。
+private fun isWeightCardHidden(
+    granted: Boolean?,
+    load: WeightRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is WeightRecordsResult.Success &&
+        load.records.isEmpty() &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+private fun isStepsCardHidden(granted: Boolean?, currentResult: StepsAggregateTotalResult?, showMetricsWithoutData: Boolean): Boolean =
+    !showMetricsWithoutData && granted == true && currentResult is StepsAggregateTotalResult.Success && currentResult.total == null
+
+private fun isHeartRateCardHidden(
+    granted: Boolean?,
+    currentResult: HeartRateAggregateSummaryResult?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData && granted == true && currentResult is HeartRateAggregateSummaryResult.Success && currentResult.averageBpm == null
+
+private fun isSleepCardHidden(granted: Boolean?, currentResult: SleepCardResult?, showMetricsWithoutData: Boolean): Boolean =
+    !showMetricsWithoutData && granted == true && currentResult is SleepCardResult.Success && currentResult.value.duration == null
+
 @Composable
 private fun WeightCard(
     granted: Boolean?,
@@ -410,9 +464,7 @@ private fun WeightCard(
     showMetricsWithoutData: Boolean,
     onClick: () -> Unit,
 ) {
-    // 要件§6「データがない項目」の表示設定（WBS 6.6）。権限が未許可・未確認のカードは
-    // 「データがない」ではなく別の案件（許可すれば解決する）のため、この設定の対象外にする。
-    if (!showMetricsWithoutData && granted == true && load is WeightRecordsResult.Success && load.records.isEmpty()) return
+    if (isWeightCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
     val locale = LocalLocale.current.platformLocale
     MetricCardContainer(
         title = stringResource(id = R.string.home_weight_title),
@@ -466,9 +518,13 @@ private fun WeightCard(
 }
 
 @Composable
-private fun StepsCard(period: DashboardPeriod, granted: Boolean?, load: StepsCardLoad?, showMetricsWithoutData: Boolean, onClick: () -> Unit) {
-    val currentResult = if (load != null && load.period == period) load.result else null
-    if (!showMetricsWithoutData && granted == true && currentResult is StepsAggregateTotalResult.Success && currentResult.total == null) return
+private fun StepsCard(
+    granted: Boolean?,
+    currentResult: StepsAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isStepsCardHidden(granted, currentResult, showMetricsWithoutData)) return
     val locale = LocalLocale.current.platformLocale
     val numberFormat = remember(locale) { NumberFormat.getIntegerInstance(locale) }
     MetricCardContainer(
@@ -497,16 +553,12 @@ private fun StepsCard(period: DashboardPeriod, granted: Boolean?, load: StepsCar
 
 @Composable
 private fun HeartRateCard(
-    period: DashboardPeriod,
     granted: Boolean?,
-    load: HeartRateCardLoad?,
+    currentResult: HeartRateAggregateSummaryResult?,
     showMetricsWithoutData: Boolean,
     onClick: () -> Unit,
 ) {
-    val currentResult = if (load != null && load.period == period) load.result else null
-    if (!showMetricsWithoutData && granted == true && currentResult is HeartRateAggregateSummaryResult.Success && currentResult.averageBpm == null) {
-        return
-    }
+    if (isHeartRateCardHidden(granted, currentResult, showMetricsWithoutData)) return
     MetricCardContainer(
         title = stringResource(id = R.string.home_heart_rate_title),
         accentColor = HeartRateAccent,
@@ -541,20 +593,12 @@ private fun HeartRateCard(
 
 @Composable
 private fun SleepCard(
-    period: DashboardPeriod,
     granted: Boolean?,
-    load: SleepCardLoad?,
+    currentResult: SleepCardResult?,
     showMetricsWithoutData: Boolean,
     onClick: () -> Unit,
 ) {
-    val currentResult = if (load != null && load.period == period) load.result else null
-    if (!showMetricsWithoutData &&
-        granted == true &&
-        currentResult is SleepCardResult.Success &&
-        currentResult.value.duration == null
-    ) {
-        return
-    }
+    if (isSleepCardHidden(granted, currentResult, showMetricsWithoutData)) return
     MetricCardContainer(
         title = stringResource(id = R.string.home_sleep_title),
         accentColor = SleepAccent,

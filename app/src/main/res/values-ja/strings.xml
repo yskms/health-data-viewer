@@ -26,6 +26,7 @@
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="home_sleep_title">睡眠</string>
     <string name="home_sleep_average_per_day_notice">この期間の1日あたり平均</string>
+    <string name="home_all_metrics_hidden_notice">「データがない項目も表示する」の設定により、非表示にしています。</string>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
     <string name="poc_steps_period_today">今日</string>

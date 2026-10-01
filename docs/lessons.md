@@ -442,6 +442,20 @@
 ### 10.2 `AppCompatDelegate.setDefaultNightMode()`はActivityを再生成するため、呼び出し元のComposition（`rememberCoroutineScope()`等）に依存する非同期処理を道連れにキャンセルしうる
 
 -   **知見**: Settings画面のテーマ選択ハンドラで、`coroutineScope.launch { repository.setThemeMode(mode) }`（DataStoreへの書き込み）と`AppCompatDelegate.setDefaultNightMode(...)`（見た目の反映）を別々の文として呼んだところ、Pixel 11実機で「見た目は即座に切り替わるが、アプリを`force-stop`して再起動すると設定が保存されておらずSystemに戻る」不具合が発生した。`setDefaultNightMode()`は呼び出すと（必要な場合）Activityを再生成し、その再生成はSettings画面のCompositionとそれに紐づく`rememberCoroutineScope()`のスコープを破棄する。DataStoreへの書き込み（`dataStore.edit {}`、suspend）がその破棄より先に完了していなければ、書き込みは完了しないままキャンセルされる。`adb shell run-as <pkg> cat .../datastore/settings.preferences_pb`でファイル自体が作成されていないことを確認して原因を特定した
--   **Viewerへの適用**: 永続化（DataStoreへの書き込み）と、その後に続く「状態変更を引き起こす可能性のある処理」（`setDefaultNightMode()`に限らず、Activity再生成・プロセス終了・画面遷移などComposition破棄を伴いうる処理全般）は同じ`launch`ブロック内で、永続化のsuspend呼び出しを`await`（＝先に書いて完了を待つ）してから後続処理を呼ぶ順序にする。見た目の反映を先に行うと、その反映自体の副作用が永続化を妨げるという順序依存の罠になる
+-   **Viewerへの適用**: 永続化（DataStoreへの書き込み）と、その後に続く「状態変更を引き起こす可能性のある処理」（`setDefaultNightMode()`に限らず、Activity再生成・プロセス終了・画面遷移などComposition破棄を伴いうる処理全般）は同じ`launch`ブロック内で、永続化のsuspend呼び出しを`await`（＝先に書いて完了を待つ）してから後続処理を呼ぶ順序にする。見た目の反映を先に行うと、その反映自体の副作用が永続化を妨げるという順序依存の罠になる。**ただしこの対策は「1回の操作では」安全だが、連続して素早く設定を変更された場合（例: テーマを連続タップ）に書き込みがキャンセルされる余地を完全には塞がない。より根本的な対策は10.3参照**
 -   **根拠**: 実機確認（Pixel 11、2026-10-01。D-039の(4)参照。選択→スクリーンショット→アプリ再起動→スクリーンショット→DataStoreファイルの直接確認、という手順で再現・特定した）
+-   **確認日**: 2026-10-01
+
+### 10.3 Activity再生成をまたぐ設定値は、Composition寿命のCoroutineScopeではなくプロセス寿命のrepositoryインスタンス＋`MutableStateFlow`で持つと、書き込みキャンセルと表示のちらつみの両方が一度に解消する
+
+-   **知見**: 10.2の対策（書き込みを待ってから適用する）を入れた後も、2回目のコードレビューで次の2つの問題が残っていることが分かった。(1) 書き込みが依然として`rememberCoroutineScope()`（Settings画面のCompositionに紐づく）上で動いているため、設定を素早く連続変更すると、1回目の変更が引き起こすActivity再生成が2回目の書き込みを道連れにキャンセルする余地が残る。(2) `userSettingsRepository.settingsFlow.collectAsState(initial = AppSettings())`のように、冷たい`Flow`（`dataStore.data`）をハードコードした既定値と組み合わせてComposeに繋ぐと、Activity再生成のたびに（`MainActivity.onCreate()`で`UserSettingsRepository`を作り直していたため）新しいインスタンスが既定値から再スタートし、DataStoreからの最初の読み取りが届くまでの一瞬、実際の保存値と異なる表示になる（テーマ変更直後に選択が一瞬「System」に戻る、起動直後は表示指標トグルがOFFでも一瞬すべてのカードが表示される、など）。根本原因はどちらも「設定の状態をActivity・Compositionより短命な場所に置いていること」
+-   **Viewerへの適用**: `UserSettingsRepository`を`HealthDataViewerApplication`（プロセス生存期間中ただ1つ）が保持するシングルトンに変更し、`MainActivity`は作り直さずそれを取得するだけにする。repository内部は、読み取りを常に最新値を持つ`MutableStateFlow`（起動時に一度だけブロッキング読み取りして初期化）で持ち、Composeからは`collectAsState()`（`initial`不要）で直接つなぐ。書き込みは、呼び出し元の状態変更に先立って`_settings.value`を同期的に更新した上で、永続化はrepository自身が持つ`CoroutineScope`（`SupervisorJob` + `Dispatchers.Default`。Activity・Compositionのどちらにも属さない）に`launch`する。この設計にすると、(1)書き込みがどのActivity再生成にも道連れにされず常に完了する、(2)Activity再生成直後からComposeが見る値は常に最新の状態（ハードコードした既定値を経由しない）、の両方が同時に満たされる
+-   **根拠**: 実機確認（Pixel 11、2026-10-01。テーマを「ライト」→「ダーク」のように連続タップしても最終的な見た目・選択表示・DataStoreへの永続化が一致することを`run-as`で確認。D-039の2回目のコードレビュー対応(12)参照）
+-   **確認日**: 2026-10-01
+
+### 10.4 DataStoreは既定で読み取り・書き込みの失敗に対する保護を持たない。`corruptionHandler`と`IOException`のcatchを明示的に用意する必要がある
+
+-   **知見**: `preferencesDataStore()`はcorruptionHandlerを指定しない限り、ファイル破損時に読み取りが例外を投げる。`HealthDataViewerApplication.onCreate()`のようにアプリ起動のたびに行う初期読み取りがこれを素通しすると、ファイルが壊れた状態（バックアップ復元の失敗等）でアプリが起動不能になり、ユーザーはアプリのデータを消去するしかなくなる。書き込み（`dataStore.edit {}`）も同様にI/Oエラーを素通しする
+-   **Viewerへの適用**: `preferencesDataStore(name = ..., corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() })`でファイル破損時に空の設定へフォールバックし、読み取りFlowには`.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }`を追加する（DataStore公式パターン）。書き込みは`runCatching`で包み、失敗しても次回の設定変更が引き続き行えるようにする（失敗した1回の書き込みが失われるだけで、アプリの続行は妨げない）
+-   **根拠**: 公式（DataStoreのドキュメントが明記する推奨パターン）。コードレビュー指摘を受けて導入し、Pixel 11実機でビルド・通常の読み書きに影響がないことを確認した（2026-10-01）
 -   **確認日**: 2026-10-01

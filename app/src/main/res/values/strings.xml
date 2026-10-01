@@ -26,6 +26,7 @@
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
     <string name="home_sleep_title">Sleep</string>
     <string name="home_sleep_average_per_day_notice">Average per day for this period</string>
+    <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
     <string name="poc_steps_period_today">Today</string>
