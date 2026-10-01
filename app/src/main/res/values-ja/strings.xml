@@ -95,9 +95,9 @@
     <string name="detail_sleep_aggregation_avg_per_day">集計方法: %1$s平均睡眠時間（1日あたり、Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
     <string name="detail_sleep_bucket_list_title">Bucketの値一覧（日付: 時間 h:mm）</string>
     <string name="detail_distance_title">距離</string>
-    <string name="detail_distance_aggregation_total">集計方法: %1$s合計距離（Health Connect公式Aggregate API）</string>
-    <string name="detail_distance_aggregation_avg_per_day">集計方法: %1$s平均距離（1日あたり、Health Connect公式Aggregate API）</string>
-    <!-- WBS 6.3: Recordsタブ（ページング生レコード一覧）。Weight/Steps/心拍数/Sleepで共通。 -->
+    <string name="detail_distance_aggregation_total">集計方法: %1$s合計距離（km、Health Connect公式Aggregate API）</string>
+    <string name="detail_distance_aggregation_avg_per_day">集計方法: %1$s平均距離（1日あたり、km、Health Connect公式Aggregate API）</string>
+    <!-- WBS 6.3（WBS 6.10でDistanceを追加）: Recordsタブ（ページング生レコード一覧）。各データ型で共通。 -->
     <string name="detail_tab_chart">グラフ</string>
     <string name="detail_tab_records">レコード</string>
     <string name="detail_records_empty">読み取れる範囲にレコードがありません。</string>

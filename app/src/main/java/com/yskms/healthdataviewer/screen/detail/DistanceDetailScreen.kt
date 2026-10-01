@@ -57,8 +57,11 @@ import java.time.format.FormatStyle
 
 // WBS 6.10: StepsDetailScreenと同じ形（Distanceも合計1系列のみのsum系メトリクス、requirements.md
 // §22.2）。StepsはMetricDensity.HIGH（記録頻度の高いActivity系データ）のため、同じ記録経路を
-// 持つと見込まれるDistanceも同じ密度プロファイルを踏襲する（実機での記録頻度の実測はまだ行っていない。
-// Stepsと大きく異なることが分かればWBS以降で見直す）。
+// 持つと見込まれるDistanceも同じ密度プロファイルを踏襲した。Pixel 11実機の実データ（Fitソース）で
+// 実際に30秒前後の短い区間ごとに記録されていることを確認しており（DistanceRecordRowのコメント・
+// WBS 6.10参照）、Stepsと同程度の高頻度データという想定どおりだった。1W〜全期間（3年弱）のいずれも
+// クラッシュ・極端な待ち時間なく描画できることも確認済みで、MetricDensity.HIGHのまま見直しの必要は
+// なかった。
 private val DISTANCE_DENSITY = MetricDensity.HIGH
 
 // WBS 6.10: RecordsタブのPagingConfig。StepsDetailScreen.STEPS_RECORDS_PAGE_SIZE等と同じ値

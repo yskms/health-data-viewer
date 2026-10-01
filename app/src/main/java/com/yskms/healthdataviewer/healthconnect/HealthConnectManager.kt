@@ -783,14 +783,18 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // WBS 6.10: Distance。要件§22.2の通りSteps同様Activity系の公式重複処理が効く合計値のため、
-    // Steps用の関数群と同じ形で実装する（PoCは行わない。Activity系の重複処理自体はSteps PoC 2で
-    // 既に確認済みのため、requirements.md §16の優先度Aを順に追加していく段階ではPoCを繰り返さない）。
+    // WBS 6.10: Distance。要件§22.2ではSteps同様Activity系に分類され公式重複処理が効くとされており、
+    // Steps用の関数群と同じ形で実装する（PoCは行わない。requirements.md §16の優先度Aを順に追加していく
+    // 段階では、同じ分類のデータ型についてまでPoCを繰り返さない）。**ただしこの分類はrequirements.md
+    // §22.2の表・公式ドキュメント上の根拠であり、Steps PoC 2で確認したのはStepsRecordのAggregateが
+    // 複数ソースの重複を実際に処理することのみ。DistanceRecordで同じ重複処理が実際に効いているかは
+    // 実機未検証のまま（要検証、D-042(2)でも同様に記録）**。
     // DISTANCE_TOTALはAggregateMetric<Length>のため、WeightAggregateBucketがMassをinKilogramsへ
     // 変換するのと同じ考え方でkmに変換する（Length.inKilometers/inMeters等はjavapの出力に現れる
     // JVMメソッド名getKilometers()/getMeters()とは異なり、Kotlin側から見える実際のプロパティ名。
     // KotlinのJvmName差し替えにより、javap逆コンパイルだけでは正しいプロパティ名が分からない
-    // 落とし穴がある。D-012のMassでも同じ構造）。表示単位はkmに統一する（D-042）。
+    // 落とし穴がある。D-012のMassでも同じ構造）。集計値（ホーム画面カード・グラフのbucket値）は
+    // km、Recordsタブの個々のレコードはmに表示単位を使い分ける（D-042(2)）。
 
     // findOldestWeightRecordTime()と同じ理由・同じ形。
     suspend fun findOldestDistanceRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {

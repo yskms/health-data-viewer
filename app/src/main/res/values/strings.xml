@@ -96,9 +96,9 @@
     <string name="detail_sleep_aggregation_avg_per_day">Aggregation: %1$s average sleep duration per day (official Aggregate API, Sleep dedup applies)</string>
     <string name="detail_sleep_bucket_list_title">Bucket values (date : duration h:mm)</string>
     <string name="detail_distance_title">Distance</string>
-    <string name="detail_distance_aggregation_total">Aggregation: %1$s total distance (official Aggregate API)</string>
-    <string name="detail_distance_aggregation_avg_per_day">Aggregation: %1$s average distance per day (official Aggregate API)</string>
-    <!-- WBS 6.3: Records tab (paged raw record list), shared across Weight/Steps/Heart rate/Sleep. -->
+    <string name="detail_distance_aggregation_total">Aggregation: %1$s total distance in km (official Aggregate API)</string>
+    <string name="detail_distance_aggregation_avg_per_day">Aggregation: %1$s average distance per day in km (official Aggregate API)</string>
+    <!-- WBS 6.3 (WBS 6.10 added Distance): Records tab (paged raw record list), shared across data types. -->
     <string name="detail_tab_chart">Chart</string>
     <string name="detail_tab_records">Records</string>
     <string name="detail_records_empty">No records found in the readable range.</string>

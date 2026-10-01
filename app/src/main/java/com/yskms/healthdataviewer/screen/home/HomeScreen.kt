@@ -699,8 +699,11 @@ private fun SleepCard(
 }
 
 // StepsCardと同じ形（期間合計をそのまま表示、Sleepのような1日あたり平均化はしない）。
-// DISTANCE_TOTALはkmへ変換済み（HealthConnectManager.readDistanceAggregateTotal()参照）のため、
-// WeightCardと同じ"%.2f"のロケール依存書式を使う。
+// DISTANCE_TOTALはkmへ変換済み（HealthConnectManager.readDistanceAggregateTotal()参照）。
+// WeightCardと同じ"%.2f"書式は桁区切りが付かず、Weightは常に1,000未満（体重）のため問題にならないが、
+// Distanceは年タブで1,000kmを超えうる（実データで1日あたり5〜8km×365日≒2,000km前後）ため、
+// StepsCardのNumberFormatと同じ考え方でNumberFormat（桁区切り＋小数2桁固定）を使う
+// （コードレビュー指摘）。
 @Composable
 private fun DistanceCard(
     permissionsCheckState: PermissionsCheckState,
@@ -711,6 +714,13 @@ private fun DistanceCard(
 ) {
     if (isDistanceCardHidden(granted, currentResult, showMetricsWithoutData)) return
     val locale = LocalLocale.current.platformLocale
+    val decimalFormat =
+        remember(locale) {
+            NumberFormat.getNumberInstance(locale).apply {
+                minimumFractionDigits = 2
+                maximumFractionDigits = 2
+            }
+        }
     MetricCardContainer(
         title = stringResource(id = R.string.home_distance_title),
         accentColor = DistanceAccent,
@@ -726,7 +736,7 @@ private fun DistanceCard(
                     Text(text = stringResource(id = R.string.home_no_data))
                 } else {
                     Text(
-                        text = stringResource(id = R.string.home_distance_value, String.format(locale, "%.2f", total)),
+                        text = stringResource(id = R.string.home_distance_value, decimalFormat.format(total)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                 }
