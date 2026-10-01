@@ -22,6 +22,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.screen.detail.ActiveCaloriesDetailScreen
 import com.yskms.healthdataviewer.screen.detail.DistanceDetailScreen
 import com.yskms.healthdataviewer.screen.detail.HeartRateDetailScreen
+import com.yskms.healthdataviewer.screen.detail.RestingHeartRateDetailScreen
 import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
 import com.yskms.healthdataviewer.screen.detail.StepsDetailScreen
 import com.yskms.healthdataviewer.screen.detail.TotalCaloriesDetailScreen
@@ -65,6 +66,7 @@ private const val ROUTE_HOME = "home"
 private const val ROUTE_WEIGHT_DETAIL = "weight_detail"
 private const val ROUTE_STEPS_DETAIL = "steps_detail"
 private const val ROUTE_HEART_RATE_DETAIL = "heart_rate_detail"
+private const val ROUTE_RESTING_HEART_RATE_DETAIL = "resting_heart_rate_detail"
 private const val ROUTE_SLEEP_DETAIL = "sleep_detail"
 private const val ROUTE_DISTANCE_DETAIL = "distance_detail"
 private const val ROUTE_ACTIVE_CALORIES_DETAIL = "active_calories_detail"
@@ -117,6 +119,10 @@ private fun MainNavHost(
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_HEART_RATE_DETAIL)
                 },
+                onOpenRestingHeartRateGraph = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_RESTING_HEART_RATE_DETAIL)
+                },
                 onOpenSleepGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_SLEEP_DETAIL)
@@ -159,6 +165,13 @@ private fun MainNavHost(
         }
         composable(ROUTE_HEART_RATE_DETAIL) {
             HeartRateDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_RESTING_HEART_RATE_DETAIL) {
+            RestingHeartRateDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

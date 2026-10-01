@@ -12,6 +12,7 @@ import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
@@ -277,6 +278,141 @@ class HealthConnectManager(context: Context) {
         ) {
             is HistoryFallbackOutcome.Success -> WeightAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> WeightAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: Resting Heart Rateを追加。RestingHeartRateRecordは
+    // HeartRateRecordと異なりサンプル配列を持たない単一時刻・単一値のレコード（InstantaneousRecord、
+    // beatsPerMinuteはLong）で、requirements.md §22.2の通り公式の重複処理もない。構造としては
+    // WeightRecord（単一時刻・単一値、重複処理なし）と同じため、Weight用の4関数
+    // （weightRecordsPagingSource/findOldestWeightRecordTime/findLatestWeightRecords/
+    // readWeightAggregates）をそのまま踏襲する。weight.inKilogramsのような単位変換が無い点のみ
+    // HeartRateRecordのBPM_AVG/BPM_MIN/BPM_MAX（AggregateMetric<Long>）と同じ（D-044）。
+    fun restingHeartRateRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<RestingHeartRateRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = RestingHeartRateRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestWeightRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestRestingHeartRateRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = RestingHeartRateRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.time
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // WBS 6.10: ホーム画面のResting Heart Rateカード（「最新値＋前回比」、期間タブに依存しない）用。
+    // findLatestWeightRecords()と同じ形・同じ理由（D-044）。Heart Rateカード（選択期間の平均・最小・
+    // 最大、readHeartRateAggregateSummary()）とは異なり、Resting Heart Rateは安静時に日1回程度
+    // 記録されることが多い（Weightと同じ記録頻度のプロファイル）ため、期間タブごとのAggregateではなく
+    // Weightと同じ「最新値＋前回比」を採用した。
+    suspend fun findLatestRestingHeartRateRecords(limit: Int, historyPermissionGranted: Boolean): RestingHeartRateRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<RestingHeartRateRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = RestingHeartRateRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                RestingHeartRateRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> RestingHeartRateRecordsResult.Failure
+        }
+    }
+
+    // readWeightAggregates()と同じ形。metricsだけRestingHeartRateRecord.BPM_AVG/BPM_MIN/BPM_MAXに
+    // 差し替える（HeartRateRecordと同じAggregateMetric<Long>のため単位変換は不要）。
+    suspend fun readRestingHeartRateAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): RestingHeartRateAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics =
+                        setOf(RestingHeartRateRecord.BPM_AVG, RestingHeartRateRecord.BPM_MIN, RestingHeartRateRecord.BPM_MAX),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                RestingHeartRateAggregateBucket(
+                    periodStart = grouped.startTime,
+                    average = grouped.result[RestingHeartRateRecord.BPM_AVG],
+                    min = grouped.result[RestingHeartRateRecord.BPM_MIN],
+                    max = grouped.result[RestingHeartRateRecord.BPM_MAX],
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                RestingHeartRateAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> RestingHeartRateAggregatesResult.Failure
         }
     }
 
@@ -1211,8 +1347,9 @@ class HealthConnectManager(context: Context) {
             TotalCaloriesAggregateTotalResult.Failure
         }
 
-    // WBS 6.4（WBS 6.10でDistance・Active Calories・Total Caloriesも追加）: 詳細画面のSourcesタブ用
-    // （Weight/Steps/Sleep/Distance/Calories共通。recordType以外の処理が完全に同一のため、
+    // WBS 6.4（WBS 6.10でDistance・Active Calories・Total Calories、Resting Heart Rateも追加）:
+    // 詳細画面のSourcesタブ用（Weight/Steps/Sleep/Distance/Calories/Resting Heart Rate共通。
+    // recordType以外の処理が完全に同一のため、
     // データ型ごとの関数に分けず1つにまとめた。OldestRecordResultを1つに統合した方針（D-034(8)）と
     // 同じ考え方）。ソース別のレコード件数はAggregateでは取れない（requirements.md §7.2/§22.3）ため、
     // 全件走査して正確に数える。
@@ -1229,6 +1366,8 @@ class HealthConnectManager(context: Context) {
     // 確認済み（WBS 6.10、D-043）。一方ActiveCaloriesBurnedRecordはこの端末にデータを書き込むソースが
     // なく、構造が同じという理由による判断のまま、全件走査自体は未確認（要検証）。Stepsの全期間全件
     // 走査もWBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・メモリ増大なしを確認済み。
+    // RestingHeartRateRecordはWeightと同じ単一時刻・単一値（サンプル配列を持たない）の構造のため
+    // 同じ基準に該当する。Pixel 11実機（実データ）での全件走査の確認結果はWBS 6.10参照。
     //
     // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
     // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の

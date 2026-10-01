@@ -169,6 +169,11 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                     permission = HealthConnectPermissions.HEART_RATE_READ,
                 )
                 PermissionStatusRow(
+                    title = stringResource(id = R.string.home_resting_heart_rate_title),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.RESTING_HEART_RATE_READ,
+                )
+                PermissionStatusRow(
                     title = stringResource(id = R.string.home_sleep_title),
                     permissionsCheckState = permissionsCheckState,
                     permission = HealthConnectPermissions.SLEEP_READ,
@@ -195,6 +200,7 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                                 add(HealthConnectPermissions.WEIGHT_READ)
                                 add(HealthConnectPermissions.STEPS_READ)
                                 add(HealthConnectPermissions.HEART_RATE_READ)
+                                add(HealthConnectPermissions.RESTING_HEART_RATE_READ)
                                 add(HealthConnectPermissions.SLEEP_READ)
                                 add(HealthConnectPermissions.DISTANCE_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)

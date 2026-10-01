@@ -48,6 +48,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
+import com.yskms.healthdataviewer.healthconnect.RestingHeartRateRecordsResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.TotalCaloriesAggregateTotalResult
@@ -59,6 +60,7 @@ import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.ActiveCaloriesAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
+import com.yskms.healthdataviewer.ui.theme.RestingHeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
 import com.yskms.healthdataviewer.ui.theme.TotalCaloriesAccent
@@ -165,6 +167,7 @@ fun HomeScreen(
     onOpenWeightGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSteps: (historyPermissionGranted: Boolean) -> Unit,
     onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenRestingHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSleepGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenDistance: (historyPermissionGranted: Boolean) -> Unit,
     onOpenActiveCalories: (historyPermissionGranted: Boolean) -> Unit,
@@ -241,6 +244,7 @@ fun HomeScreen(
                 val weightGranted = permissionsCheckState.isGranted(HealthConnectPermissions.WEIGHT_READ)
                 val stepsGranted = permissionsCheckState.isGranted(HealthConnectPermissions.STEPS_READ)
                 val heartRateGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HEART_RATE_READ)
+                val restingHeartRateGranted = permissionsCheckState.isGranted(HealthConnectPermissions.RESTING_HEART_RATE_READ)
                 val sleepGranted = permissionsCheckState.isGranted(HealthConnectPermissions.SLEEP_READ)
                 val distanceGranted = permissionsCheckState.isGranted(HealthConnectPermissions.DISTANCE_READ)
                 val activeCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.ACTIVE_CALORIES_READ)
@@ -251,6 +255,7 @@ fun HomeScreen(
                         weightGranted,
                         stepsGranted,
                         heartRateGranted,
+                        restingHeartRateGranted,
                         sleepGranted,
                         distanceGranted,
                         activeCaloriesGranted,
@@ -264,6 +269,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.WEIGHT_READ)
                                     add(HealthConnectPermissions.STEPS_READ)
                                     add(HealthConnectPermissions.HEART_RATE_READ)
+                                    add(HealthConnectPermissions.RESTING_HEART_RATE_READ)
                                     add(HealthConnectPermissions.SLEEP_READ)
                                     add(HealthConnectPermissions.DISTANCE_READ)
                                     add(HealthConnectPermissions.ACTIVE_CALORIES_READ)
@@ -321,6 +327,17 @@ fun HomeScreen(
                 LaunchedEffect(weightGranted, historyPermissionGranted, resumeKey) {
                     if (weightGranted != true) return@LaunchedEffect
                     weightLoad = healthConnectManager.findLatestWeightRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                }
+
+                // Resting Heart Rateカード（WBS 6.10、D-044）: WeightCardと同じ「最新値＋前回比」
+                // （期間タブに依存しない）。Heart Rateカードが選択期間のAggregate平均・最小・最大を
+                // 使うのに対し、Resting Heart Rateは安静時に日1回程度しか記録されないことが多く、
+                // Weightと同じ記録頻度のプロファイルのためこのパターンを採用した。
+                var restingHeartRateLoad by remember { mutableStateOf<RestingHeartRateRecordsResult?>(null) }
+                LaunchedEffect(restingHeartRateGranted, historyPermissionGranted, resumeKey) {
+                    if (restingHeartRateGranted != true) return@LaunchedEffect
+                    restingHeartRateLoad =
+                        healthConnectManager.findLatestRestingHeartRateRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -424,6 +441,12 @@ fun HomeScreen(
                         isWeightCardHidden(weightGranted, weightLoad, historyFeatureAvailable, showMetricsWithoutData) &&
                         isStepsCardHidden(stepsGranted, stepsResult, showMetricsWithoutData) &&
                         isHeartRateCardHidden(heartRateGranted, heartRateResult, showMetricsWithoutData) &&
+                        isRestingHeartRateCardHidden(
+                            restingHeartRateGranted,
+                            restingHeartRateLoad,
+                            historyFeatureAvailable,
+                            showMetricsWithoutData,
+                        ) &&
                         isSleepCardHidden(sleepGranted, sleepResult, showMetricsWithoutData) &&
                         isDistanceCardHidden(distanceGranted, distanceResult, showMetricsWithoutData) &&
                         isActiveCaloriesCardHidden(activeCaloriesGranted, activeCaloriesResult, showMetricsWithoutData) &&
@@ -454,6 +477,14 @@ fun HomeScreen(
                     currentResult = heartRateResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenHeartRateGraph(historyPermissionGranted) },
+                )
+                RestingHeartRateCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = restingHeartRateGranted,
+                    load = restingHeartRateLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenRestingHeartRateGraph(historyPermissionGranted) },
                 )
                 SleepCard(
                     permissionsCheckState = permissionsCheckState,
@@ -562,6 +593,19 @@ private fun isWeightCardHidden(
     !showMetricsWithoutData &&
         granted == true &&
         load is WeightRecordsResult.Success &&
+        load.records.isEmpty() &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+// isWeightCardHidden()と同じ理由・同じ形（D-044。WeightCardと同じ「最新値＋前回比」パターンのため）。
+private fun isRestingHeartRateCardHidden(
+    granted: Boolean?,
+    load: RestingHeartRateRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is RestingHeartRateRecordsResult.Success &&
         load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
@@ -748,6 +792,56 @@ private fun HeartRateCard(
     }
 }
 
+// WeightCardと同じ形（D-044。「最新値＋前回比」、beatsPerMinuteはLongのため.inKilogramsのような
+// 単位変換・小数書式は不要）。
+@Composable
+private fun RestingHeartRateCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    load: RestingHeartRateRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isRestingHeartRateCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_resting_heart_rate_title),
+        accentColor = RestingHeartRateAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            load == null -> Text(text = stringResource(id = R.string.home_loading))
+            load is RestingHeartRateRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is RestingHeartRateRecordsResult.Success -> {
+                val records = load.records
+                val latest = records.firstOrNull()
+                if (latest == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_resting_heart_rate_value, latest.beatsPerMinute),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    val previous = records.getOrNull(1)
+                    if (previous != null) {
+                        val diffBpm = latest.beatsPerMinute - previous.beatsPerMinute
+                        Text(
+                            text = stringResource(id = R.string.home_resting_heart_rate_delta, formatSignedBpm(diffBpm)),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                // WeightCardのhistoryLimited通知と同じ理由（期間タブに依存しないカードのため、
+                // DashboardPeriod.isHistoryLimited()では検知できない）。
+                if (load.historyLimited && historyFeatureAvailable != false) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SleepCard(
     permissionsCheckState: PermissionsCheckState,
@@ -926,3 +1020,11 @@ private fun formatSignedKg(diffKg: Double, locale: Locale): String {
         }
     return sign + String.format(locale, "%.2f", kotlin.math.abs(rounded))
 }
+
+// formatSignedKg()と同じ役割。beatsPerMinuteは既にLong（丸め誤差が無い）のため、丸め処理は不要。
+private fun formatSignedBpm(diffBpm: Long): String =
+    when {
+        diffBpm > 0 -> "+$diffBpm"
+        diffBpm < 0 -> "-${-diffBpm}"
+        else -> "±0"
+    }

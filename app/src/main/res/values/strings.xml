@@ -29,6 +29,9 @@
     <string name="home_heart_rate_title">Heart Rate</string>
     <string name="home_heart_rate_value">%1$d bpm avg</string>
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
+    <string name="home_resting_heart_rate_title">Resting Heart Rate</string>
+    <string name="home_resting_heart_rate_value">%1$d bpm</string>
+    <string name="home_resting_heart_rate_delta">vs. previous: %1$s bpm</string>
     <string name="home_sleep_title">Sleep</string>
     <string name="home_sleep_average_per_day_notice">Average per day for this period</string>
     <string name="home_distance_title">Distance</string>
@@ -95,6 +98,8 @@
     <string name="detail_heart_rate_title">Heart rate</string>
     <string name="detail_heart_rate_aggregation_avg">Aggregation: %1$s average / min / max bpm (official Aggregate API)</string>
     <string name="detail_heart_rate_measurement_count">Measurements in this period (samples, not records): %1$s</string>
+    <string name="detail_resting_heart_rate_title">Resting heart rate</string>
+    <string name="detail_resting_heart_rate_aggregation_avg">Aggregation: %1$s average / min / max bpm (official Aggregate API)</string>
     <string name="detail_sleep_title">Sleep</string>
     <string name="detail_sleep_aggregation_total">Aggregation: %1$s total sleep duration (official Aggregate API, Sleep dedup applies)</string>
     <string name="detail_sleep_aggregation_avg_per_day">Aggregation: %1$s average sleep duration per day (official Aggregate API, Sleep dedup applies)</string>

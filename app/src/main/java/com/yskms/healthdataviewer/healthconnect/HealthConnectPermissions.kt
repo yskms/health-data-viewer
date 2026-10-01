@@ -4,6 +4,7 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
@@ -24,6 +25,7 @@ object HealthConnectPermissions {
     val WEIGHT_READ: String = HealthPermission.getReadPermission(WeightRecord::class)
     val STEPS_READ: String = HealthPermission.getReadPermission(StepsRecord::class)
     val HEART_RATE_READ: String = HealthPermission.getReadPermission(HeartRateRecord::class)
+    val RESTING_HEART_RATE_READ: String = HealthPermission.getReadPermission(RestingHeartRateRecord::class)
     val SLEEP_READ: String = HealthPermission.getReadPermission(SleepSessionRecord::class)
     val DISTANCE_READ: String = HealthPermission.getReadPermission(DistanceRecord::class)
     val ACTIVE_CALORIES_READ: String = HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)

@@ -29,6 +29,9 @@
     <string name="home_heart_rate_title">心拍数</string>
     <string name="home_heart_rate_value">平均 %1$d bpm</string>
     <string name="home_heart_rate_range">%1$d–%2$d bpm</string>
+    <string name="home_resting_heart_rate_title">安静時心拍数</string>
+    <string name="home_resting_heart_rate_value">%1$d bpm</string>
+    <string name="home_resting_heart_rate_delta">前回比: %1$s bpm</string>
     <string name="home_sleep_title">睡眠</string>
     <string name="home_sleep_average_per_day_notice">この期間の1日あたり平均</string>
     <string name="home_distance_title">距離</string>
@@ -94,6 +97,8 @@
     <string name="detail_heart_rate_title">心拍数</string>
     <string name="detail_heart_rate_aggregation_avg">集計方法: %1$s平均・最小・最大bpm（Health Connect公式Aggregate API）</string>
     <string name="detail_heart_rate_measurement_count">期間内の測定数（サンプル数。レコード数ではない）: %1$s</string>
+    <string name="detail_resting_heart_rate_title">安静時心拍数</string>
+    <string name="detail_resting_heart_rate_aggregation_avg">集計方法: %1$s平均・最小・最大bpm（Health Connect公式Aggregate API）</string>
     <string name="detail_sleep_title">睡眠</string>
     <string name="detail_sleep_aggregation_total">集計方法: %1$s合計睡眠時間（Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
     <string name="detail_sleep_aggregation_avg_per_day">集計方法: %1$s平均睡眠時間（1日あたり、Health Connect公式Aggregate API、Sleepの重複処理あり）</string>
