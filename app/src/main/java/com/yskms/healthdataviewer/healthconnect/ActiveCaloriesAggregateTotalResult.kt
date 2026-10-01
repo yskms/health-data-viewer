@@ -8,7 +8,9 @@ sealed interface ActiveCaloriesAggregateTotalResult {
     // 仕様）。ただしTotalCaloriesBurnedRecord.ENERGY_TOTALでは、レコードが1件もない期間でも非null値
     // （推計値と見られる）が返ることを実機で確認している（TotalCaloriesAggregateTotalResult.kt参照）。
     // ACTIVE_CALORIES_TOTALで同じことが起きるかは、この端末にActiveCaloriesBurnedRecordのデータが
-    // なく未確認のまま（要検証、lessons.md 6.25）。
+    // なく未確認のまま（要検証、lessons.md 6.26）。確認が取れるまでは、Total Caloriesで入れた
+    // hasAnyRecord()による実レコード確認（readTotalCaloriesAggregateTotal()参照）は、根拠のない
+    // ガードを増やさないため、こちらにはあえて追加していない。
     data class Success(val totalKilocalories: Double?) : ActiveCaloriesAggregateTotalResult
 
     data object Failure : ActiveCaloriesAggregateTotalResult

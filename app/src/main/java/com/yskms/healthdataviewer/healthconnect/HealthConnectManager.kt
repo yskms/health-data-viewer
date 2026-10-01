@@ -941,16 +941,22 @@ class HealthConnectManager(context: Context) {
     // 逆アセンブル出力には現れず、.classバイナリの文字列直接検索（grep -a）で確認した
     // （HealthConnectPermissions.kt参照、D-043(5)）。
     //
-    // **要検証（レビュー指摘、2026-10-01に簡易確認）**: TotalCaloriesBurnedRecord.ENERGY_TOTALは、
-    // 実際のレコードが1件も存在しない期間（2010年の1日分でAggregateを試した）でもnullではなく
-    // 非null値（約1,565kcal）を返した。これは「レコードが無ければnull」（他のAggregateMetricと
-    // 共通の前提、readDistanceAggregateTotal()等のコメント参照）が本メトリクスには当てはまらない
-    // 可能性を示す。Android 14+のプラットフォーム側でActive Calories・基礎代謝（BMR）等から
-    // 推計値を補っていると見られるが、根拠資料は未確認。一方、実際にレコードがある日（単一ソース）
-    // ではAggregateとRaw合計が完全に一致することも確認した（按分・重複処理らしき差分はこの1日・
-    // 1ソースの範囲では見られなかった）。この挙動により、「データがない項目は非表示」設定
-    // （isTotalCaloriesCardHidden()）が意図通りに機能しない可能性がある（totalKilocalories==null
-    // にならないため）。詳細はlessons.md 6.25、requirements.md §27参照
+    // **TotalCaloriesBurnedRecord.ENERGY_TOTALは「レコードが無ければnull」という他のAggregateMetric
+    // 共通の前提（readDistanceAggregateTotal()等のコメント参照）に従わない**（レビュー指摘を受けて
+    // 実機確認、2026-10-01）。実際のレコードが1件も存在しない期間（2010年の1日分でAggregateを試した）
+    // でもnullではなく非null値（約1,565kcal）を返した。Android 14+のプラットフォーム側でActive
+    // Calories・基礎代謝（BMR）等から推計値を補っていると見られるが、根拠資料は未確認。この挙動を
+    // 放置すると「データがない項目は非表示」設定（isTotalCaloriesCardHidden()）が機能せず、
+    // Records/Sourcesタブには何もないのにホームのカードやグラフには値が出る、という食い違いが起きる
+    // ため、readTotalCaloriesAggregateTotal()/readTotalCaloriesAggregates()ではAggregateを信用する前に
+    // hasAnyRecord()で範囲内の実レコードの有無を確認し、無ければnullとして扱う（hasAnyRecord()の
+    // コメント参照）。
+    //
+    // 一方、実際にレコードがある日は、単一ソースに絞ったAggregateとRaw合計が完全に一致することも
+    // 確認した。ただしこの確認は「24時間すべてレコードで埋まっている1日」「dataOriginFilterで1ソースに
+    // 絞った」という狭い条件でのものに限る。ソースを絞らない通常の呼び出し（ホーム画面・Chartが
+    // 実際に使う形）や、レコードが一部だけ欠けた日（ソースが途中で止まった日等）で、推計による水増しが
+    // 混ざらず一致し続けるかは確認できていない（要検証）。詳細はlessons.md 6.26、requirements.md §27参照
 
     // findOldestDistanceRecordTime()と同じ理由・同じ形。
     suspend fun findOldestActiveCaloriesRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
@@ -1120,7 +1126,17 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // readDistanceAggregates()と同じ形（詳細画面のTotal Caloriesグラフ用）。
+    // readDistanceAggregates()と同じ形（詳細画面のTotal Caloriesグラフ用）。readTotalCaloriesAggregateTotal()
+    // と異なり、bucketごとのhasAnyRecord()チェックは**意図的に入れていない**。実機で計測したところ、
+    // ALL期間（MONTH bucket、43個）のaggregateGroupByPeriod()自体が単独で約77秒かかっており（System.
+    // currentTimeMillis()で計測、一時的な診断コードは確認後に削除済み）、これはHeart Rateの既知の遅さ
+    // （ALL期間96秒、lessons.md 6.12）に匹敵する。bucket数ではなく問い合わせ範囲の実データ量が主要因と
+    // 見られる点もHeart Rateと同じ（約17万件・2ソース・3.5年分）。この時点で既に「致命的に遅い」状態の
+    // 操作に、bucketの数だけreadRecords(pageSize = 1)を追加するのは、coroutineScope + asyncで並行化しても
+    // 悪化させるだけと判断し、見送った（実際に試した際は合計で45秒前後だったが、この77秒という値も
+    // 含め実行のたびに大きくばらつき、安定した計測ができなかった。要検証、lessons.md 6.26）。そのため、
+    // 記録が1件もないbucketでも（readTotalCaloriesAggregateTotal()と異なり）Aggregateの値をそのまま使う。
+    // 記録のないbucketが「記録があるように」描画され得る問題はChart側では未解消のまま残っている。
     suspend fun readTotalCaloriesAggregates(
         timeRangeFilter: TimeRangeFilter,
         bucket: Period,
@@ -1159,17 +1175,22 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // readDistanceAggregateTotal()と同じ形（ホーム画面のTotal Caloriesカード用）。
+    // readDistanceAggregateTotal()と同じ形（ホーム画面のTotal Caloriesカード用）。hasAnyRecord()による
+    // 実レコード有無の確認を挟む理由はhasAnyRecord()のコメント・lessons.md 6.26参照。
     suspend fun readTotalCaloriesAggregateTotal(timeRangeFilter: TimeRangeFilter): TotalCaloriesAggregateTotalResult =
         try {
-            val result =
-                client.aggregate(
-                    AggregateRequest(
-                        metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL),
-                        timeRangeFilter = timeRangeFilter,
-                    ),
-                )
-            TotalCaloriesAggregateTotalResult.Success(totalKilocalories = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories)
+            if (!hasAnyRecord(TotalCaloriesBurnedRecord::class, timeRangeFilter)) {
+                TotalCaloriesAggregateTotalResult.Success(totalKilocalories = null)
+            } else {
+                val result =
+                    client.aggregate(
+                        AggregateRequest(
+                            metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL),
+                            timeRangeFilter = timeRangeFilter,
+                        ),
+                    )
+                TotalCaloriesAggregateTotalResult.Success(totalKilocalories = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories)
+            }
         } catch (e: RemoteException) {
             TotalCaloriesAggregateTotalResult.Failure
         } catch (e: IOException) {
@@ -1225,6 +1246,25 @@ class HealthConnectManager(context: Context) {
     // レコード自体は保持しない走査」（Raw一覧のページング表示化後の代替案）をここで実装する。
     // Map<DataOrigin, Long>（ソース数程度の小さいサイズ）だけを保持し、ページごとのレコードリストは
     // カウントに使ったらその場で破棄する（Stepsのような数十万件規模でも安全なことをlessons.md 6.19で確認済み）。
+    // レビュー指摘（2026-10-01、lessons.md 6.26）: TotalCaloriesBurnedRecord.ENERGY_TOTALは、
+    // 問い合わせ範囲に実レコードが1件もなくても非null値（推計値と見られる）を返すことがある。
+    // readRecords(pageSize = 1)でその範囲に実レコードが1件でも存在するかを安価に確認し、無ければ
+    // Aggregateの値を信用せずnullとして扱う（readTotalCaloriesAggregateTotal()参照）。推計がどんな
+    // 条件で発生するかは非公開のプラットフォーム実装のため分からないが、このチェック自体は「実レコード
+    // の有無」という事実に基づくため、発生条件が分からなくても正しく働く。ActiveCaloriesBurnedRecordでも
+    // 同じ推計が起きるかは未確認（lessons.md 6.26）だが、Aggregateがnull同士で見えた範囲では問題は
+    // 観測されていないため、根拠のないガードを足すのは避け、この端末で確認できたTotalCaloriesBurnedRecord
+    // にのみ適用する。
+    //
+    // **bucketごとのAggregate（readTotalCaloriesAggregates()、詳細画面のChart用）には、このガードを
+    // 意図的に適用していない**。1回の呼び出しで済むreadTotalCaloriesAggregateTotal()と異なり、Chartは
+    // bucket数（ALL期間・MONTH粒度で約42個）だけこの関数を追加で呼ぶ必要がある。ALL期間はこのガードを
+    // 入れる前の時点で既にaggregateGroupByPeriod()自体が単独で約77秒かかっており（実機計測、詳細は
+    // readTotalCaloriesAggregates()のコメント）、その上にbucket数分のreadRecords(pageSize = 1)を
+    // 追加するのは、coroutineScope + asyncで並行化しても悪化させるだけと判断し見送った。
+    private suspend fun <T : Record> hasAnyRecord(recordType: KClass<T>, filter: TimeRangeFilter): Boolean =
+        client.readRecords(ReadRecordsRequest(recordType = recordType, timeRangeFilter = filter, pageSize = 1)).records.isNotEmpty()
+
     private suspend fun <T : Record> countBySource(recordType: KClass<T>, filter: TimeRangeFilter): Map<DataOrigin, Long> {
         val counts = mutableMapOf<DataOrigin, Long>()
         var pageToken: String? = null

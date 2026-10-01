@@ -595,10 +595,11 @@ private fun isActiveCaloriesCardHidden(
         currentResult.totalKilocalories == null
 
 // レビュー指摘: TotalCaloriesAggregateTotalResult.Successのコメント参照。ENERGY_TOTALはレコードが
-// 1件もない期間でも非null値（推計値と見られる）を返すことがあると実機で確認しており、
-// totalKilocalories == nullを「データなし」とみなすこの判定が意図通り機能しない可能性がある
-// （要検証、lessons.md 6.25）。他のisXxxCardHidden()と形を揃えるため、判定ロジック自体は変更せず
-// 残しているが、確認が取れるまで動作を過信しないこと。
+// 1件もない期間でも非null値（推計値と見られる）を返すことがあると実機で確認したため、
+// HealthConnectManager.readTotalCaloriesAggregateTotal()側でhasAnyRecord()による実レコード確認を
+// 挟み、実レコードが無ければtotalKilocaloriesをnullにするよう修正済み（lessons.md 6.26）。
+// この判定自体は他のisXxxCardHidden()と同じtotalKilocalories == nullのままで変更していないが、
+// 呼び出し元のAggregateが上記の理由で信頼できる値を返すようになったため、意図通り機能する。
 private fun isTotalCaloriesCardHidden(
     granted: Boolean?,
     currentResult: TotalCaloriesAggregateTotalResult?,
@@ -831,9 +832,7 @@ private fun DistanceCard(
 // ACTIVE_CALORIES_TOTALはkcalへ変換済み（HealthConnectManager.readActiveCaloriesAggregateTotal()参照）。
 // DistanceCardのkm（小数2桁）とは異なり、kcal合計は歩数と同じく小数の意味が薄いため、StepsCardと同じ
 // 桁区切り付き整数表示にする（D-043(4)）。グラフ側（ActiveCaloriesAggregateChart）の縦軸・マーカーは
-// Vicoの既定書式のままで、この桁区切り整数化はしていない（Steps/Distanceの既存Chartと同じ扱いで
-// 回帰ではないが、D-043(4)・wbs.md 6.10の「グラフも桁区切り付き整数」という記述はカード限定の話として
-// 読み替えること）。
+// Vicoの既定書式のままで、この桁区切り整数化はしていない（Steps/Distanceの既存Chartと同じ扱い）。
 @Composable
 private fun ActiveCaloriesCard(
     permissionsCheckState: PermissionsCheckState,
