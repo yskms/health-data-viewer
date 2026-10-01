@@ -2,7 +2,6 @@ package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -188,11 +187,10 @@ fun StepsDetailScreen(
             }
         }
 
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val availableHeight = maxHeight
+        Box(modifier = Modifier.weight(1f)) {
             when (tab) {
                 DetailTab.CHART ->
-                    ChartTabColumn(fullScreenChart = fullScreenChart) {
+                    ChartTabColumn(fullScreenChart = fullScreenChart) { availableHeight ->
                         PeriodTabs(period = period, onPeriodChange = { period = it })
                         if (period == GraphPeriod.CUSTOM) {
                             CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
@@ -230,7 +228,15 @@ fun StepsDetailScreen(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
                                     denominatorFloor = currentStepsLoad.denominatorFloor,
-                                    modifier = Modifier.fillMaxWidth().height(detailChartHeight(fullScreenChart, availableHeight)),
+                                    modifier =
+                                        Modifier.fillMaxWidth().height(
+                                            detailChartHeight(
+                                                fullScreenChart = fullScreenChart,
+                                                availableHeight = availableHeight,
+                                                historyLimited = currentResult.historyLimited,
+                                                isCustomPeriod = period == GraphPeriod.CUSTOM,
+                                            ),
+                                        ),
                                 )
                             }
                         }

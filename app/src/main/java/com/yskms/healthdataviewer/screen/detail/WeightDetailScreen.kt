@@ -2,7 +2,6 @@ package com.yskms.healthdataviewer.screen.detail
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -170,11 +169,11 @@ fun WeightDetailScreen(
     // システム戻る操作（ジェスチャー／ボタン）で画面を抜けられるため、専用の戻るUIは設けない。
     val fullScreenChart = isLandscapeOrientation() && tab == DetailTab.CHART
 
-    // WBS 6.3: Chart（verticalScroll付きColumn）とRecords（LazyColumn）はスクロール戦略が異なるため、
-    // 同じColumnに両方を入れられない（verticalScrollの親は子に無限大の高さ制約を与え、内側の
-    // LazyColumnが測定できずクラッシュ、または全件を一度にコンポーズしてしまいPaging3の目的が
-    // 無効化される）。タブ切替部分の下をBox(Modifier.weight(1f))で高さ確定した領域にし、
-    // タブごとに別のスクロール可能コンポーザブルを切り替えて配置する。
+    // WBS 6.3: Chart（verticalScroll付きColumn、ChartTabColumn参照）とRecords（LazyColumn）はスクロール
+    // 戦略が異なるため、同じColumnに両方を入れられない（verticalScrollの親は子に無限大の高さ制約を与え、
+    // 内側のLazyColumnが測定できずクラッシュ、または全件を一度にコンポーズしてしまいPaging3の目的が
+    // 無効化される）。タブ切替部分の下をBox(Modifier.weight(1f))で高さ確定した領域にし、タブごとに別の
+    // スクロール可能コンポーザブルを切り替えて配置する。
     Column(modifier = modifier.fillMaxSize()) {
         if (!fullScreenChart) {
             Column(modifier = Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -189,11 +188,10 @@ fun WeightDetailScreen(
             }
         }
 
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val availableHeight = maxHeight
+        Box(modifier = Modifier.weight(1f)) {
             when (tab) {
                 DetailTab.CHART ->
-                    ChartTabColumn(fullScreenChart = fullScreenChart) {
+                    ChartTabColumn(fullScreenChart = fullScreenChart) { availableHeight ->
                         PeriodTabs(period = period, onPeriodChange = { period = it })
                         if (period == GraphPeriod.CUSTOM) {
                             CustomRangePicker(range = customRange, onRangeChange = { customRange = it })
@@ -230,7 +228,15 @@ fun WeightDetailScreen(
                                 WeightAggregateChart(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
-                                    modifier = Modifier.fillMaxWidth().height(detailChartHeight(fullScreenChart, availableHeight)),
+                                    modifier =
+                                        Modifier.fillMaxWidth().height(
+                                            detailChartHeight(
+                                                fullScreenChart = fullScreenChart,
+                                                availableHeight = availableHeight,
+                                                historyLimited = currentResult.historyLimited,
+                                                isCustomPeriod = period == GraphPeriod.CUSTOM,
+                                            ),
+                                        ),
                                 )
                             }
                         }

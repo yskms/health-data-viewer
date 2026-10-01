@@ -2,6 +2,7 @@ package com.yskms.healthdataviewer.screen.detail
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -64,38 +65,56 @@ fun OldestRecordInfo(oldestResult: OldestRecordResult?) {
 @Composable
 fun isLandscapeOrientation(): Boolean = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-// WBS 6.5（レビュー指摘への対応）: Chartタブの外側Column（全画面時はpaddingを狭める）は4データ型の
-// DetailScreenで同一のため共通化した。全画面時も含め常にverticalScrollを付けたままにする（後述の
-// 高さ見積もりが外れた場合の安全弁。verticalScrollとModifier.weight()は同居できないため、グラフ本体の
-// 高さは`detailChartHeight()`で明示的に計算する方式にしている）。
+// Chartタブの外側Column（全画面時はpaddingを狭める）は4データ型のDetailScreenで同一のため共通化した。
+// 全画面時も含め常にverticalScrollを付けたままにする（detailChartHeight()の見積もりが外れた場合の
+// 安全弁）。`Modifier.weight()`は使わない: verticalScroll付きColumnの子は無限大の高さ制約を受けるため、
+// weight()と同居できない（Composeの制約）。グラフの高さは、ここで取得した利用可能高さ（`maxHeight`）を
+// contentに渡し、呼び出し側がdetailChartHeight()で計算する。BoxWithConstraints（SubcomposeLayout）は
+// Chartタブの中でのみ使い、Records（LazyColumn）・Sourcesタブまで巻き込まない。
 @Composable
-fun ChartTabColumn(fullScreenChart: Boolean, content: @Composable ColumnScope.() -> Unit) {
+fun ChartTabColumn(fullScreenChart: Boolean, content: @Composable ColumnScope.(availableHeight: Dp) -> Unit) {
     val horizontalPadding = if (fullScreenChart) 8.dp else 24.dp
-    Column(
-        modifier =
-            Modifier.fillMaxSize()
-                .padding(horizontal = horizontalPadding)
-                .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        content = content,
-    )
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val availableHeight = maxHeight
+        Column(
+            modifier =
+                Modifier.fillMaxSize()
+                    .padding(horizontal = horizontalPadding)
+                    .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            content(availableHeight)
+        }
+    }
 }
 
 private val PORTRAIT_CHART_HEIGHT = 240.dp
 private val FULLSCREEN_CHART_MIN_HEIGHT = 160.dp
+private val FULLSCREEN_ELEMENT_SPACING = 16.dp
+private val FULLSCREEN_PERIOD_TABS_HEIGHT = 48.dp
+private val FULLSCREEN_CAPTION_HEIGHT = 24.dp
+private val FULLSCREEN_NOTICE_HEIGHT = 24.dp
+private val FULLSCREEN_MEASUREMENT_COUNT_HEIGHT = 20.dp
+private val FULLSCREEN_CUSTOM_PICKER_HEIGHT = 56.dp
 
-// WBS 6.5（レビュー指摘への対応）: 全画面時、初版は`Modifier.weight(1f)`でグラフ本体を残り領域
-// いっぱいに広げていたが、`ChartTabColumn`はverticalScroll付きのため`weight()`とは同居できず、採用でき
-// ない（Composeの制約。ChartTabColumnのコメント参照）。代わりに、呼び出し元の`BoxWithConstraints`から
-// 渡される実際の利用可能高さ`availableHeight`から、期間タブ・Custom選択時のピッカー・集計方法の注記・
-// 履歴制限の注記・（HeartRateのみ）計測数テキストなどグラフ以外の要素が使うおおよその高さを差し引いて
-// グラフの高さを決める。この見積もり（140dp）は固定値で、実際の内訳（要素の有無・フォントサイズ設定）
-// によって過不足が出るが、ChartTabColumnのverticalScrollが安全弁になるため、正確な値である必要はない
-// （見積もりが小さすぎて余ればグラフの下に余白ができるだけ、大きすぎて足りなければスクロールすれば
-// 見える）。下限（160dp）も設け、極端に低い横画面（分割画面等）でもグラフの高さが0近くまで潰れることが
-// ないようにしている。
-fun detailChartHeight(fullScreenChart: Boolean, availableHeight: Dp): Dp =
-    if (fullScreenChart) (availableHeight - 140.dp).coerceAtLeast(FULLSCREEN_CHART_MIN_HEIGHT) else PORTRAIT_CHART_HEIGHT
+// 全画面時、グラフ本体は`availableHeight`から他の要素（期間タブ・集計方法の注記は常に表示、
+// historyLimitedの注記・Custom選択時のピッカー・HeartRateの計測数テキストは条件付きで表示）が使う
+// 高さを差し引いた分を使う。見積もりが外れてもChartTabColumnのverticalScrollが安全弁になるため、
+// 正確な値である必要はない（下限160dpも設け、極端に低い横画面でも0近くまで潰れないようにしている）。
+fun detailChartHeight(
+    fullScreenChart: Boolean,
+    availableHeight: Dp,
+    historyLimited: Boolean,
+    isCustomPeriod: Boolean,
+    showsMeasurementCount: Boolean = false,
+): Dp {
+    if (!fullScreenChart) return PORTRAIT_CHART_HEIGHT
+    var reserved = FULLSCREEN_PERIOD_TABS_HEIGHT + FULLSCREEN_ELEMENT_SPACING + FULLSCREEN_CAPTION_HEIGHT + FULLSCREEN_ELEMENT_SPACING
+    if (isCustomPeriod) reserved += FULLSCREEN_CUSTOM_PICKER_HEIGHT + FULLSCREEN_ELEMENT_SPACING
+    if (historyLimited) reserved += FULLSCREEN_NOTICE_HEIGHT + FULLSCREEN_ELEMENT_SPACING
+    if (showsMeasurementCount) reserved += FULLSCREEN_MEASUREMENT_COUNT_HEIGHT + FULLSCREEN_ELEMENT_SPACING
+    return (availableHeight - reserved).coerceAtLeast(FULLSCREEN_CHART_MIN_HEIGHT)
+}
 
 // WBS 6.3/6.4: Metric Detail画面のChart/Records/Sources（requirements.md §18）の3タブ。
 enum class DetailTab { CHART, RECORDS, SOURCES }
