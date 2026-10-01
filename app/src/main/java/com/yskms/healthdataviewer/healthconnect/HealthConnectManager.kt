@@ -947,10 +947,11 @@ class HealthConnectManager(context: Context) {
     // でもnullではなく非null値（約1,565kcal）を返した。Android 14+のプラットフォーム側でActive
     // Calories・基礎代謝（BMR）等から推計値を補っていると見られるが、根拠資料は未確認。この挙動を
     // 放置すると「データがない項目は非表示」設定（isTotalCaloriesCardHidden()）が機能せず、
-    // Records/Sourcesタブには何もないのにホームのカードやグラフには値が出る、という食い違いが起きる
-    // ため、readTotalCaloriesAggregateTotal()/readTotalCaloriesAggregates()ではAggregateを信用する前に
-    // hasAnyRecord()で範囲内の実レコードの有無を確認し、無ければnullとして扱う（hasAnyRecord()の
-    // コメント参照）。
+    // Records/Sourcesタブには何もないのにホームのカードには値が出る、という食い違いが起きるため、
+    // ホーム画面カード用のreadTotalCaloriesAggregateTotal()では、Aggregateを信用する前にhasAnyRecord()で
+    // 範囲内の実レコードの有無を確認し、無ければnullとして扱う。**詳細画面のグラフ用
+    // readTotalCaloriesAggregates()には、このガードを入れていない**（理由は同関数のコメント参照）。
+    // そのためグラフでは、この食い違いが未解消のまま残っている。
     //
     // 一方、実際にレコードがある日は、単一ソースに絞ったAggregateとRaw合計が完全に一致することも
     // 確認した。ただしこの確認は「24時間すべてレコードで埋まっている1日」「dataOriginFilterで1ソースに
@@ -1127,16 +1128,27 @@ class HealthConnectManager(context: Context) {
     }
 
     // readDistanceAggregates()と同じ形（詳細画面のTotal Caloriesグラフ用）。readTotalCaloriesAggregateTotal()
-    // と異なり、bucketごとのhasAnyRecord()チェックは**意図的に入れていない**。実機で計測したところ、
-    // ALL期間（MONTH bucket、43個）のaggregateGroupByPeriod()自体が単独で約77秒かかっており（System.
-    // currentTimeMillis()で計測、一時的な診断コードは確認後に削除済み）、これはHeart Rateの既知の遅さ
-    // （ALL期間96秒、lessons.md 6.12）に匹敵する。bucket数ではなく問い合わせ範囲の実データ量が主要因と
-    // 見られる点もHeart Rateと同じ（約17万件・2ソース・3.5年分）。この時点で既に「致命的に遅い」状態の
-    // 操作に、bucketの数だけreadRecords(pageSize = 1)を追加するのは、coroutineScope + asyncで並行化しても
-    // 悪化させるだけと判断し、見送った（実際に試した際は合計で45秒前後だったが、この77秒という値も
-    // 含め実行のたびに大きくばらつき、安定した計測ができなかった。要検証、lessons.md 6.26）。そのため、
-    // 記録が1件もないbucketでも（readTotalCaloriesAggregateTotal()と異なり）Aggregateの値をそのまま使う。
-    // 記録のないbucketが「記録があるように」描画され得る問題はChart側では未解消のまま残っている。
+    // と異なり、bucketごとのhasAnyRecord()チェックは**意図的に入れていない**。
+    //
+    // 実機で計測したところ、ALL期間（MONTH bucket、43個）のaggregateGroupByPeriod()自体が単独で約77秒
+    // かかった（System.currentTimeMillis()で計測、一時的な診断コードは確認後に削除済み）。これはHeart
+    // Rateの既知の遅さ（ALL期間96秒、lessons.md 6.12）に匹敵し、bucket数ではなく問い合わせ範囲の実
+    // データ量が主要因と見られる点もHeart Rateと同じ（約17万件・2ソース・3.5年分）。
+    //
+    // **このbucketごとのガードを実際に追加して試したところ合計約45秒、外した状態（上記）が約77秒と、
+    // 数字の上ではガードを入れたほうが速いという結果になった**。これはガードの効果を示すものではなく、
+    // 2回の計測の間で実行環境（端末の負荷・Health Connect側の状態等）が変わったことによる誤差と見られ、
+    // 「並行化しても悪化するだけ」という当初の判断根拠は誤りだった（レビュー指摘）。実際のところ、
+    // ガードを追加することの所要時間への影響は、計測が安定しないため確認できていない。それでも追加を
+    // 見送ったのは、素の状態で既に77秒という「致命的に遅い」操作に、bucket数分のIPC呼び出しを足す
+    // ことが改善につながる見込みが薄く、かつ正確な効果を計測で確認できない以上、確証のないまま追加する
+    // べきではないと判断したため（要検証、lessons.md 6.26）。
+    //
+    // 影響範囲: このグラフのALL期間は、すでにfindOldestTotalCaloriesRecordTime()で求めた最古レコード
+    // 時刻を開始点にしている（resolveDetailGraphRange()参照）ため、記録を始める前の期間がbucketとして
+    // 現れることはない。起こり得るのは、最古レコード〜現在の間で記録が途切れた日・週・月のbucketが、
+    // 実際には記録がないにもかかわらず値を描画してしまうことに限られる。そのため、記録が1件もない
+    // bucketでも（readTotalCaloriesAggregateTotal()と異なり）Aggregateの値をそのまま使う。
     suspend fun readTotalCaloriesAggregates(
         timeRangeFilter: TimeRangeFilter,
         bucket: Period,
@@ -1251,17 +1263,13 @@ class HealthConnectManager(context: Context) {
     // readRecords(pageSize = 1)でその範囲に実レコードが1件でも存在するかを安価に確認し、無ければ
     // Aggregateの値を信用せずnullとして扱う（readTotalCaloriesAggregateTotal()参照）。推計がどんな
     // 条件で発生するかは非公開のプラットフォーム実装のため分からないが、このチェック自体は「実レコード
-    // の有無」という事実に基づくため、発生条件が分からなくても正しく働く。ActiveCaloriesBurnedRecordでも
-    // 同じ推計が起きるかは未確認（lessons.md 6.26）だが、Aggregateがnull同士で見えた範囲では問題は
-    // 観測されていないため、根拠のないガードを足すのは避け、この端末で確認できたTotalCaloriesBurnedRecord
-    // にのみ適用する。
+    // の有無」という事実に基づくため、発生条件が分からなくても正しく働く。ActiveCaloriesBurnedRecordは
+    // この端末にデータがなく、同じ推計が起きるかどうかを確かめたこと自体がない（未確認。2010年等
+    // レコードのない期間でACTIVE_CALORIES_TOTALのAggregateを試せば、この端末でも確認できる）。
+    // 未確認のため、根拠のないガードは足さない（ActiveCaloriesAggregateTotalResult.kt参照）。
     //
     // **bucketごとのAggregate（readTotalCaloriesAggregates()、詳細画面のChart用）には、このガードを
-    // 意図的に適用していない**。1回の呼び出しで済むreadTotalCaloriesAggregateTotal()と異なり、Chartは
-    // bucket数（ALL期間・MONTH粒度で約42個）だけこの関数を追加で呼ぶ必要がある。ALL期間はこのガードを
-    // 入れる前の時点で既にaggregateGroupByPeriod()自体が単独で約77秒かかっており（実機計測、詳細は
-    // readTotalCaloriesAggregates()のコメント）、その上にbucket数分のreadRecords(pageSize = 1)を
-    // 追加するのは、coroutineScope + asyncで並行化しても悪化させるだけと判断し見送った。
+    // 意図的に適用していない**。詳しい経緯・判断理由はreadTotalCaloriesAggregates()のコメント参照。
     private suspend fun <T : Record> hasAnyRecord(recordType: KClass<T>, filter: TimeRangeFilter): Boolean =
         client.readRecords(ReadRecordsRequest(recordType = recordType, timeRangeFilter = filter, pageSize = 1)).records.isNotEmpty()
 
