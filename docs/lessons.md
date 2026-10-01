@@ -446,7 +446,7 @@
 -   **根拠**: 実機確認（Pixel 11、2026-10-01。D-039の(4)参照。選択→スクリーンショット→アプリ再起動→スクリーンショット→DataStoreファイルの直接確認、という手順で再現・特定した）
 -   **確認日**: 2026-10-01
 
-### 10.3 Activity再生成をまたぐ設定値は、Composition寿命のCoroutineScopeではなくプロセス寿命のrepositoryインスタンス＋`MutableStateFlow`で持つと、書き込みキャンセルと表示のちらつみの両方が一度に解消する
+### 10.3 Activity再生成をまたぐ設定値は、Composition寿命のCoroutineScopeではなくプロセス寿命のrepositoryインスタンス＋`MutableStateFlow`で持つと、書き込みキャンセルと表示のちらつきの両方が一度に解消する
 
 -   **知見**: 10.2の対策（書き込みを待ってから適用する）を入れた後も、2回目のコードレビューで次の2つの問題が残っていることが分かった。(1) 書き込みが依然として`rememberCoroutineScope()`（Settings画面のCompositionに紐づく）上で動いているため、設定を素早く連続変更すると、1回目の変更が引き起こすActivity再生成が2回目の書き込みを道連れにキャンセルする余地が残る。(2) `userSettingsRepository.settingsFlow.collectAsState(initial = AppSettings())`のように、冷たい`Flow`（`dataStore.data`）をハードコードした既定値と組み合わせてComposeに繋ぐと、Activity再生成のたびに（`MainActivity.onCreate()`で`UserSettingsRepository`を作り直していたため）新しいインスタンスが既定値から再スタートし、DataStoreからの最初の読み取りが届くまでの一瞬、実際の保存値と異なる表示になる（テーマ変更直後に選択が一瞬「System」に戻る、起動直後は表示指標トグルがOFFでも一瞬すべてのカードが表示される、など）。根本原因はどちらも「設定の状態をActivity・Compositionより短命な場所に置いていること」
 -   **Viewerへの適用**: `UserSettingsRepository`を`HealthDataViewerApplication`（プロセス生存期間中ただ1つ）が保持するシングルトンに変更し、`MainActivity`は作り直さずそれを取得するだけにする。repository内部は、読み取りを常に最新値を持つ`MutableStateFlow`（起動時に一度だけブロッキング読み取りして初期化）で持ち、Composeからは`collectAsState()`（`initial`不要）で直接つなぐ。書き込みは、呼び出し元の状態変更に先立って`_settings.value`を同期的に更新した上で、永続化はrepository自身が持つ`CoroutineScope`（`SupervisorJob` + `Dispatchers.Default`。Activity・Compositionのどちらにも属さない）に`launch`する。この設計にすると、(1)書き込みがどのActivity再生成にも道連れにされず常に完了する、(2)Activity再生成直後からComposeが見る値は常に最新の状態（ハードコードした既定値を経由しない）、の両方が同時に満たされる
@@ -458,4 +458,11 @@
 -   **知見**: `preferencesDataStore()`はcorruptionHandlerを指定しない限り、ファイル破損時に読み取りが例外を投げる。`HealthDataViewerApplication.onCreate()`のようにアプリ起動のたびに行う初期読み取りがこれを素通しすると、ファイルが壊れた状態（バックアップ復元の失敗等）でアプリが起動不能になり、ユーザーはアプリのデータを消去するしかなくなる。書き込み（`dataStore.edit {}`）も同様にI/Oエラーを素通しする
 -   **Viewerへの適用**: `preferencesDataStore(name = ..., corruptionHandler = ReplaceFileCorruptionHandler { emptyPreferences() })`でファイル破損時に空の設定へフォールバックし、読み取りFlowには`.catch { e -> if (e is IOException) emit(emptyPreferences()) else throw e }`を追加する（DataStore公式パターン）。書き込みは`runCatching`で包み、失敗しても次回の設定変更が引き続き行えるようにする（失敗した1回の書き込みが失われるだけで、アプリの続行は妨げない）
 -   **根拠**: 公式（DataStoreのドキュメントが明記する推奨パターン）。コードレビュー指摘を受けて導入し、Pixel 11実機でビルド・通常の読み書きに影響がないことを確認した（2026-10-01）
+-   **確認日**: 2026-10-01
+
+### 10.5 `MutableStateFlow`を正としてrepository自身のCoroutineScopeで書き込む設計（10.3）でも、「呼び出し時点の引数」をそのままDataStoreへの書き込みに使うと、連続した変更で保存順が入れ替わりうる
+
+-   **知見**: 10.3の設計変更後も、`setThemeModeAndApply(mode: ThemeMode)`が`persist { it[THEME_MODE] = mode.name }`のように、呼び出し時点の引数`mode`をそのままラムダに閉じ込めて`scope.launch {}`していた。`scope`は`Dispatchers.Default`（複数スレッド）上で動くため、設定を連続して素早く変更すると、生成順と実行順が入れ替わる余地が理論上残る（例: System→Light→Darkと連続で変更した場合、Darkの書き込みがLightの書き込みより先に実行されると、最終的にDataStoreにはLightが残ってしまう。画面の表示は常に最後の選択＝Darkを正しく反映しているため、気付きにくい食い違いになる）
+-   **Viewerへの適用**: 書き込みラムダの中では、呼び出し時点の引数を使わず、実行される瞬間の`_settings.value`を読み直して書く（`persist { it[THEME_MODE] = _settings.value.themeMode.name }`）。`_settings.value`への代入は常に同期的に（呼び出し元のComposeイベントハンドラ内で）完了しているため、どの書き込みが実際に最後に実行されても、その時点の最新値（＝最後にタップされた選択）を書くことになる。DataStoreの`edit {}`自体は1件ずつ順番に適用されるため、これだけで実行順序に依存しない一貫性が保証される
+-   **根拠**: コードレビュー指摘（2026-10-01）。理論的な競合であり、実機での再現は行っていない（10.3の修正後の実機確認では連続タップでも一致していたが、`Dispatchers.Default`のスレッドスケジューリングに依存する競合は再現性が低く、確認できなかったことが競合不在の証明にはならない）
 -   **確認日**: 2026-10-01

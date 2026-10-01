@@ -88,17 +88,25 @@ class UserSettingsRepository(context: Context) {
     fun setThemeModeAndApply(mode: ThemeMode) {
         _settings.value = _settings.value.copy(themeMode = mode)
         AppCompatDelegate.setDefaultNightMode(mode.toAppCompatNightMode())
-        persist { it[THEME_MODE] = mode.name }
+        persist { it[THEME_MODE] = _settings.value.themeMode.name }
     }
 
     fun setShowMetricsWithoutData(show: Boolean) {
         _settings.value = _settings.value.copy(showMetricsWithoutData = show)
-        persist { it[SHOW_METRICS_WITHOUT_DATA] = show }
+        persist { it[SHOW_METRICS_WITHOUT_DATA] = _settings.value.showMetricsWithoutData }
     }
 
     // DataStoreへの書き込み失敗（IOException等）は、見た目にはすでに反映済みの設定値を
     // 次回起動時に復元できなくなるだけで、アプリの続行は妨げない。読み取り側と同様に
     // 例外で落とさず諦める（他のDataStore呼び出し元と同じ「失敗は握りつぶして継続する」方針）。
+    //
+    // `edit`ラムダの中では、呼び出し時点の引数（例: setThemeModeAndApply()のmode）ではなく、
+    // その時点の`_settings.value`を読み直して書く（コードレビュー指摘）。書き込みは`scope`
+    // （Dispatchers.Default）上で並行にlaunchされるため、連続して素早く設定を変更すると
+    // 複数の書き込みが実行順序を問わず走りうる。`_settings.value`は毎回の呼び出しで同期的に
+    // 更新済みのため、どの書き込みが実際に最後に実行されても、常にその時点の最新値
+    // （＝最後にタップされた選択）を書く。これにより、書き込みの実行順序に関わらず
+    // DataStoreの最終的な内容は必ず最新の選択と一致する。
     private fun persist(edit: (MutablePreferences) -> Unit) {
         scope.launch { runCatching { dataStore.edit(edit) } }
     }

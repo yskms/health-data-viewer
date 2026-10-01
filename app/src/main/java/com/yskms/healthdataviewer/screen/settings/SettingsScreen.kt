@@ -39,7 +39,6 @@ import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
-import com.yskms.healthdataviewer.settings.AppSettings
 import com.yskms.healthdataviewer.settings.ThemeMode
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import kotlinx.coroutines.launch
