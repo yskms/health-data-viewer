@@ -7,6 +7,11 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.res.stringResource
 import com.yskms.healthdataviewer.R
@@ -81,4 +86,25 @@ fun PeriodTabs(period: GraphPeriod, onPeriodChange: (GraphPeriod) -> Unit) {
             )
         }
     }
+}
+
+// WBS 6.4（コードレビュー指摘への対応）: Sourcesタブ用。全件走査（`HealthConnectManager
+// .readSourceRecordCounts()`等）は、Recordsタブのページング（見えている分だけ読む）と違い1回で
+// 全件分のIPCを発行する。初版は状態をタブのComposableブランチの内側に置いており、他のタブへ切り替えて
+// 戻るたびに状態が破棄され全件走査をやり直していた（Stepsのような数十万件規模では画面操作のたびに
+// 無駄な再走査が走る）。呼び出し元のComposableが生存している間（画面回転までの間）は結果を保持し、
+// `active`になった最初のタイミングでのみ`load()`を実行する。再試行は`retryKey`を変えることで行う
+// （結果をnullに戻してから再取得する）。画面回転時はActivity再生成によりこの`remember`自体が破棄され、
+// 他のタブ・既存のRecordsタブと同様に再取得される（D-035(4)と一貫した設計）。
+@Composable
+fun <T> rememberLazyTabResult(active: Boolean, retryKey: Int, load: suspend () -> T): T? {
+    var result by remember { mutableStateOf<T?>(null) }
+    var loadedForRetryKey by remember { mutableStateOf<Int?>(null) }
+    LaunchedEffect(active, retryKey) {
+        if (!active || loadedForRetryKey == retryKey) return@LaunchedEffect
+        result = null
+        result = load()
+        loadedForRetryKey = retryKey
+    }
+    return result
 }

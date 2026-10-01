@@ -49,7 +49,6 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.SleepAggregatesResult
-import com.yskms.healthdataviewer.healthconnect.SourceRecordCountsResult
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -88,6 +87,13 @@ fun SleepDetailScreen(
     var customRange by rememberSaveable { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
     var aggregatesLoad by remember { mutableStateOf<PeriodTaggedResult<SleepLoad>?>(null) }
     var oldestResult by remember { mutableStateOf<OldestRecordResult?>(null) }
+    // WBS 6.4: Sourcesタブは全件走査1回分のIPCを発行するため、タブ切替のたびに再実行しない
+    // （rememberLazyTabResult()参照、コードレビュー指摘）。
+    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+    val sourcesLoad =
+        rememberLazyTabResult(active = tab == DetailTab.SOURCES, retryKey = sourcesRetryKey) {
+            healthConnectManager.readSourceRecordCounts(SleepSessionRecord::class, historyPermissionGranted)
+        }
 
     LaunchedEffect(retryKey) {
         oldestResult = null
@@ -253,17 +259,7 @@ fun SleepDetailScreen(
                         rowContent = { record -> SleepRecordRow(record = record) },
                     )
                 }
-                DetailTab.SOURCES -> {
-                    // WeightDetailScreenのSourcesタブと同じ考え方（タブに入っている間だけ生存する状態）。
-                    // Sleep Sessionは件数が少なく、Weightと同じ全件走査カウント（readSleepSourceCounts()）を使う。
-                    var sourcesLoad by remember { mutableStateOf<SourceRecordCountsResult?>(null) }
-                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
-                    LaunchedEffect(sourcesRetryKey) {
-                        sourcesLoad = null
-                        sourcesLoad = healthConnectManager.readSleepSourceCounts(historyPermissionGranted)
-                    }
-                    RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
-                }
+                DetailTab.SOURCES -> RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
             }
         }
     }

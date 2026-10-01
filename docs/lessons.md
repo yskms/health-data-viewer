@@ -323,9 +323,16 @@
 
 ### 6.19 継続記録型の高密度データ型（Steps）でも、ソース別の正確なレコード件数を求める全件走査（Rawレコード自体は保持せず件数だけ集計）は、数十万件規模でも安全に完了する
 
--   **知見**: WBS 6.4で、Stepsの全期間（約2.5年分、5ソース、合計約30万件）のソース別レコード件数を、`Map<DataOrigin, Long>`に件数だけを集計しながら全件ページングして求めた（`HealthConnectManager.countBySource()`、レコード自体は各ページの処理後に参照を残さない）。実機でクラッシュせず、プロセスのメモリ使用量（RSS）も走査前後で大きな増加なく安定していた
--   **Viewerへの適用**: 6.7で確認したOutOfMemoryErrorは、Heart Rateのように1レコードに大量のサンプル配列を含みHealth Connect SDK内部の変換コストが高いデータ型・読み込み方法（全件をListに保持するRaw一覧）に起因するものであり、「レコード自体を保持せず件数だけを集計する」走査であれば、Stepsのような数十万件規模でも成立することを確認した。Weight/Steps/Sleepのデータソース画面（Sourcesタブ）は、Heart Rateのような代替指標（`MEASUREMENTS_COUNT`）に頼らず、全件走査による正確な件数を表示する設計にした（D-009、D-037）
--   **根拠**: 実機確認（Pixel 11、実データ。Stepsの全期間Sourcesタブ表示でクラッシュなし、`ps`でのRSSが走査前後で大きく変化しないことを確認、2026-10-01）
+-   **知見**: WBS 6.4で、Stepsの全期間（約2.5年分、5ソース、合計約30万件）のソース別レコード件数を、`Map<DataOrigin, Long>`に件数だけを集計しながら全件ページングして求めた（`HealthConnectManager.countBySource()`、レコード自体は各ページの処理後に参照を残さない）。実機でクラッシュせず、プロセスのメモリ使用量（RSS）も走査前後で大きな増加なく安定していた。一方で所要時間は軽視できず、Sourcesタブのタップから一覧が表示されるまで実測で約65秒かかった（約300回の`readRecords()`呼び出しを直列に発行するため）
+-   **Viewerへの適用**: 6.7で確認したOutOfMemoryErrorは、Heart Rateのように1レコードに大量のサンプル配列を含みHealth Connect SDK内部の変換コストが高いデータ型・読み込み方法（全件をListに保持するRaw一覧）に起因するものであり、「レコード自体を保持せず件数だけを集計する」走査であれば、Stepsのような数十万件規模でも成立することを確認した。Weight/Steps/Sleepのデータソース画面（Sourcesタブ）は、Heart Rateのような代替指標（`MEASUREMENTS_COUNT`）に頼らず、全件走査による正確な件数を表示する設計にした（D-009、D-037）。**この3データ型を選んだ基準はレコード件数の多寡ではなく、サンプル配列を持たずSDK変換コストが低いかどうかである点に注意**（コードレビューで、初版のコメント・ドキュメントが「件数が少ないから全件走査する」という誤った基準を書いていたと指摘され訂正した。Stepsの約30万件はWeight・Sleepより2桁近く多い）。約65秒という所要時間は軽くはないため、コードレビューを受け、Sourcesタブの読み込み状態をタブ切替で破棄せず画面滞在中は保持する設計に変更した（タブを一度でも開けば、以降の往復では再走査しない。`screen/detail/DetailCommon.rememberLazyTabResult()`）
+-   **根拠**: 実機確認（Pixel 11、実データ。Stepsの全期間Sourcesタブ表示でクラッシュなし、`ps`でのRSSが走査前後で大きく変化しないことを確認、タップから一覧表示までの所要時間を目視で計測し約65秒、2026-10-01）
+-   **確認日**: 2026-10-01
+
+### 6.20 connect-client 1.1.0は、プラットフォーム側のレート制限エラー（`ERROR_RATE_LIMIT_EXCEEDED`）をRemoteException/IOException/SecurityExceptionではなく`IllegalStateException`に変換する
+
+-   **知見**: WBS 6.4のコードレビューで、「RemoteException/IOException/SecurityException以外の例外が出なかった」というこれまでの確認方法が、レート制限の検知手段として妥当かを問われた。`androidx.health.connect:connect-client:1.1.0`の実装クラス（`ExceptionConverterKt.toKtException()`）をbytecodeレベルで確認したところ、プラットフォーム側`android.health.connect.HealthConnectException.errorCode`から各Kotlin例外への変換は固定のswitchで行われており、`ERROR_INVALID_ARGUMENT`→`IllegalArgumentException`、`ERROR_IO`→`IOException`、`ERROR_SECURITY`→`SecurityException`、`ERROR_REMOTE`→`RemoteException`の4つ以外（`ERROR_UNKNOWN`・`ERROR_INTERNAL`・`ERROR_DATA_SYNC_IN_PROGRESS`・`ERROR_RATE_LIMIT_EXCEEDED`・`ERROR_UNSUPPORTED_OPERATION`を含む）は、すべてdefault分岐で`IllegalStateException`に変換されることが分かった。この変換は`wrapPlatformException()`という共通ヘルパー経由で`readRecords()`・`aggregate()`・`aggregateGroupByPeriod()`など主要なsuspend関数すべてに適用されている（同クラス内で13箇所から呼ばれている）
+-   **Viewerへの適用**: `HealthConnectManager.readWithHistoryFallback()`（および`readStepsRecords()`等の個別のtry/catch）はRemoteException/IOException/SecurityExceptionの3種類しか捕まえない設計を意図的に維持している（D-035(7)と同じ「レート制限らしき例外を握りつぶさず表に出す」方針）。この調査により、レート制限が実際に発生した場合は`IllegalStateException`として未捕捉のままクラッシュする形で表面化するはずだと具体的に裏付けられた。したがって「大規模な操作（Stepsの全件走査約30万件・Heart Rateの複数回Aggregate呼び出し等）を行ってもクラッシュしなかった」ことは、レート制限が発生していないことの一定の根拠になる（クラッシュは目立つため見逃しにくい）。ただし`IllegalStateException`はレート制限以外の要因（`ERROR_INTERNAL`・`ERROR_DATA_SYNC_IN_PROGRESS`等）でも起こり得る分類のため、「クラッシュしなかった」ことも確定的な証明にはならない
+-   **根拠**: 逆コンパイル（`javap -c`でconnect-client 1.1.0の`ExceptionConverterKt.toKtException()`のtableswitchを確認。errorCodeの整数値は`android-37.0/android.jar`の`android.health.connect.HealthConnectException`のconstant poolから取得: UNKNOWN=1, INTERNAL=2, INVALID_ARGUMENT=3, IO=4, SECURITY=5, REMOTE=6, RATE_LIMIT_EXCEEDED=7, UNSUPPORTED_OPERATION=9。`wrapPlatformException()`の呼び出し箇所をbytecodeで確認、2026-10-01）。非公開の実装詳細の逆コンパイルに基づくため、将来のライブラリバージョンで変換ロジックが変わる可能性がある点に注意
 -   **確認日**: 2026-10-01
 
 ## 7. グラフ描画（Vico、WBS 2.4）

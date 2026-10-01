@@ -107,18 +107,25 @@ fun HeartRateSourcesTab(load: HeartRateSourceSampleCountsResult?, onRetry: () ->
     }
 }
 
+// コードレビュー指摘: failed=trueの行を何も表示しない設計だと、「取得に失敗した」のか「仕様として
+// 件数を出さない」のかが区別できず、D-036（ソース名のみ表示へのフォールバックは発動させない）とも
+// 矛盾して見える。failedの行、およびsampleCountがnull（このソースはdataOriginsに含まれていた＝
+// 範囲内に記録があるにもかかわらず、個別のAggregate呼び出しが値を返さなかった想定外のケース。
+// poc/StepsScreen.formatOptionalTotal()と同じ考え方で、0埋めせず「取得できず」として扱う）の行は、
+// 両方とも明示的に「取得できませんでした」と表示する。
 @Composable
 private fun HeartRateSourceSampleCountRow(row: HeartRateSourceSampleCount, numberFormat: NumberFormat, context: Context) {
     val sourceName = remember(row.dataOrigin.packageName) { DataOriginNameResolver.resolve(context, row.dataOrigin.packageName) }
     Column {
         Text(text = sourceName, style = MaterialTheme.typography.bodyLarge)
         val sampleCount = row.sampleCount
-        if (!row.failed && sampleCount != null) {
-            Text(
-                text = stringResource(id = R.string.detail_heart_rate_source_sample_count, numberFormat.format(sampleCount)),
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        val detailText =
+            if (!row.failed && sampleCount != null) {
+                stringResource(id = R.string.detail_heart_rate_source_sample_count, numberFormat.format(sampleCount))
+            } else {
+                stringResource(id = R.string.detail_heart_rate_source_sample_count_failed)
+            }
+        Text(text = detailText, style = MaterialTheme.typography.bodySmall)
     }
 }
 

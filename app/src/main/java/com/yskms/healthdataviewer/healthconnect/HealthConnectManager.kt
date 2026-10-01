@@ -180,33 +180,6 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // WBS 6.4: 詳細画面のSourcesタブ用。ソース別のレコード件数はAggregateでは取れない
-    // （requirements.md §7.2/§22.3）ため、全件走査して正確に数える。Weightは件数が少なく
-    // （Recordsタブと同程度）、Heart Rateのような大量データ型に必要なAggregate代替（D-036）は不要。
-    // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
-    // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の
-    // 自動フォールバック再試行をそのまま使える（D-035(1)がRecordsタブで避けている設計とは別物）。
-    suspend fun readWeightSourceCounts(historyPermissionGranted: Boolean): SourceRecordCountsResult {
-        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
-            countBySource(WeightRecord::class, filter)
-                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
-                .sortedByDescending { it.count }
-
-        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
-        return when (
-            val outcome =
-                readWithHistoryFallback(
-                    primaryFilter = primaryFilter,
-                    primaryHistoryLimited = !historyPermissionGranted,
-                    fallbackFilter = recentRangeFilter(),
-                    read = ::read,
-                )
-        ) {
-            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
-            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
-        }
-    }
-
     // WBS 2.2（PoC 1）: 同日複数レコードのグラフ上の扱い。
     // D-027の通り、アプリ独自に平均／最新値を選ぶのではなく、Health Connect公式のAggregate Metric
     // （WEIGHT_AVG / WEIGHT_MIN / WEIGHT_MAX）をaggregateGroupByPeriod()でbucket集計して使う。
@@ -371,31 +344,6 @@ class HealthConnectManager(context: Context) {
             StepsAggregateTotalResult.Failure
         }
 
-    // WBS 6.4: 詳細画面のSourcesタブ用。Stepsはrecord自体が歩数の単純な値（Heart Rateのような
-    // サンプル配列を持たない）で、WBS 3.1で全期間（数十万件規模）のRaw全件ページング読み取りが
-    // 問題なく動作することを確認済みのため、readWeightSourceCounts()と同じ全件走査でよい
-    // （D-036はHeart Rate固有の判断で、Stepsには適用しない）。
-    suspend fun readStepsSourceCounts(historyPermissionGranted: Boolean): SourceRecordCountsResult {
-        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
-            countBySource(StepsRecord::class, filter)
-                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
-                .sortedByDescending { it.count }
-
-        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
-        return when (
-            val outcome =
-                readWithHistoryFallback(
-                    primaryFilter = primaryFilter,
-                    primaryHistoryLimited = !historyPermissionGranted,
-                    fallbackFilter = recentRangeFilter(),
-                    read = ::read,
-                )
-        ) {
-            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
-            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
-        }
-    }
-
     // WBS 6.3: 詳細画面のRecordsタブ用。readHeartRateRecords()（全件を1つのListに溜め込む旧実装）を
     // 置き換える。Heart Rateは1レコードに複数サンプルを含み、継続記録するソースでは「全期間」の
     // Raw全件読み込みが実機のヒープを枯渇させ、Health Connect SDK内部（readRecords()のレコード変換
@@ -541,6 +489,12 @@ class HealthConnectManager(context: Context) {
     // （Failureにはしない。Recordsタブの「記録なし」と同じ「正常に0件」の扱い）。
     // 個別ソースのAggregate呼び出しが失敗した場合は、そのソースだけfailed=trueにして他のソースの
     // 表示を妨げない（poc/StepsScreen.StepsSourceRowのofficialTotal/officialTotalFailedと同じ考え方）。
+    // ただしSecurityExceptionはここで握りつぶさず、呼び出し元のread()・readWithHistoryFallback()まで
+    // 伝播させる（コードレビュー指摘）。ここで捕まえてfailed=trueにしてしまうと、主範囲の問い合わせ中に
+    // 履歴読み取り権限が失われた場合でも直近30日へのフォールバックが起動せず、countBySource()を使う
+    // Weight/Steps/Sleep（readSourceRecordCounts()）と異なり「権限喪失時は直近30日に切り替えて再取得する」
+    // という既存の方針（readWithHistoryFallback()）から外れてしまう。RemoteException/IOExceptionは
+    // 従来通りここで捕まえ、1ソースの一時的な失敗が他のソースの表示を道連れにしないようにする。
     //
     // D-036の採用条件（MEASUREMENTS_COUNTがRawから数えたサンプル数と実機で一致するか）は、全件走査が
     // 安全な直近7日・直近30日の範囲（主ソースでそれぞれ9,895件/253,082サンプル、41,376件/1,065,015
@@ -563,8 +517,6 @@ class HealthConnectManager(context: Context) {
             } catch (e: RemoteException) {
                 HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = null, failed = true)
             } catch (e: IOException) {
-                HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = null, failed = true)
-            } catch (e: SecurityException) {
                 HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = null, failed = true)
             }
 
@@ -662,29 +614,6 @@ class HealthConnectManager(context: Context) {
         } catch (e: SecurityException) {
             SleepAggregateSummaryResult.Failure
         }
-
-    // WBS 6.4: 詳細画面のSourcesタブ用。readWeightSourceCounts()と同じ理由・同じ形
-    // （Sleep Sessionは1日1〜数件程度で件数が少なく、全件走査で正確に数えられる）。
-    suspend fun readSleepSourceCounts(historyPermissionGranted: Boolean): SourceRecordCountsResult {
-        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
-            countBySource(SleepSessionRecord::class, filter)
-                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
-                .sortedByDescending { it.count }
-
-        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
-        return when (
-            val outcome =
-                readWithHistoryFallback(
-                    primaryFilter = primaryFilter,
-                    primaryHistoryLimited = !historyPermissionGranted,
-                    fallbackFilter = recentRangeFilter(),
-                    read = ::read,
-                )
-        ) {
-            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
-            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
-        }
-    }
 
     // WBS 6.3: 詳細画面のRecordsタブ用。readSleepSessionRecords()（全件を1つのListに溜め込む旧実装）を
     // 置き換える。weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の
@@ -815,12 +744,46 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // WBS 6.4: readWeightSourceCounts() / readStepsSourceCounts() / readSleepSourceCounts()に共通する
-    // 全件走査カウント。D-031(3)で候補に挙がっていた「件数だけを集計し、レコード自体は保持しない走査」
-    // （Raw一覧のページング表示化後の代替案）をここで実装する。Map<DataOrigin, Long>（ソース数程度の
-    // 小さいサイズ）だけを保持し、ページごとのレコードリストはカウントに使ったらその場で破棄する
-    // （Weight/Sleepは元々件数が少なく実害は小さいが、Stepsは全期間で数十万件規模になり得るため、
-    // 一貫してこの方式にする）。
+    // WBS 6.4: 詳細画面のSourcesタブ用（Weight/Steps/Sleep共通。recordType以外の処理が完全に同一のため、
+    // データ型ごとの関数に分けず1つにまとめた。OldestRecordResultを1つに統合した方針（D-034(8)）と
+    // 同じ考え方）。ソース別のレコード件数はAggregateでは取れない（requirements.md §7.2/§22.3）ため、
+    // 全件走査して正確に数える。
+    //
+    // **この3データ型で全件走査を選んだ基準は「レコード件数の多寡」ではない**（コードレビュー指摘。
+    // Stepsは全期間で数十万件規模になり得り、Weight/Sleepより2桁近く多い）。実際の基準は
+    // 「1レコードが大きなサンプル配列を持たず、Health Connect SDK内部の変換コストが低いか」で、
+    // Heart Rateだけがこれに該当しない（1レコードに多数のサンプルを含み、継続記録ソースでは
+    // 全件走査がOutOfMemoryErrorを起こす実例がある。lessons.md 6.7）。Stepsの全期間全件走査は
+    // WBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・メモリ増大なしを確認済み。
+    //
+    // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
+    // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の
+    // 自動フォールバック再試行をそのまま使える（D-035(1)がRecordsタブで避けている設計とは別物）。
+    suspend fun <T : Record> readSourceRecordCounts(recordType: KClass<T>, historyPermissionGranted: Boolean): SourceRecordCountsResult {
+        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
+            countBySource(recordType, filter)
+                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
+                .sortedByDescending { it.count }
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::read,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
+        }
+    }
+
+    // readSourceRecordCounts()が使う全件走査カウント。D-031(3)で候補に挙がっていた「件数だけを集計し、
+    // レコード自体は保持しない走査」（Raw一覧のページング表示化後の代替案）をここで実装する。
+    // Map<DataOrigin, Long>（ソース数程度の小さいサイズ）だけを保持し、ページごとのレコードリストは
+    // カウントに使ったらその場で破棄する（Stepsのような数十万件規模でも安全なことをlessons.md 6.19で確認済み）。
     private suspend fun <T : Record> countBySource(recordType: KClass<T>, filter: TimeRangeFilter): Map<DataOrigin, Long> {
         val counts = mutableMapOf<DataOrigin, Long>()
         var pageToken: String? = null
@@ -847,6 +810,22 @@ class HealthConnectManager(context: Context) {
     // また主範囲がSecurityException以外（RemoteException/IOException）で失敗した場合はFailureにする。
     // フォールバック先のfilterの決め方（Instant.now()基準かLocalDateTime基準か）・結果の詰め替え方
     // （どのsealed interfaceに包むか）は関数ごとに異なるため、そこは各呼び出し元に残している。
+    //
+    // **ここでRemoteException/IOException/SecurityException以外を捕まえない（＝レート制限らしき例外を
+    // 握りつぶさず表に出す）のは意図的**（D-035(7)と同じ方針）。connect-client 1.1.0の
+    // `ExceptionConverterKt.toKtException()`をbytecodeで確認したところ、プラットフォーム側の
+    // `HealthConnectException.errorCode`はSECURITY→SecurityException、IO→IOException、
+    // REMOTE→RemoteException、INVALID_ARGUMENT→IllegalArgumentExceptionに変換される一方、
+    // **RATE_LIMIT_EXCEEDEDを含むそれ以外のerrorCode（UNKNOWN/INTERNAL/DATA_SYNC_IN_PROGRESS/
+    // UNSUPPORTED_OPERATION）はすべてIllegalStateExceptionに変換される**（コードレビュー指摘を受けて
+    // 確認。非公開の実装詳細の逆コンパイルのため将来のバージョンで変わり得る）。つまりレート制限が
+    // 実際に発生した場合、ここではIllegalStateExceptionとして未捕捉のまま呼び出し元（LaunchedEffect）
+    // まで伝播し、アプリがクラッシュする形で表面化する。「RemoteException/IOException/SecurityException
+    // 以外の例外が出なかった」という従来の確認基準は、レート制限がRemoteException化されて汎用の
+    // Failure表示に隠れる可能性を考慮していなかったが、実際にはそうならず、見える形で（クラッシュとして）
+    // 検知できる設計になっている。ただしIllegalStateExceptionはレート制限以外の要因（一時的な内部エラー等）
+    // でも起こり得るため、「クラッシュしなかった」こと自体もレート制限が存在しないことの確定的な証明には
+    // ならない（lessons.md 6.19参照）。
     private suspend fun <T> readWithHistoryFallback(
         primaryFilter: TimeRangeFilter,
         primaryHistoryLimited: Boolean,

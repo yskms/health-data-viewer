@@ -108,4 +108,5 @@
     <string name="detail_sources_empty">No sources found in the readable range.</string>
     <string name="detail_sources_record_count">%1$s records</string>
     <string name="detail_heart_rate_source_sample_count">%1$s samples (not an exact record count)</string>
+    <string name="detail_heart_rate_source_sample_count_failed">Couldn\'t load the sample count for this source.</string>
 </resources>

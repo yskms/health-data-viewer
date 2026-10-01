@@ -107,4 +107,5 @@
     <string name="detail_sources_empty">読み取れる範囲にソースがありません。</string>
     <string name="detail_sources_record_count">%1$s件のレコード</string>
     <string name="detail_heart_rate_source_sample_count">%1$s件のサンプル（正確なレコード件数ではない）</string>
+    <string name="detail_heart_rate_source_sample_count_failed">このソースのサンプル数を取得できませんでした。</string>
 </resources>

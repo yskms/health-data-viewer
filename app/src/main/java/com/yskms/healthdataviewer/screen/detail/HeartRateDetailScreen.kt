@@ -48,7 +48,6 @@ import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregatesResult
-import com.yskms.healthdataviewer.healthconnect.HeartRateSourceSampleCountsResult
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -89,6 +88,14 @@ fun HeartRateDetailScreen(
     var customRange by rememberSaveable { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
     var aggregatesLoad by remember { mutableStateOf<PeriodTaggedResult<HeartRateLoad>?>(null) }
     var oldestResult by remember { mutableStateOf<OldestRecordResult?>(null) }
+    // WBS 6.4: Weight/Steps/SleepのSourcesタブと同じ理由でタブ切替のたびに再実行しない
+    // （rememberLazyTabResult()参照、コードレビュー指摘）。Heart Rateは全件走査ではなくAggregate
+    // 呼び出し（ソース数+1回）だが、タブを往復するたびに繰り返す必要はない。
+    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+    val sourcesLoad =
+        rememberLazyTabResult(active = tab == DetailTab.SOURCES, retryKey = sourcesRetryKey) {
+            healthConnectManager.readHeartRateSourceSampleCounts(historyPermissionGranted)
+        }
 
     LaunchedEffect(retryKey) {
         oldestResult = null
@@ -240,18 +247,7 @@ fun HeartRateDetailScreen(
                         rowContent = { record -> HeartRateRecordRow(record = record) },
                     )
                 }
-                DetailTab.SOURCES -> {
-                    // WeightDetailScreenのSourcesタブと同じ考え方（タブに入っている間だけ生存する状態）。
-                    // Heart RateはD-036により、全件走査ではなくAggregateのソース別サンプル数
-                    // （readHeartRateSourceSampleCounts()）を使う。
-                    var sourcesLoad by remember { mutableStateOf<HeartRateSourceSampleCountsResult?>(null) }
-                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
-                    LaunchedEffect(sourcesRetryKey) {
-                        sourcesLoad = null
-                        sourcesLoad = healthConnectManager.readHeartRateSourceSampleCounts(historyPermissionGranted)
-                    }
-                    HeartRateSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
-                }
+                DetailTab.SOURCES -> HeartRateSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
             }
         }
     }

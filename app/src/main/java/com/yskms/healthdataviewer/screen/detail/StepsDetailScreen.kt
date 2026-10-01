@@ -47,7 +47,6 @@ import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
-import com.yskms.healthdataviewer.healthconnect.SourceRecordCountsResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.StepsAggregatesResult
 import java.text.NumberFormat
@@ -88,6 +87,13 @@ fun StepsDetailScreen(
     var customRange by rememberSaveable { mutableStateOf<Pair<LocalDate, LocalDate>?>(null) }
     var aggregatesLoad by remember { mutableStateOf<PeriodTaggedResult<StepsLoad>?>(null) }
     var oldestResult by remember { mutableStateOf<OldestRecordResult?>(null) }
+    // WBS 6.4: Sourcesタブは全件走査1回分のIPCを発行するため、タブ切替のたびに再実行しない
+    // （rememberLazyTabResult()参照、コードレビュー指摘）。
+    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+    val sourcesLoad =
+        rememberLazyTabResult(active = tab == DetailTab.SOURCES, retryKey = sourcesRetryKey) {
+            healthConnectManager.readSourceRecordCounts(StepsRecord::class, historyPermissionGranted)
+        }
 
     LaunchedEffect(retryKey) {
         oldestResult = null
@@ -246,18 +252,7 @@ fun StepsDetailScreen(
                         rowContent = { record -> StepsRecordRow(record = record) },
                     )
                 }
-                DetailTab.SOURCES -> {
-                    // WeightDetailScreenのSourcesタブと同じ考え方（タブに入っている間だけ生存する状態）。
-                    // Stepsは全期間で数十万件規模になり得るが、WBS 3.1でRaw全件走査が性能上問題ないことを
-                    // 確認済みのため、Weightと同じ全件走査カウント（readStepsSourceCounts()）を使う。
-                    var sourcesLoad by remember { mutableStateOf<SourceRecordCountsResult?>(null) }
-                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
-                    LaunchedEffect(sourcesRetryKey) {
-                        sourcesLoad = null
-                        sourcesLoad = healthConnectManager.readStepsSourceCounts(historyPermissionGranted)
-                    }
-                    RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
-                }
+                DetailTab.SOURCES -> RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
             }
         }
     }

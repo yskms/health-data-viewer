@@ -190,7 +190,7 @@ Fitbit            481 records
 
 -   ソース一覧はAggregate結果の `dataOrigins` などから比較的軽量に取得できる見込み
 -   **ソース別のレコード件数はAggregate APIから直接は得られず**、正確に出すにはRaw Recordを全件ページングして数える必要がある
--   **件数表示の仕様はWBS 6.4で確定した（D-009、D-037）**: 件数の少ないデータ型（Weight/Steps/Sleep）は全件走査した正確なレコード件数を表示する。走査中もレコード自体は保持せず、ソースごとの件数だけを集計しながら読み進める（D-031(3)で候補に挙がっていた方式）
+-   **件数表示の仕様はWBS 6.4で確定した（D-009、D-037）**: Weight/Steps/Sleepは全件走査した正確なレコード件数を表示する。走査中もレコード自体は保持せず、ソースごとの件数だけを集計しながら読み進める（D-031(3)で候補に挙がっていた方式）。この3データ型とHeart Rateを分ける基準は**レコード件数の多寡ではない**（Stepsは全期間で数十万件規模になり得り、Weight/Sleepより2桁近く多い）。実際の基準は「1レコードが大きなサンプル配列を持たず、SDK内部の変換コストが低いか」で、Heart Rateだけがこれに該当しない（コードレビューで誤った分類基準の記述を指摘され訂正、lessons.md 6.7/6.19）
 -   **Heart Rateは正確なソース別Record件数を表示しない**（D-036）。代わりにAggregateのソース別サンプル数（`MEASUREMENTS_COUNT`）を「サンプル数」と明記して表示する。採用条件だった実機確認（全件走査が安全な直近7日・30日の範囲でRawから数えたサンプル数と比較）は一致を確認できたため、採用を確定した（D-037）。ただし多年規模の全件走査はOutOfMemoryErrorのリスクがあるため行っておらず、この一致がより長い範囲でも成り立つかは未検証のまま残る。Records画面（Rawのページング表示）は対象外で、Heart Rateでも重複を含めてすべて表示する
 
 ## 8. Raw / Aggregateの扱い
@@ -534,8 +534,8 @@ PoC 1〜4（Weight・Steps・Heart Rate・Sleep）で解決した事項（Weight
 -   ~~データ型×期間のグラフ集計ルールの残り（Stepsのグラフ集計ルール自体が未定）~~ → WBS 6.2でStepsの詳細画面グラフを新規実装し解決済み（D-034）。ただしHeart Rateの週bucket化（D-031の仮説）は実機で効果が限定的と判明した（次項参照）
 -   ~~短期間（1Wなど）のグラフでRawの全点を使うかどうか~~ → WBS 6.2で解決済み（D-034）。1Wを含む全期間でHealth Connect公式Aggregateのbucket集計を使い、独自のRaw全点描画は行わない
 -   **継続的にバックグラウンド記録される高密度データ型（Heart Rate等）で、3M以上の期間のグラフが数十秒規模の待ち時間になり得る問題**（WBS 6.2で新たに判明）。bucket粒度を粗くする対策（週bucket、D-031の仮説）は実機で効果が限定的と判明し（週bucketでも1年56.9秒・全期間96.4秒、同条件のStepsは1秒未満〜5秒）、所要時間の主要因はbucket数ではなく問い合わせ範囲の実データ量だと分かった（lessons.md 6.12）。読み込み中はクラッシュ・フリーズしないため現状は許容しているが、体感の改善が必要になった場合はRoom導入（D-031）を再検討する
--   ~~ソース別件数の表示仕様~~ → WBS 6.4で解決済み（D-009、D-036、D-037）。件数の少ないデータ型（Weight/Steps/Sleep）は全件走査した正確なレコード件数、Heart RateはAggregateのソース別サンプル数（`MEASUREMENTS_COUNT`）。実機確認（直近7日・30日の範囲でRawから数えたサンプル数と比較）でも一致を確認した
--   APIレート制限（WBS 4.2の専用PoCは打ち切り、WBS 6.3・6.4のMVP実装・実機確認にあわせて確認する方針としたが、いずれもレート制限らしき例外（RemoteException/IOException/SecurityException以外の型）は発生しなかったという消極的な確認にとどまり、確定的な判断材料はまだ得られていない。確認された場合、Roomを導入しないという結論（D-031）を再検討する）
+-   ~~ソース別件数の表示仕様~~ → WBS 6.4で解決済み（D-009、D-036、D-037）。Weight/Steps/Sleepは全件走査した正確なレコード件数、Heart RateはAggregateのソース別サンプル数（`MEASUREMENTS_COUNT`）。実機確認（直近7日・30日の範囲でRawから数えたサンプル数と比較、Fitbit単一ソースのみ）でも一致を確認した。複数ソースが同じ期間を重ねて記録した場合にも成り立つかは未確認のまま残る（lessons.md 6.18）
+-   APIレート制限（WBS 4.2の専用PoCは打ち切り、WBS 6.3・6.4のMVP実装・実機確認にあわせて確認する方針としたが、いずれもレート制限らしき例外（RemoteException/IOException/SecurityException以外の型）は発生しなかったという消極的な確認にとどまり、確定的な判断材料はまだ得られていない。WBS 6.4のコードレビューで、connect-client 1.1.0の実装を確認したところ、プラットフォーム側のレート制限エラーはRemoteException/IOException/SecurityExceptionではなくIllegalStateExceptionに変換されることが分かった（lessons.md 6.19）。`readWithHistoryFallback()`はこの型を捕まえない設計のため、レート制限が発生すればクラッシュという形で表面化するはずだが、今回の大規模な全件走査・連続Aggregate呼び出しでもクラッシュは発生しなかった。ただしIllegalStateExceptionはレート制限以外の要因でも起こり得るため、これも確定的な証拠ではない。確認された場合、Roomを導入しないという結論（D-031）を再検討する）
 -   Vico採用後の残課題: 10年規模（数千bucket）での操作感（Pixel 11実機でHeart Rateの365bucket規模までは描画・横スクロールとも確認済み）、ピンチズーム、`aggregateGroupByPeriod()`が値のないbucketを実際にどう返すか（WBS 6.2/6.5、lessons.md 7.2〜7.3）
 -   3Y / 5Y期間を追加するか（WBS 6.1/6.2）
 -   Body Fat / Blood Glucose / SpO2 / HRV のAggregate対応状況（WBS 6.10）
