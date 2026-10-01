@@ -443,7 +443,7 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 |---|---|---|---|
 | Weight | 平均・最小・最大 | なし | 同日複数レコードは独自判定せず、公式Aggregate Metric（平均・最小・最大）をbucket集計して使う（PoC 1で決定、D-027） |
 | Steps | 合計 | あり（Activity） | 実データでは、単一ソースだけを指定したAggregateがそのソースの生データ単純合計と一致しないことがあった。同一ソース内で秒単位で実際に重なっている区間を時間按分している可能性が高いことを定量的に確認したが、正確な計算式は未確定（PoC 2、lessons.md 6.6、要検証） |
-| Distance | 合計 | あり（Activity） | |
+| Distance | 合計 | あり（Activity） | Activity系に分類され公式重複処理が適用されるとされているのは公式ドキュメント・本表の分類根拠のみで、Distance自体で複数ソース重複時の挙動を実機確認してはいない（Steps PoC 2で確認したのはStepsRecordのみ。WBS 6.10、要検証、D-042(8)） |
 | Calories | 合計 | あり（Activity） | Total / Activeの区別あり |
 | Heart Rate | 平均・最小・最大・測定数 | なし | 測定数はサンプル数であり、レコード数ではない |
 | Resting Heart Rate | 平均・最小・最大 | なし | |
@@ -542,6 +542,7 @@ PoC 1〜4（Weight・Steps・Heart Rate・Sleep）で解決した事項（Weight
 -   Vico採用後の残課題: 10年規模（数千bucket）での操作感（Pixel 11実機でHeart Rateの365bucket規模までは描画・横スクロールとも確認済み）、ピンチズーム、`aggregateGroupByPeriod()`が値のないbucketを実際にどう返すか（WBS 6.2/6.5、lessons.md 7.2〜7.3）
 -   3Y / 5Y期間を追加するか（WBS 6.1/6.2）
 -   Body Fat / Blood Glucose / SpO2 / HRV のAggregate対応状況（WBS 6.10）
+-   Distanceの複数ソース重複処理（§22.2で「あり（Activity）」と分類）が実際に効いているかどうか。Steps PoC 2で確認したのはStepsRecordのAggregateのみで、DistanceRecordでの実機確認はまだ行っていない（WBS 6.10、D-042(8)）
 -   ホームの体重カード（WBS 6.1、D-033）の「前回比」は、Rawレコードを降順に並べた先頭2件の差として計算している。複数ソースが同じ測定を別々に書き込んでいる場合（例: 体重計アプリと連携先アプリが同時刻付近に書き込む）、前回比が常に0付近になったり、比較対象が体重計本体ではなく別ソースの値になったりし得る。重複ソースがある場合の前回比の意味づけは未決（WBS 6.2〜6.4で詳細画面と合わせて検討する）
 -   ホームの指標カード（WBS 6.1）は要件§6のカード例が示すSleepのステージ内訳（Awake | REM | Light | Deep）を含んでいない（スパークライン省略はD-033）。対応するかはWBS 6.10で検討する
 -   「データありのみ表示／すべて表示」の設定（§6）はWBS 6.6で実装し、Stepsカード（データなし）で実機確認した。Weight/HeartRate/Sleepカードのデータなし時に隠れる経路はStepsと同一ロジックだが、確認時のテストデータにこれらの空データ状態がなく未検証のまま残っている（D-039）

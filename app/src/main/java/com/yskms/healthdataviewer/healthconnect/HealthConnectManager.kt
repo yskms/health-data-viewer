@@ -788,7 +788,7 @@ class HealthConnectManager(context: Context) {
     // 段階では、同じ分類のデータ型についてまでPoCを繰り返さない）。**ただしこの分類はrequirements.md
     // §22.2の表・公式ドキュメント上の根拠であり、Steps PoC 2で確認したのはStepsRecordのAggregateが
     // 複数ソースの重複を実際に処理することのみ。DistanceRecordで同じ重複処理が実際に効いているかは
-    // 実機未検証のまま（要検証、D-042(2)でも同様に記録）**。
+    // 実機未検証のまま（要検証、requirements.md §22.2・§27、D-042(8)でも同様に記録）**。
     // DISTANCE_TOTALはAggregateMetric<Length>のため、WeightAggregateBucketがMassをinKilogramsへ
     // 変換するのと同じ考え方でkmに変換する（Length.inKilometers/inMeters等はjavapの出力に現れる
     // JVMメソッド名getKilometers()/getMeters()とは異なり、Kotlin側から見える実際のプロパティ名。
