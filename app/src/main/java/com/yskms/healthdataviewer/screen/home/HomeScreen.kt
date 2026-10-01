@@ -21,8 +21,10 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +48,8 @@ import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.WeightRecordsResult
+import com.yskms.healthdataviewer.settings.AppSettings
+import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
@@ -141,12 +145,15 @@ private data class SleepCardLoad(val period: DashboardPeriod, val result: SleepC
 @Composable
 fun HomeScreen(
     healthConnectManager: HealthConnectManager,
+    userSettingsRepository: UserSettingsRepository,
     onOpenWeightGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSteps: (historyPermissionGranted: Boolean) -> Unit,
     onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSleepGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val settings by userSettingsRepository.settingsFlow.collectAsState(initial = AppSettings())
     var availability by remember { mutableStateOf(healthConnectManager.availability) }
     var grantedPermissions by remember { mutableStateOf<Set<String>?>(null) }
     var historyFeatureAvailable by remember { mutableStateOf<Boolean?>(null) }
@@ -182,7 +189,12 @@ fun HomeScreen(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.titleLarge)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            Text(text = stringResource(id = R.string.app_name), style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = onOpenSettings) {
+                Text(text = stringResource(id = R.string.settings_title))
+            }
+        }
 
         when (availability) {
             HealthConnectAvailability.NOT_INSTALLED -> Text(text = stringResource(id = R.string.health_connect_not_installed))
@@ -312,21 +324,30 @@ fun HomeScreen(
                     granted = weightGranted,
                     load = weightLoad,
                     historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = settings.showMetricsWithoutData,
                     onClick = { onOpenWeightGraph(historyPermissionGranted) },
                 )
                 StepsCard(
                     period = selectedPeriod,
                     granted = stepsGranted,
                     load = stepsLoad,
+                    showMetricsWithoutData = settings.showMetricsWithoutData,
                     onClick = { onOpenSteps(historyPermissionGranted) },
                 )
                 HeartRateCard(
                     period = selectedPeriod,
                     granted = heartRateGranted,
                     load = heartRateLoad,
+                    showMetricsWithoutData = settings.showMetricsWithoutData,
                     onClick = { onOpenHeartRateGraph(historyPermissionGranted) },
                 )
-                SleepCard(period = selectedPeriod, granted = sleepGranted, load = sleepLoad, onClick = { onOpenSleepGraph(historyPermissionGranted) })
+                SleepCard(
+                    period = selectedPeriod,
+                    granted = sleepGranted,
+                    load = sleepLoad,
+                    showMetricsWithoutData = settings.showMetricsWithoutData,
+                    onClick = { onOpenSleepGraph(historyPermissionGranted) },
+                )
             }
         }
     }
@@ -386,8 +407,12 @@ private fun WeightCard(
     granted: Boolean?,
     load: WeightRecordsResult?,
     historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
     onClick: () -> Unit,
 ) {
+    // 要件§6「データがない項目」の表示設定（WBS 6.6）。権限が未許可・未確認のカードは
+    // 「データがない」ではなく別の案件（許可すれば解決する）のため、この設定の対象外にする。
+    if (!showMetricsWithoutData && granted == true && load is WeightRecordsResult.Success && load.records.isEmpty()) return
     val locale = LocalLocale.current.platformLocale
     MetricCardContainer(
         title = stringResource(id = R.string.home_weight_title),
@@ -441,7 +466,9 @@ private fun WeightCard(
 }
 
 @Composable
-private fun StepsCard(period: DashboardPeriod, granted: Boolean?, load: StepsCardLoad?, onClick: () -> Unit) {
+private fun StepsCard(period: DashboardPeriod, granted: Boolean?, load: StepsCardLoad?, showMetricsWithoutData: Boolean, onClick: () -> Unit) {
+    val currentResult = if (load != null && load.period == period) load.result else null
+    if (!showMetricsWithoutData && granted == true && currentResult is StepsAggregateTotalResult.Success && currentResult.total == null) return
     val locale = LocalLocale.current.platformLocale
     val numberFormat = remember(locale) { NumberFormat.getIntegerInstance(locale) }
     MetricCardContainer(
@@ -449,7 +476,6 @@ private fun StepsCard(period: DashboardPeriod, granted: Boolean?, load: StepsCar
         accentColor = StepsAccent,
         onClick = if (granted == true) onClick else null,
     ) {
-        val currentResult = if (load != null && load.period == period) load.result else null
         when {
             granted != true -> PermissionNotGrantedOrLoadingText(granted)
             currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
@@ -470,13 +496,22 @@ private fun StepsCard(period: DashboardPeriod, granted: Boolean?, load: StepsCar
 }
 
 @Composable
-private fun HeartRateCard(period: DashboardPeriod, granted: Boolean?, load: HeartRateCardLoad?, onClick: () -> Unit) {
+private fun HeartRateCard(
+    period: DashboardPeriod,
+    granted: Boolean?,
+    load: HeartRateCardLoad?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    val currentResult = if (load != null && load.period == period) load.result else null
+    if (!showMetricsWithoutData && granted == true && currentResult is HeartRateAggregateSummaryResult.Success && currentResult.averageBpm == null) {
+        return
+    }
     MetricCardContainer(
         title = stringResource(id = R.string.home_heart_rate_title),
         accentColor = HeartRateAccent,
         onClick = if (granted == true) onClick else null,
     ) {
-        val currentResult = if (load != null && load.period == period) load.result else null
         when {
             granted != true -> PermissionNotGrantedOrLoadingText(granted)
             currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
@@ -505,13 +540,26 @@ private fun HeartRateCard(period: DashboardPeriod, granted: Boolean?, load: Hear
 }
 
 @Composable
-private fun SleepCard(period: DashboardPeriod, granted: Boolean?, load: SleepCardLoad?, onClick: () -> Unit) {
+private fun SleepCard(
+    period: DashboardPeriod,
+    granted: Boolean?,
+    load: SleepCardLoad?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    val currentResult = if (load != null && load.period == period) load.result else null
+    if (!showMetricsWithoutData &&
+        granted == true &&
+        currentResult is SleepCardResult.Success &&
+        currentResult.value.duration == null
+    ) {
+        return
+    }
     MetricCardContainer(
         title = stringResource(id = R.string.home_sleep_title),
         accentColor = SleepAccent,
         onClick = if (granted == true) onClick else null,
     ) {
-        val currentResult = if (load != null && load.period == period) load.result else null
         when {
             granted != true -> PermissionNotGrantedOrLoadingText(granted)
             currentResult == null -> Text(text = stringResource(id = R.string.home_loading))

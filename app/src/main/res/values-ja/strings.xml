@@ -108,4 +108,25 @@
     <string name="detail_sources_record_count">%1$s件のレコード</string>
     <string name="detail_heart_rate_source_sample_count">%1$s件のサンプル（正確なレコード件数ではない）</string>
     <string name="detail_heart_rate_source_sample_count_failed">このソースのサンプル数を取得できませんでした。</string>
+    <!-- WBS 6.6: 設定画面。 -->
+    <string name="settings_title">設定</string>
+    <string name="settings_back">戻る</string>
+    <string name="settings_section_permissions">Health Connectの権限</string>
+    <string name="settings_permission_granted">許可されています</string>
+    <string name="settings_permission_history">履歴の読み取り</string>
+    <string name="settings_open_health_connect">Health Connectで管理</string>
+    <string name="settings_section_visible_metrics">表示指標</string>
+    <string name="settings_show_metrics_without_data">データがない項目も表示する</string>
+    <string name="settings_section_theme">テーマ</string>
+    <string name="settings_theme_system">システム</string>
+    <string name="settings_theme_light">ライト</string>
+    <string name="settings_theme_dark">ダーク</string>
+    <string name="settings_section_language">言語</string>
+    <string name="settings_language_system">システム</string>
+    <string name="settings_language_japanese">日本語</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_about_version">バージョン %1$s</string>
+    <string name="settings_about_github">GitHubでソースコードを見る</string>
+    <string name="settings_about_rights">© yskms. All rights reserved.</string>
 </resources>

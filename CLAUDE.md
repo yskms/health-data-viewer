@@ -1,7 +1,7 @@
 # Health Data Viewer
 
 Health Connectに保存済みのデータを読み取り専用で可視化・検証するAndroidアプリ。
-現在はPoCフェーズ（WBS 2〜5、[docs/wbs.md](docs/wbs.md)参照）。
+現在はMVP実装フェーズ（WBS 6、[docs/wbs.md](docs/wbs.md)参照）。
 
 -   要件・技術方針: [docs/requirements.md](docs/requirements.md)（第II部は「確定」と「PoCで確定する候補」を区別している）
 -   WBS・決定ログ: [docs/wbs.md](docs/wbs.md)。タスクの完了時に状態を更新し、方針を変えたら決定ログに追記する
@@ -45,3 +45,8 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 
 -   MainActivityは`ComponentActivity`ではなく`AppCompatActivity`を使う。テーマの親も`Theme.AppCompat.DayNight.NoActionBar`（フレームワーク標準の`android:Theme.Material...`ではない）。Composeオンリーだからと`ComponentActivity`に「簡略化」しないこと
 -   理由: 要件§21で確定済みの言語切替方式`AppCompatDelegate.setApplicationLocales()`は、Android 12以前ではAppCompatActivity・AppCompat系テーマが前提（D-022）。DayNightテーマにしているのは、ダークモード端末での起動時（Compose描画前）の白画面ちらつきも同時に防ぐため
+
+## 設定・テーマ・言語で誤解しやすい点
+
+-   `AppCompatDelegate.setDefaultNightMode()`（テーマ）はプロセス内メモリのstatic変数のみで、プロセス再起動をまたいで**永続化されない**。`setApplicationLocales()`（言語）はマニフェストの`AppLocalesMetadataHolderService`宣言経由でライブラリ自身が永続化する点と対照的（逆コンパイルで確認）。そのためテーマだけは独自のDataStore（`settings/UserSettingsRepository.kt`）が必要で、アプリ起動時（`HealthDataViewerApplication.onCreate()`）に保存値を読んで`setDefaultNightMode()`を呼び直す。言語は独自のDataStoreに重複して保存しない（[docs/lessons.md](docs/lessons.md) 10.1）
+-   `AppCompatDelegate.setDefaultNightMode()`はActivityの再生成を引き起こすため、設定変更ハンドラ内でDataStoreへの書き込み（suspend）とこの呼び出しを同じ`launch`ブロックの別々のタイミングで行うと、再生成がComposition（`rememberCoroutineScope()`）を道連れに破棄し、書き込みが完了前にキャンセルされうる（見た目だけ切り替わり、再起動すると保存されていない）。**書き込みを`await`してから`setDefaultNightMode()`を呼ぶ順序にすること**（[docs/lessons.md](docs/lessons.md) 10.2、D-039）

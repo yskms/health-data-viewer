@@ -21,14 +21,32 @@
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 
     <application
+        android:name=".HealthDataViewerApplication"
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.HealthDataViewer">
+
+        <!-- 要件§13・§21・D-022・WBS 6.8メモ: AppCompatDelegate.setApplicationLocales()の選択を
+             Android 12以前でもプロセス再起動をまたいで自動的に永続化させるための宣言（AppCompat側が
+             SharedPreferencesに保存・復元する。android:enabled="false"はAppCompatの推奨設定で、
+             実際にこのServiceが起動することはない）。Android 13以降はこの宣言なしでもOS側の
+             per-app language機能（上記android:localeConfig）で永続化されるが、12以前はこの宣言が
+             必須（公式ドキュメント「Use per-app language preferences」）。 -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

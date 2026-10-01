@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   要件§13・§21（言語切替）。AndroidManifest.xmlのapplication要素android:localeConfigから参照する。
+   Android 13以降で、システムの「アプリの言語」設定にこのアプリが対応言語一覧として表示される
+   （WBS 6.8メモ）。アプリ内のLanguage設定（AppCompatDelegate.setApplicationLocales()）とは
+   別の入り口だが、どちらも同じ仕組みに保存される。
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ja" />
+</locale-config>

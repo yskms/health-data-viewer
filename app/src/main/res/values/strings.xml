@@ -109,4 +109,25 @@
     <string name="detail_sources_record_count">%1$s records</string>
     <string name="detail_heart_rate_source_sample_count">%1$s samples (not an exact record count)</string>
     <string name="detail_heart_rate_source_sample_count_failed">Couldn\'t load the sample count for this source.</string>
+    <!-- WBS 6.6: Settings screen. -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_section_permissions">Health Connect permissions</string>
+    <string name="settings_permission_granted">Allowed</string>
+    <string name="settings_permission_history">History</string>
+    <string name="settings_open_health_connect">Manage in Health Connect</string>
+    <string name="settings_section_visible_metrics">Visible metrics</string>
+    <string name="settings_show_metrics_without_data">Show metrics with no data</string>
+    <string name="settings_section_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_section_language">Language</string>
+    <string name="settings_language_system">System</string>
+    <string name="settings_language_japanese">日本語</string>
+    <string name="settings_language_english">English</string>
+    <string name="settings_section_about">About</string>
+    <string name="settings_about_version">Version %1$s</string>
+    <string name="settings_about_github">View source on GitHub</string>
+    <string name="settings_about_rights">© yskms. All rights reserved.</string>
 </resources>

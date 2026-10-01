@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
    Health Connectのデータはこのアプリ内に複製しないため、バックアップ対象は
-   設定（DataStore: テーマ・言語・表示指標・購入状態キャッシュ、要件§21）のみに
-   なる想定。DataStoreは健康データを含まないためバックアップ対象のままでよい。
+   設定（DataStore: テーマ・表示指標。WBS 6.6で導入。言語はAppCompatDelegate、
+   購入状態キャッシュはWBS 7.4で導入予定、要件§21）のみになる。DataStoreは
+   健康データを含まないためバックアップ対象のままでよい。
    将来Room（健康データのキャッシュ、PoC 4.3で要否判断）を導入する場合は、
    data_extraction_rules.xmlと合わせてこちらも除外設定を追加する（要件§14）。
-   現時点でアプリ独自の永続データがないため除外ルールは未定義。
 -->
 <full-backup-content>
 </full-backup-content>

@@ -403,7 +403,7 @@
 -   [ ] 権限説明画面を両方の経路（Android 13以前・14以降）から開く
 -   [ ] データが0件のデータ型／読み込み失敗（データなしと区別できるか）
 -   [ ] 端末のタイムゾーン変更・夏時間の境界・日付境界での日／月／年bucket
--   [ ] テーマ（System / Light / Dark）と言語（日本語 / English）の切り替え
+-   [x] テーマ（System / Light / Dark）と言語（日本語 / English）の切り替え（10.1、10.2。Pixel 11で確認、2026-10-01）
 -   [ ] リリースビルドのlogcatに健康データの値が出ていないか
 -   [ ] 広告リクエストに健康データ由来の情報が含まれていないか
 -   [ ] 同一日・同一ソースなど複数の重複レコードが、実装変更（`ReadRecordsRequest`の呼び方の変更など）でRaw一覧から消えていないか（6.3）
@@ -427,3 +427,21 @@
 -   アプリ内DB（暗号化DB、スキーマ変更時の再インストール）
 -   Health Connectの有無によるビルドの出し分け（Viewerは常にHealth Connectを使う）
 -   iOS固有の回避策
+
+------------------------------------------------------------------------
+
+## 10. 設定・テーマ・言語（WBS 6.6）
+
+### 10.1 `AppCompatDelegate.setDefaultNightMode()`はプロセス再起動をまたいで永続化されない。`setApplicationLocales()`（言語）は永続化される
+
+-   **知見**: `androidx.appcompat:appcompat` 1.8.0のclasses.jarを逆コンパイル（`javap -p -constants`）して確認したところ、夜間モードの保持は`AppCompatDelegate`内の`private static int sDefaultNightMode`というプロセス内メモリのみのstatic変数で行われており、`SharedPreferences`等への書き込みコードは存在しない。一方、言語（`setApplicationLocales()`）は`sAppLocalesStorageSyncLock`・`AppLocalesMetadataHolderService`関連の静的フィールド・メソッド（`syncRequestedAndStoredLocales()`等）を持ち、マニフェストに`AppLocalesMetadataHolderService`（`autoStoreLocales`）を宣言すると、ライブラリが自分でSharedPreferences相当の永続化を行う（Android 13以降はさらにOS側のper-app language機能と同期する）
+-   **Viewerへの適用**: テーマ（System/Light/Dark）はアプリ独自の永続化層（DataStore、`settings/UserSettingsRepository.kt`）が必須で、プロセス起動時（`HealthDataViewerApplication.onCreate()`）に保存値を読んで`setDefaultNightMode()`を呼び直す必要がある。言語は`AppCompatDelegate`が自前で永続化するため、アプリ独自のDataStoreに重複して保存しない（二重管理による食い違いを避ける）。要件§21の「DataStore（テーマ・言語・表示指標・購入状態のキャッシュ）」という書き方はこの違いを区別していないため、実装時に精査が必要だった
+-   **根拠**: 逆コンパイル（appcompat 1.8.0のclasses.jar、2026-10-01）／実機確認（Pixel 11。テーマ・言語とも3択の切り替えと、`am force-stop`→再起動後の保持を確認。D-039）
+-   **確認日**: 2026-10-01
+
+### 10.2 `AppCompatDelegate.setDefaultNightMode()`はActivityを再生成するため、呼び出し元のComposition（`rememberCoroutineScope()`等）に依存する非同期処理を道連れにキャンセルしうる
+
+-   **知見**: Settings画面のテーマ選択ハンドラで、`coroutineScope.launch { repository.setThemeMode(mode) }`（DataStoreへの書き込み）と`AppCompatDelegate.setDefaultNightMode(...)`（見た目の反映）を別々の文として呼んだところ、Pixel 11実機で「見た目は即座に切り替わるが、アプリを`force-stop`して再起動すると設定が保存されておらずSystemに戻る」不具合が発生した。`setDefaultNightMode()`は呼び出すと（必要な場合）Activityを再生成し、その再生成はSettings画面のCompositionとそれに紐づく`rememberCoroutineScope()`のスコープを破棄する。DataStoreへの書き込み（`dataStore.edit {}`、suspend）がその破棄より先に完了していなければ、書き込みは完了しないままキャンセルされる。`adb shell run-as <pkg> cat .../datastore/settings.preferences_pb`でファイル自体が作成されていないことを確認して原因を特定した
+-   **Viewerへの適用**: 永続化（DataStoreへの書き込み）と、その後に続く「状態変更を引き起こす可能性のある処理」（`setDefaultNightMode()`に限らず、Activity再生成・プロセス終了・画面遷移などComposition破棄を伴いうる処理全般）は同じ`launch`ブロック内で、永続化のsuspend呼び出しを`await`（＝先に書いて完了を待つ）してから後続処理を呼ぶ順序にする。見た目の反映を先に行うと、その反映自体の副作用が永続化を妨げるという順序依存の罠になる
+-   **根拠**: 実機確認（Pixel 11、2026-10-01。D-039の(4)参照。選択→スクリーンショット→アプリ再起動→スクリーンショット→DataStoreファイルの直接確認、という手順で再現・特定した）
+-   **確認日**: 2026-10-01

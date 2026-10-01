@@ -24,6 +24,8 @@ import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
 import com.yskms.healthdataviewer.screen.detail.StepsDetailScreen
 import com.yskms.healthdataviewer.screen.detail.WeightDetailScreen
 import com.yskms.healthdataviewer.screen.home.HomeScreen
+import com.yskms.healthdataviewer.screen.settings.SettingsScreen
+import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.HealthDataViewerTheme
 
 // AppCompatDelegate.setApplicationLocales()（アプリ内言語切替、要件§21）は
@@ -33,11 +35,13 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val healthConnectManager = HealthConnectManager(applicationContext)
+        val userSettingsRepository = UserSettingsRepository(applicationContext)
         setContent {
             HealthDataViewerTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     MainNavHost(
                         healthConnectManager = healthConnectManager,
+                        userSettingsRepository = userSettingsRepository,
                         modifier = Modifier.padding(innerPadding),
                     )
                 }
@@ -50,12 +54,14 @@ class MainActivity : AppCompatActivity() {
 // screen/detail配下の正式なDetail画面へ接続する（D-033のpoc/各Graph画面への暫定的なブリッジを
 // 置き換えた）。WBS 6.3で各Detail画面にRecordsタブ（ページング生レコード一覧）を追加し、旧Raw一覧
 // PoC画面（WeightRawRecordsScreen等）は削除した。Steps比較PoC＝poc/StepsScreenは、ソース別件数の
-// 仕様を確定するWBS 6.4まで引き続きどこからも遷移させない。
+// 仕様を確定するWBS 6.4まで引き続きどこからも遷移させない。WBS 6.6でHomeScreenから設定画面への
+// 導線を追加した。
 private const val ROUTE_HOME = "home"
 private const val ROUTE_WEIGHT_DETAIL = "weight_detail"
 private const val ROUTE_STEPS_DETAIL = "steps_detail"
 private const val ROUTE_HEART_RATE_DETAIL = "heart_rate_detail"
 private const val ROUTE_SLEEP_DETAIL = "sleep_detail"
+private const val ROUTE_SETTINGS = "settings"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
 // まだRESUMEDになっていない間はnavigate()/popBackStack()を呼ばない。ガードなしだと、素早く2回
@@ -74,7 +80,11 @@ private fun NavHostController.popBackStackOnce() {
 }
 
 @Composable
-private fun MainNavHost(healthConnectManager: HealthConnectManager, modifier: Modifier = Modifier) {
+private fun MainNavHost(
+    healthConnectManager: HealthConnectManager,
+    userSettingsRepository: UserSettingsRepository,
+    modifier: Modifier = Modifier,
+) {
     val navController: NavHostController = rememberNavController()
     // WeightDetailScreen/StepsDetailScreen/HeartRateDetailScreen/SleepDetailScreenが引数として
     // 受け取るhistoryPermissionGrantedのスナップショット。遷移直前にHomeScreen側の最新の許可状態を
@@ -86,6 +96,7 @@ private fun MainNavHost(healthConnectManager: HealthConnectManager, modifier: Mo
         composable(ROUTE_HOME) {
             HomeScreen(
                 healthConnectManager = healthConnectManager,
+                userSettingsRepository = userSettingsRepository,
                 onOpenWeightGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_WEIGHT_DETAIL)
@@ -102,6 +113,14 @@ private fun MainNavHost(healthConnectManager: HealthConnectManager, modifier: Mo
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_SLEEP_DETAIL)
                 },
+                onOpenSettings = { navController.navigateOnce(ROUTE_SETTINGS) },
+            )
+        }
+        composable(ROUTE_SETTINGS) {
+            SettingsScreen(
+                healthConnectManager = healthConnectManager,
+                userSettingsRepository = userSettingsRepository,
+                onBack = { navController.popBackStackOnce() },
             )
         }
         composable(ROUTE_WEIGHT_DETAIL) {
