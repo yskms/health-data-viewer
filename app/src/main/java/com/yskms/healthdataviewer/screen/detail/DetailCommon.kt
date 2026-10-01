@@ -41,14 +41,14 @@ fun OldestRecordInfo(oldestResult: OldestRecordResult?) {
     Text(text = text, style = MaterialTheme.typography.bodySmall)
 }
 
-// WBS 6.3: Metric Detail画面のChart/Records/Sources（requirements.md §18）のうち、Chart/Recordsの
-// 2つを先に実装する（Sourcesタブ自体はWBS 6.4）。
-enum class DetailTab { CHART, RECORDS }
+// WBS 6.3/6.4: Metric Detail画面のChart/Records/Sources（requirements.md §18）の3タブ。
+enum class DetailTab { CHART, RECORDS, SOURCES }
 
 private fun DetailTab.labelRes(): Int =
     when (this) {
         DetailTab.CHART -> R.string.detail_tab_chart
         DetailTab.RECORDS -> R.string.detail_tab_records
+        DetailTab.SOURCES -> R.string.detail_tab_sources
     }
 
 @Composable

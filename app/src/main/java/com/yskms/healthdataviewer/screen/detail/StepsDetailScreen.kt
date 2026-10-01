@@ -47,6 +47,7 @@ import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
+import com.yskms.healthdataviewer.healthconnect.SourceRecordCountsResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.StepsAggregatesResult
 import java.text.NumberFormat
@@ -244,6 +245,18 @@ fun StepsDetailScreen(
                         historyLimited = !historyPermissionGranted,
                         rowContent = { record -> StepsRecordRow(record = record) },
                     )
+                }
+                DetailTab.SOURCES -> {
+                    // WeightDetailScreenのSourcesタブと同じ考え方（タブに入っている間だけ生存する状態）。
+                    // Stepsは全期間で数十万件規模になり得るが、WBS 3.1でRaw全件走査が性能上問題ないことを
+                    // 確認済みのため、Weightと同じ全件走査カウント（readStepsSourceCounts()）を使う。
+                    var sourcesLoad by remember { mutableStateOf<SourceRecordCountsResult?>(null) }
+                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+                    LaunchedEffect(sourcesRetryKey) {
+                        sourcesLoad = null
+                        sourcesLoad = healthConnectManager.readStepsSourceCounts(historyPermissionGranted)
+                    }
+                    RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
                 }
             }
         }

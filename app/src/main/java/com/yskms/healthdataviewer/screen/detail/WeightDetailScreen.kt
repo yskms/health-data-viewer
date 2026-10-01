@@ -47,6 +47,7 @@ import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
+import com.yskms.healthdataviewer.healthconnect.SourceRecordCountsResult
 import com.yskms.healthdataviewer.healthconnect.WeightAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.WeightAggregatesResult
 import java.time.LocalDate
@@ -247,6 +248,17 @@ fun WeightDetailScreen(
                         historyLimited = !historyPermissionGranted,
                         rowContent = { record -> WeightRecordRow(record = record) },
                     )
+                }
+                DetailTab.SOURCES -> {
+                    // WBS 6.4: RecordsタブのPagerと同じ考え方で、Sourcesタブに入っている間だけ生存する
+                    // ローカル状態にする（タブを離れると破棄され、再訪時に読み直す）。
+                    var sourcesLoad by remember { mutableStateOf<SourceRecordCountsResult?>(null) }
+                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+                    LaunchedEffect(sourcesRetryKey) {
+                        sourcesLoad = null
+                        sourcesLoad = healthConnectManager.readWeightSourceCounts(historyPermissionGranted)
+                    }
+                    RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
                 }
             }
         }

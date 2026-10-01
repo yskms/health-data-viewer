@@ -48,6 +48,7 @@ import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregatesResult
+import com.yskms.healthdataviewer.healthconnect.HeartRateSourceSampleCountsResult
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import java.text.NumberFormat
 import java.time.LocalDate
@@ -238,6 +239,18 @@ fun HeartRateDetailScreen(
                         historyLimited = !historyPermissionGranted,
                         rowContent = { record -> HeartRateRecordRow(record = record) },
                     )
+                }
+                DetailTab.SOURCES -> {
+                    // WeightDetailScreenのSourcesタブと同じ考え方（タブに入っている間だけ生存する状態）。
+                    // Heart RateはD-036により、全件走査ではなくAggregateのソース別サンプル数
+                    // （readHeartRateSourceSampleCounts()）を使う。
+                    var sourcesLoad by remember { mutableStateOf<HeartRateSourceSampleCountsResult?>(null) }
+                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+                    LaunchedEffect(sourcesRetryKey) {
+                        sourcesLoad = null
+                        sourcesLoad = healthConnectManager.readHeartRateSourceSampleCounts(historyPermissionGranted)
+                    }
+                    HeartRateSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
                 }
             }
         }

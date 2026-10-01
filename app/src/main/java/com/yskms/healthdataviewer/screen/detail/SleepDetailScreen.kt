@@ -49,6 +49,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.SleepAggregatesResult
+import com.yskms.healthdataviewer.healthconnect.SourceRecordCountsResult
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -251,6 +252,17 @@ fun SleepDetailScreen(
                         historyLimited = !historyPermissionGranted,
                         rowContent = { record -> SleepRecordRow(record = record) },
                     )
+                }
+                DetailTab.SOURCES -> {
+                    // WeightDetailScreenのSourcesタブと同じ考え方（タブに入っている間だけ生存する状態）。
+                    // Sleep Sessionは件数が少なく、Weightと同じ全件走査カウント（readSleepSourceCounts()）を使う。
+                    var sourcesLoad by remember { mutableStateOf<SourceRecordCountsResult?>(null) }
+                    var sourcesRetryKey by remember { mutableIntStateOf(0) }
+                    LaunchedEffect(sourcesRetryKey) {
+                        sourcesLoad = null
+                        sourcesLoad = healthConnectManager.readSleepSourceCounts(historyPermissionGranted)
+                    }
+                    RecordCountSourcesTab(load = sourcesLoad, onRetry = { sourcesRetryKey++ })
                 }
             }
         }

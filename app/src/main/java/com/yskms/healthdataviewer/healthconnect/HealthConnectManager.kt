@@ -7,6 +7,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.WeightRecord
@@ -21,6 +22,7 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.Period
 import java.time.temporal.ChronoUnit
+import kotlin.reflect.KClass
 
 // HealthConnectManager.readWithHistoryFallback()の結果型（詳細は同関数のコメント参照）。
 private sealed interface HistoryFallbackOutcome<out T> {
@@ -175,6 +177,33 @@ class HealthConnectManager(context: Context) {
         ) {
             is HistoryFallbackOutcome.Success -> WeightRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> WeightRecordsResult.Failure
+        }
+    }
+
+    // WBS 6.4: 詳細画面のSourcesタブ用。ソース別のレコード件数はAggregateでは取れない
+    // （requirements.md §7.2/§22.3）ため、全件走査して正確に数える。Weightは件数が少なく
+    // （Recordsタブと同程度）、Heart Rateのような大量データ型に必要なAggregate代替（D-036）は不要。
+    // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
+    // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の
+    // 自動フォールバック再試行をそのまま使える（D-035(1)がRecordsタブで避けている設計とは別物）。
+    suspend fun readWeightSourceCounts(historyPermissionGranted: Boolean): SourceRecordCountsResult {
+        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
+            countBySource(WeightRecord::class, filter)
+                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
+                .sortedByDescending { it.count }
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::read,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
         }
     }
 
@@ -342,6 +371,31 @@ class HealthConnectManager(context: Context) {
             StepsAggregateTotalResult.Failure
         }
 
+    // WBS 6.4: 詳細画面のSourcesタブ用。Stepsはrecord自体が歩数の単純な値（Heart Rateのような
+    // サンプル配列を持たない）で、WBS 3.1で全期間（数十万件規模）のRaw全件ページング読み取りが
+    // 問題なく動作することを確認済みのため、readWeightSourceCounts()と同じ全件走査でよい
+    // （D-036はHeart Rate固有の判断で、Stepsには適用しない）。
+    suspend fun readStepsSourceCounts(historyPermissionGranted: Boolean): SourceRecordCountsResult {
+        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
+            countBySource(StepsRecord::class, filter)
+                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
+                .sortedByDescending { it.count }
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::read,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
+        }
+    }
+
     // WBS 6.3: 詳細画面のRecordsタブ用。readHeartRateRecords()（全件を1つのListに溜め込む旧実装）を
     // 置き換える。Heart Rateは1レコードに複数サンプルを含み、継続記録するソースでは「全期間」の
     // Raw全件読み込みが実機のヒープを枯渇させ、Health Connect SDK内部（readRecords()のレコード変換
@@ -478,6 +532,68 @@ class HealthConnectManager(context: Context) {
             HeartRateAggregateSummaryResult.Failure
         }
 
+    // WBS 6.4（D-036）: Heart Rateのデータソース画面用。正確なレコード件数の全件走査は
+    // OutOfMemoryErrorの実例がある（lessons.md 6.7）ため行わず、Aggregateのソース別MEASUREMENTS_COUNT
+    // （サンプル数、レコード数ではない）で代替する。ソース一覧は、requirements.md §22.3の見込み通り
+    // dataOriginFilterを指定しない通常のAggregate呼び出しが返す`AggregationResult.dataOrigins`から
+    // 取得する（全件走査よりはるかに軽量な1回のAggregate呼び出し）。
+    // ソースが1件も見つからない場合（範囲内に記録なし）はdataOriginsが空集合になり、counts=emptyListを返す
+    // （Failureにはしない。Recordsタブの「記録なし」と同じ「正常に0件」の扱い）。
+    // 個別ソースのAggregate呼び出しが失敗した場合は、そのソースだけfailed=trueにして他のソースの
+    // 表示を妨げない（poc/StepsScreen.StepsSourceRowのofficialTotal/officialTotalFailedと同じ考え方）。
+    //
+    // D-036の採用条件（MEASUREMENTS_COUNTがRawから数えたサンプル数と実機で一致するか）は、全件走査が
+    // 安全な直近7日・直近30日の範囲（主ソースでそれぞれ9,895件/253,082サンプル、41,376件/1,065,015
+    // サンプル）で、一時的な診断コード（確認後に削除済み）により検証した。いずれもMEASUREMENTS_COUNTと
+    // Rawから数えたサンプル数の単純合計が完全に一致することをPixel 11実機（実データ）で確認できた
+    // （2026-10-01）。多年規模の全件走査自体は引き続き行わないため、この一致がより長い範囲でも
+    // 成り立つかは未検証のまま残る。
+    suspend fun readHeartRateSourceSampleCounts(historyPermissionGranted: Boolean): HeartRateSourceSampleCountsResult {
+        suspend fun readSingleSourceSampleCount(filter: TimeRangeFilter, origin: DataOrigin): HeartRateSourceSampleCount =
+            try {
+                val result =
+                    client.aggregate(
+                        AggregateRequest(
+                            metrics = setOf(HeartRateRecord.MEASUREMENTS_COUNT),
+                            timeRangeFilter = filter,
+                            dataOriginFilter = setOf(origin),
+                        ),
+                    )
+                HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = result[HeartRateRecord.MEASUREMENTS_COUNT], failed = false)
+            } catch (e: RemoteException) {
+                HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = null, failed = true)
+            } catch (e: IOException) {
+                HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = null, failed = true)
+            } catch (e: SecurityException) {
+                HeartRateSourceSampleCount(dataOrigin = origin, sampleCount = null, failed = true)
+            }
+
+        suspend fun read(filter: TimeRangeFilter): List<HeartRateSourceSampleCount> {
+            val combined =
+                client.aggregate(
+                    AggregateRequest(metrics = setOf(HeartRateRecord.MEASUREMENTS_COUNT), timeRangeFilter = filter),
+                )
+            return combined.dataOrigins
+                .map { origin -> readSingleSourceSampleCount(filter, origin) }
+                .sortedByDescending { it.sampleCount ?: 0L }
+        }
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::read,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                HeartRateSourceSampleCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> HeartRateSourceSampleCountsResult.Failure
+        }
+    }
+
     // WBS 5.1（PoC 4）: Sleepの公式Aggregate（SLEEP_DURATION_TOTAL）はActivity/Sleepにのみ効く公式の
     // 重複処理を経る（requirements.md §22.2）。Weight/Heart Rateと同じくreadWeightAggregates()と同じ形
     // （metricsをSLEEP_DURATION_TOTAL 1つに差し替え、結果はDuration）にする。
@@ -546,6 +662,29 @@ class HealthConnectManager(context: Context) {
         } catch (e: SecurityException) {
             SleepAggregateSummaryResult.Failure
         }
+
+    // WBS 6.4: 詳細画面のSourcesタブ用。readWeightSourceCounts()と同じ理由・同じ形
+    // （Sleep Sessionは1日1〜数件程度で件数が少なく、全件走査で正確に数えられる）。
+    suspend fun readSleepSourceCounts(historyPermissionGranted: Boolean): SourceRecordCountsResult {
+        suspend fun read(filter: TimeRangeFilter): List<SourceRecordCount> =
+            countBySource(SleepSessionRecord::class, filter)
+                .map { (origin, count) -> SourceRecordCount(dataOrigin = origin, count = count) }
+                .sortedByDescending { it.count }
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::read,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> SourceRecordCountsResult.Success(counts = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> SourceRecordCountsResult.Failure
+        }
+    }
 
     // WBS 6.3: 詳細画面のRecordsタブ用。readSleepSessionRecords()（全件を1つのListに溜め込む旧実装）を
     // 置き換える。weightRecordsPagingSource()と同じ考え方（入り口で一度だけfilterを決め、ページング中の
@@ -674,6 +813,29 @@ class HealthConnectManager(context: Context) {
             is HistoryFallbackOutcome.Success -> StepsAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> StepsAggregatesResult.Failure
         }
+    }
+
+    // WBS 6.4: readWeightSourceCounts() / readStepsSourceCounts() / readSleepSourceCounts()に共通する
+    // 全件走査カウント。D-031(3)で候補に挙がっていた「件数だけを集計し、レコード自体は保持しない走査」
+    // （Raw一覧のページング表示化後の代替案）をここで実装する。Map<DataOrigin, Long>（ソース数程度の
+    // 小さいサイズ）だけを保持し、ページごとのレコードリストはカウントに使ったらその場で破棄する
+    // （Weight/Sleepは元々件数が少なく実害は小さいが、Stepsは全期間で数十万件規模になり得るため、
+    // 一貫してこの方式にする）。
+    private suspend fun <T : Record> countBySource(recordType: KClass<T>, filter: TimeRangeFilter): Map<DataOrigin, Long> {
+        val counts = mutableMapOf<DataOrigin, Long>()
+        var pageToken: String? = null
+        do {
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(recordType = recordType, timeRangeFilter = filter, pageToken = pageToken),
+                )
+            for (record in response.records) {
+                val origin = record.metadata.dataOrigin
+                counts[origin] = (counts[origin] ?: 0L) + 1L
+            }
+            pageToken = response.pageToken?.ifEmpty { null }
+        } while (pageToken != null)
+        return counts
     }
 
     // findOldestWeightRecordTime() / readWeightAggregates() / findOldestHeartRateRecordTime() /

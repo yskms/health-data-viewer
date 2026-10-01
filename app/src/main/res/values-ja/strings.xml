@@ -102,4 +102,9 @@
     <string name="detail_sleep_stage_deep">深い睡眠</string>
     <string name="detail_sleep_stage_rem">レム睡眠</string>
     <string name="detail_sleep_stage_awake_in_bed">覚醒（ベッド内）</string>
+    <!-- WBS 6.4: Sourcesタブ。Weight/Steps/Heart rate/Sleepで共通。 -->
+    <string name="detail_tab_sources">データソース</string>
+    <string name="detail_sources_empty">読み取れる範囲にソースがありません。</string>
+    <string name="detail_sources_record_count">%1$s件のレコード</string>
+    <string name="detail_heart_rate_source_sample_count">%1$s件のサンプル（正確なレコード件数ではない）</string>
 </resources>
