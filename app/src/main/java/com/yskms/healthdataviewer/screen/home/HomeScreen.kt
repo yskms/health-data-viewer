@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.R
+import com.yskms.healthdataviewer.healthconnect.ActiveCaloriesAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.DistanceAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
@@ -49,15 +50,18 @@ import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.StepsAggregateTotalResult
+import com.yskms.healthdataviewer.healthconnect.TotalCaloriesAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.WeightRecordsResult
 import com.yskms.healthdataviewer.healthconnect.isGranted
 import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
+import com.yskms.healthdataviewer.ui.theme.ActiveCaloriesAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
+import com.yskms.healthdataviewer.ui.theme.TotalCaloriesAccent
 import com.yskms.healthdataviewer.ui.theme.WeightAccent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -135,6 +139,10 @@ private data class StepsCardLoad(val period: DashboardPeriod, val result: StepsA
 
 private data class DistanceCardLoad(val period: DashboardPeriod, val result: DistanceAggregateTotalResult?)
 
+private data class ActiveCaloriesCardLoad(val period: DashboardPeriod, val result: ActiveCaloriesAggregateTotalResult?)
+
+private data class TotalCaloriesCardLoad(val period: DashboardPeriod, val result: TotalCaloriesAggregateTotalResult?)
+
 private data class HeartRateCardLoad(val period: DashboardPeriod, val result: HeartRateAggregateSummaryResult?)
 
 // 週/月/年タブは「期間合計 ÷ 経過日数」の単純な1日あたり平均（記録のない日も分母に含む近似。
@@ -159,6 +167,8 @@ fun HomeScreen(
     onOpenHeartRateGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSleepGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenDistance: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenActiveCalories: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenTotalCalories: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -233,9 +243,20 @@ fun HomeScreen(
                 val heartRateGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HEART_RATE_READ)
                 val sleepGranted = permissionsCheckState.isGranted(HealthConnectPermissions.SLEEP_READ)
                 val distanceGranted = permissionsCheckState.isGranted(HealthConnectPermissions.DISTANCE_READ)
+                val activeCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.ACTIVE_CALORIES_READ)
+                val totalCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.TOTAL_CALORIES_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
-                if (listOf(weightGranted, stepsGranted, heartRateGranted, sleepGranted, distanceGranted).any { it == false }) {
+                if (listOf(
+                        weightGranted,
+                        stepsGranted,
+                        heartRateGranted,
+                        sleepGranted,
+                        distanceGranted,
+                        activeCaloriesGranted,
+                        totalCaloriesGranted,
+                    ).any { it == false }
+                ) {
                     PermissionBanner(
                         onRequestClick = {
                             val permissions =
@@ -245,6 +266,8 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.HEART_RATE_READ)
                                     add(HealthConnectPermissions.SLEEP_READ)
                                     add(HealthConnectPermissions.DISTANCE_READ)
+                                    add(HealthConnectPermissions.ACTIVE_CALORIES_READ)
+                                    add(HealthConnectPermissions.TOTAL_CALORIES_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -288,7 +311,7 @@ fun HomeScreen(
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
-                // 5つのLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
+                // 7つのLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
                 // 戻すと、表示指標トグルがOFFの状態で「データなし」と確定していたカードが、画面復帰
                 // （resumeKeyの変化）や期間タブ切り替えのたびに一瞬「読み込み中」として出現してから
                 // また消える、というちらつきが起きる。前回の結果を表示したまま裏で再取得し、新しい
@@ -368,7 +391,23 @@ fun HomeScreen(
                         DistanceCardLoad(period = selectedPeriod, result = healthConnectManager.readDistanceAggregateTotal(filter))
                 }
 
-                // period違いの結果を弾くガード（Steps/HeartRate/Sleep/Distanceで共通）。各Cardの描画と
+                var activeCaloriesLoad by remember { mutableStateOf<ActiveCaloriesCardLoad?>(null) }
+                LaunchedEffect(selectedPeriod, activeCaloriesGranted, historyPermissionGranted, resumeKey) {
+                    if (activeCaloriesGranted != true) return@LaunchedEffect
+                    val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
+                    activeCaloriesLoad =
+                        ActiveCaloriesCardLoad(period = selectedPeriod, result = healthConnectManager.readActiveCaloriesAggregateTotal(filter))
+                }
+
+                var totalCaloriesLoad by remember { mutableStateOf<TotalCaloriesCardLoad?>(null) }
+                LaunchedEffect(selectedPeriod, totalCaloriesGranted, historyPermissionGranted, resumeKey) {
+                    if (totalCaloriesGranted != true) return@LaunchedEffect
+                    val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
+                    totalCaloriesLoad =
+                        TotalCaloriesCardLoad(period = selectedPeriod, result = healthConnectManager.readTotalCaloriesAggregateTotal(filter))
+                }
+
+                // period違いの結果を弾くガード（Steps/HeartRate/Sleep/Distance/Calories共通）。各Cardの描画と
                 // 「表示指標」での非表示判定（isXxxCardHidden()）の両方がこれを使うため、親で
                 // 一度だけ計算する（コードレビュー指摘: 全カードが非表示になった場合に理由が
                 // 分からず画面が空白になる問題への対応で、両者が同じ値を見る必要があるため）。
@@ -376,6 +415,8 @@ fun HomeScreen(
                 val heartRateResult = if (heartRateLoad?.period == selectedPeriod) heartRateLoad?.result else null
                 val sleepResult = if (sleepLoad?.period == selectedPeriod) sleepLoad?.result else null
                 val distanceResult = if (distanceLoad?.period == selectedPeriod) distanceLoad?.result else null
+                val activeCaloriesResult = if (activeCaloriesLoad?.period == selectedPeriod) activeCaloriesLoad?.result else null
+                val totalCaloriesResult = if (totalCaloriesLoad?.period == selectedPeriod) totalCaloriesLoad?.result else null
                 val showMetricsWithoutData = settings.showMetricsWithoutData
 
                 val allCardsHidden =
@@ -384,7 +425,9 @@ fun HomeScreen(
                         isStepsCardHidden(stepsGranted, stepsResult, showMetricsWithoutData) &&
                         isHeartRateCardHidden(heartRateGranted, heartRateResult, showMetricsWithoutData) &&
                         isSleepCardHidden(sleepGranted, sleepResult, showMetricsWithoutData) &&
-                        isDistanceCardHidden(distanceGranted, distanceResult, showMetricsWithoutData)
+                        isDistanceCardHidden(distanceGranted, distanceResult, showMetricsWithoutData) &&
+                        isActiveCaloriesCardHidden(activeCaloriesGranted, activeCaloriesResult, showMetricsWithoutData) &&
+                        isTotalCaloriesCardHidden(totalCaloriesGranted, totalCaloriesResult, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -425,6 +468,20 @@ fun HomeScreen(
                     currentResult = distanceResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenDistance(historyPermissionGranted) },
+                )
+                ActiveCaloriesCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = activeCaloriesGranted,
+                    currentResult = activeCaloriesResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenActiveCalories(historyPermissionGranted) },
+                )
+                TotalCaloriesCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = totalCaloriesGranted,
+                    currentResult = totalCaloriesResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenTotalCalories(historyPermissionGranted) },
                 )
             }
         }
@@ -526,6 +583,26 @@ private fun isDistanceCardHidden(granted: Boolean?, currentResult: DistanceAggre
         granted == true &&
         currentResult is DistanceAggregateTotalResult.Success &&
         currentResult.totalKilometers == null
+
+private fun isActiveCaloriesCardHidden(
+    granted: Boolean?,
+    currentResult: ActiveCaloriesAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        currentResult is ActiveCaloriesAggregateTotalResult.Success &&
+        currentResult.totalKilocalories == null
+
+private fun isTotalCaloriesCardHidden(
+    granted: Boolean?,
+    currentResult: TotalCaloriesAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        currentResult is TotalCaloriesAggregateTotalResult.Success &&
+        currentResult.totalKilocalories == null
 
 @Composable
 private fun WeightCard(
@@ -737,6 +814,81 @@ private fun DistanceCard(
                 } else {
                     Text(
                         text = stringResource(id = R.string.home_distance_value, decimalFormat.format(total)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// StepsCardと同じ形（期間合計をそのまま表示、Sleepのような1日あたり平均化はしない）。
+// ACTIVE_CALORIES_TOTALはkcalへ変換済み（HealthConnectManager.readActiveCaloriesAggregateTotal()参照）。
+// DistanceCardのkm（小数2桁）とは異なり、kcal合計は歩数と同じく小数の意味が薄いため、StepsCardと同じ
+// 桁区切り付き整数表示にする（D-043(3)）。
+@Composable
+private fun ActiveCaloriesCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    currentResult: ActiveCaloriesAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isActiveCaloriesCardHidden(granted, currentResult, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    val numberFormat = remember(locale) { NumberFormat.getIntegerInstance(locale) }
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_active_calories_title),
+        accentColor = ActiveCaloriesAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
+            currentResult is ActiveCaloriesAggregateTotalResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            currentResult is ActiveCaloriesAggregateTotalResult.Success -> {
+                val total = currentResult.totalKilocalories
+                if (total == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_active_calories_value, numberFormat.format(total)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ActiveCaloriesCardと同じ形・同じ理由。
+@Composable
+private fun TotalCaloriesCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    currentResult: TotalCaloriesAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isTotalCaloriesCardHidden(granted, currentResult, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    val numberFormat = remember(locale) { NumberFormat.getIntegerInstance(locale) }
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_total_calories_title),
+        accentColor = TotalCaloriesAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
+            currentResult is TotalCaloriesAggregateTotalResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            currentResult is TotalCaloriesAggregateTotalResult.Success -> {
+                val total = currentResult.totalKilocalories
+                if (total == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_total_calories_value, numberFormat.format(total)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                 }

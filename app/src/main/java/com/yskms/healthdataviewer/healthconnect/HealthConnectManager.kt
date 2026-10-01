@@ -8,11 +8,13 @@ import androidx.activity.result.contract.ActivityResultContract
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
@@ -912,19 +914,272 @@ class HealthConnectManager(context: Context) {
             DistanceAggregateTotalResult.Failure
         }
 
-    // WBS 6.4（WBS 6.10でDistanceも追加）: 詳細画面のSourcesタブ用（Weight/Steps/Sleep/Distance共通。
-    // recordType以外の処理が完全に同一のため、データ型ごとの関数に分けず1つにまとめた。
-    // OldestRecordResultを1つに統合した方針（D-034(8)）と同じ考え方）。ソース別のレコード件数は
-    // Aggregateでは取れない（requirements.md §7.2/§22.3）ため、全件走査して正確に数える。
+    // WBS 6.10（D-043）: Calories。requirements.md §22.2の「Calories」はHealth Connect上で
+    // ActiveCaloriesBurnedRecord / TotalCaloriesBurnedRecordという2つの独立したRecord型に対応し
+    // （§22.2備考「Total / Activeの区別あり」）、1つのRecord型の中にTotal/Activeの2フィールドがある
+    // わけではない（javap逆コンパイルで確認）。この2型を1つのカード・詳細画面に統合すると、どちらの
+    // 値を優先するか、あるいは両方をどう1つの数値に合成するかというアプリ独自の判断が必要になり、
+    // 「重複も含めてすべて表示する、アプリ独自に判定しない」という原則（CLAUDE.md）に反する。そのため
+    // Weight/Steps/Distanceと同じ「1 Record型＝1カード＝1詳細画面」の構成を踏襲し、Active Calories・
+    // Total Caloriesをそれぞれ独立したデータ型として追加する（D-043(1)）。
+    //
+    // 両Record型ともDistanceRecordと同じ構造（IntervalRecord、値フィールドは`energy: Energy`1つのみ）
+    // で、§22.2では両方とも「合計」「あり（Activity）」に分類されているため、Steps/Distance用の
+    // 関数群と同じ形でそのまま実装する（PoCは行わない。D-042(1)と同じ考え方）。
+    //
+    // Energy型の実際のKotlinプロパティ名はinKilocalories（javap逆コンパイルが示すgetKilocalories()とは
+    // 異なる。CLAUDE.md「SDK調査（逆コンパイル）で誤解しやすい点」のLength/Massと同じ落とし穴で、
+    // .classバイナリの文字列直接検索で確認、D-043(2)）。表示単位はkcalに統一する（Distanceのkmのように
+    // 1件あたりの値が小さく潰れて見える問題が実機で起きるかは未確認。D-042(2)のような単位の使い分けが
+    // 必要かは実機確認後に判断する、要検証、D-043(3)）。
+    //
+    // 権限文字列（READ_ACTIVE_CALORIES_BURNED/READ_TOTAL_CALORIES_BURNED）はHealthPermission.
+    // getReadPermission()が内部のRECORD_TYPE_TO_PERMISSIONマップから組み立てる固定の接尾辞を
+    // javap逆コンパイルで確認した（HealthConnectPermissions.kt参照、D-043(4)）。
+
+    // findOldestDistanceRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestActiveCaloriesRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = ActiveCaloriesBurnedRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // distanceRecordsPagingSource()と同じ考え方。
+    fun activeCaloriesRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<ActiveCaloriesBurnedRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = ActiveCaloriesBurnedRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // readDistanceAggregates()と同じ形（詳細画面のActive Caloriesグラフ用）。
+    suspend fun readActiveCaloriesAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): ActiveCaloriesAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                ActiveCaloriesAggregateBucket(
+                    periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
+                    totalKilocalories = grouped.result[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                ActiveCaloriesAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> ActiveCaloriesAggregatesResult.Failure
+        }
+    }
+
+    // readDistanceAggregateTotal()と同じ形（ホーム画面のActive Caloriesカード用）。
+    suspend fun readActiveCaloriesAggregateTotal(timeRangeFilter: TimeRangeFilter): ActiveCaloriesAggregateTotalResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            ActiveCaloriesAggregateTotalResult.Success(
+                totalKilocalories = result[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories,
+            )
+        } catch (e: RemoteException) {
+            ActiveCaloriesAggregateTotalResult.Failure
+        } catch (e: IOException) {
+            ActiveCaloriesAggregateTotalResult.Failure
+        } catch (e: SecurityException) {
+            ActiveCaloriesAggregateTotalResult.Failure
+        }
+
+    // findOldestDistanceRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestTotalCaloriesRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = TotalCaloriesBurnedRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // distanceRecordsPagingSource()と同じ考え方。
+    fun totalCaloriesRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<TotalCaloriesBurnedRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = TotalCaloriesBurnedRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // readDistanceAggregates()と同じ形（詳細画面のTotal Caloriesグラフ用）。
+    suspend fun readTotalCaloriesAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): TotalCaloriesAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                TotalCaloriesAggregateBucket(
+                    periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
+                    totalKilocalories = grouped.result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories,
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                TotalCaloriesAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> TotalCaloriesAggregatesResult.Failure
+        }
+    }
+
+    // readDistanceAggregateTotal()と同じ形（ホーム画面のTotal Caloriesカード用）。
+    suspend fun readTotalCaloriesAggregateTotal(timeRangeFilter: TimeRangeFilter): TotalCaloriesAggregateTotalResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(TotalCaloriesBurnedRecord.ENERGY_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            TotalCaloriesAggregateTotalResult.Success(totalKilocalories = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories)
+        } catch (e: RemoteException) {
+            TotalCaloriesAggregateTotalResult.Failure
+        } catch (e: IOException) {
+            TotalCaloriesAggregateTotalResult.Failure
+        } catch (e: SecurityException) {
+            TotalCaloriesAggregateTotalResult.Failure
+        }
+
+    // WBS 6.4（WBS 6.10でDistance・Active Calories・Total Caloriesも追加）: 詳細画面のSourcesタブ用
+    // （Weight/Steps/Sleep/Distance/Calories共通。recordType以外の処理が完全に同一のため、
+    // データ型ごとの関数に分けず1つにまとめた。OldestRecordResultを1つに統合した方針（D-034(8)）と
+    // 同じ考え方）。ソース別のレコード件数はAggregateでは取れない（requirements.md §7.2/§22.3）ため、
+    // 全件走査して正確に数える。
     //
     // **この基準は「レコード件数の多寡」ではない**（コードレビュー指摘。Stepsは全期間で数十万件規模に
     // なり得る＝Weight/Sleepより2桁近く多い）。実際の基準は「1レコードが大きなサンプル配列を持たず、
     // Health Connect SDK内部の変換コストが低いか」で、Heart Rateだけがこれに該当しない（1レコードに
     // 多数のサンプルを含み、継続記録ソースでは全件走査がOutOfMemoryErrorを起こす実例がある。
-    // lessons.md 6.7）。DistanceRecordもStepsと同じ単純な区間+数値1個の構造で該当しないと判断した。
-    // Pixel 11実機（実データ、Fit 212,095件・Health 20,202件の計約23万件規模）で実際に全件走査しても
-    // クラッシュ・メモリ増大が起きないことを確認済み（WBS 6.10、D-042）。Stepsの全期間全件走査も
-    // WBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・メモリ増大なしを確認済み。
+    // lessons.md 6.7）。DistanceRecord/ActiveCaloriesBurnedRecord/TotalCaloriesBurnedRecordもStepsと
+    // 同じ単純な区間+数値1個の構造で該当しないと判断した。Pixel 11実機（実データ、Fit 212,095件・
+    // Health 20,202件の計約23万件規模）で実際に全件走査してもクラッシュ・メモリ増大が起きないことを
+    // 確認済み（WBS 6.10、D-042）だが、これはDistanceRecordでの確認であり、ActiveCaloriesBurnedRecord/
+    // TotalCaloriesBurnedRecordでの全件走査自体は未確認のまま（構造が同じという理由による判断、
+    // 要検証、D-043(3)）。Stepsの全期間全件走査もWBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・
+    // メモリ増大なしを確認済み。
     //
     // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
     // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の

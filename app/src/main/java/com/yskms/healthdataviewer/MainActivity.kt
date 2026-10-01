@@ -19,10 +19,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
+import com.yskms.healthdataviewer.screen.detail.ActiveCaloriesDetailScreen
 import com.yskms.healthdataviewer.screen.detail.DistanceDetailScreen
 import com.yskms.healthdataviewer.screen.detail.HeartRateDetailScreen
 import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
 import com.yskms.healthdataviewer.screen.detail.StepsDetailScreen
+import com.yskms.healthdataviewer.screen.detail.TotalCaloriesDetailScreen
 import com.yskms.healthdataviewer.screen.detail.WeightDetailScreen
 import com.yskms.healthdataviewer.screen.home.HomeScreen
 import com.yskms.healthdataviewer.screen.settings.SettingsScreen
@@ -65,6 +67,8 @@ private const val ROUTE_STEPS_DETAIL = "steps_detail"
 private const val ROUTE_HEART_RATE_DETAIL = "heart_rate_detail"
 private const val ROUTE_SLEEP_DETAIL = "sleep_detail"
 private const val ROUTE_DISTANCE_DETAIL = "distance_detail"
+private const val ROUTE_ACTIVE_CALORIES_DETAIL = "active_calories_detail"
+private const val ROUTE_TOTAL_CALORIES_DETAIL = "total_calories_detail"
 private const val ROUTE_SETTINGS = "settings"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
@@ -121,6 +125,14 @@ private fun MainNavHost(
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_DISTANCE_DETAIL)
                 },
+                onOpenActiveCalories = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_ACTIVE_CALORIES_DETAIL)
+                },
+                onOpenTotalCalories = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_TOTAL_CALORIES_DETAIL)
+                },
                 onOpenSettings = { navController.navigateOnce(ROUTE_SETTINGS) },
             )
         }
@@ -161,6 +173,20 @@ private fun MainNavHost(
         }
         composable(ROUTE_DISTANCE_DETAIL) {
             DistanceDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_ACTIVE_CALORIES_DETAIL) {
+            ActiveCaloriesDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_TOTAL_CALORIES_DETAIL) {
+            TotalCaloriesDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

@@ -33,6 +33,10 @@
     <string name="home_sleep_average_per_day_notice">Average per day for this period</string>
     <string name="home_distance_title">Distance</string>
     <string name="home_distance_value">%1$s km</string>
+    <string name="home_active_calories_title">Active Calories</string>
+    <string name="home_active_calories_value">%1$s kcal</string>
+    <string name="home_total_calories_title">Total Calories</string>
+    <string name="home_total_calories_value">%1$s kcal</string>
     <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
@@ -98,7 +102,13 @@
     <string name="detail_distance_title">Distance</string>
     <string name="detail_distance_aggregation_total">Aggregation: %1$s total distance in km (official Aggregate API)</string>
     <string name="detail_distance_aggregation_avg_per_day">Aggregation: %1$s average distance per day in km (official Aggregate API)</string>
-    <!-- WBS 6.3 (WBS 6.10 added Distance): Records tab (paged raw record list), shared across data types. -->
+    <string name="detail_active_calories_title">Active Calories</string>
+    <string name="detail_active_calories_aggregation_total">Aggregation: %1$s total active calories burned in kcal (official Aggregate API)</string>
+    <string name="detail_active_calories_aggregation_avg_per_day">Aggregation: %1$s average active calories burned per day in kcal (official Aggregate API)</string>
+    <string name="detail_total_calories_title">Total Calories</string>
+    <string name="detail_total_calories_aggregation_total">Aggregation: %1$s total calories burned in kcal (official Aggregate API)</string>
+    <string name="detail_total_calories_aggregation_avg_per_day">Aggregation: %1$s average calories burned per day in kcal (official Aggregate API)</string>
+    <!-- WBS 6.3 (WBS 6.10 added Distance, Active Calories, Total Calories): Records tab (paged raw record list), shared across data types. -->
     <string name="detail_tab_chart">Chart</string>
     <string name="detail_tab_records">Records</string>
     <string name="detail_records_empty">No records found in the readable range.</string>

@@ -33,6 +33,10 @@
     <string name="home_sleep_average_per_day_notice">この期間の1日あたり平均</string>
     <string name="home_distance_title">距離</string>
     <string name="home_distance_value">%1$s km</string>
+    <string name="home_active_calories_title">アクティブカロリー</string>
+    <string name="home_active_calories_value">%1$s kcal</string>
+    <string name="home_total_calories_title">総消費カロリー</string>
+    <string name="home_total_calories_value">%1$s kcal</string>
     <string name="home_all_metrics_hidden_notice">「データがない項目も表示する」の設定により、非表示にしています。</string>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
@@ -97,7 +101,13 @@
     <string name="detail_distance_title">距離</string>
     <string name="detail_distance_aggregation_total">集計方法: %1$s合計距離（km、Health Connect公式Aggregate API）</string>
     <string name="detail_distance_aggregation_avg_per_day">集計方法: %1$s平均距離（1日あたり、km、Health Connect公式Aggregate API）</string>
-    <!-- WBS 6.3（WBS 6.10でDistanceを追加）: Recordsタブ（ページング生レコード一覧）。各データ型で共通。 -->
+    <string name="detail_active_calories_title">アクティブカロリー</string>
+    <string name="detail_active_calories_aggregation_total">集計方法: %1$s合計アクティブカロリー消費量（kcal、Health Connect公式Aggregate API）</string>
+    <string name="detail_active_calories_aggregation_avg_per_day">集計方法: %1$s平均アクティブカロリー消費量（1日あたり、kcal、Health Connect公式Aggregate API）</string>
+    <string name="detail_total_calories_title">総消費カロリー</string>
+    <string name="detail_total_calories_aggregation_total">集計方法: %1$s合計消費カロリー（kcal、Health Connect公式Aggregate API）</string>
+    <string name="detail_total_calories_aggregation_avg_per_day">集計方法: %1$s平均消費カロリー（1日あたり、kcal、Health Connect公式Aggregate API）</string>
+    <!-- WBS 6.3（WBS 6.10でDistance・Active Calories・Total Caloriesを追加）: Recordsタブ（ページング生レコード一覧）。各データ型で共通。 -->
     <string name="detail_tab_chart">グラフ</string>
     <string name="detail_tab_records">レコード</string>
     <string name="detail_records_empty">読み取れる範囲にレコードがありません。</string>
