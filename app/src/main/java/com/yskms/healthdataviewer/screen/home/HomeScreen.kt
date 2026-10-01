@@ -288,7 +288,7 @@ fun HomeScreen(
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
-                // 4つのLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
+                // 5つのLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
                 // 戻すと、表示指標トグルがOFFの状態で「データなし」と確定していたカードが、画面復帰
                 // （resumeKeyの変化）や期間タブ切り替えのたびに一瞬「読み込み中」として出現してから
                 // また消える、というちらつきが起きる。前回の結果を表示したまま裏で再取得し、新しい

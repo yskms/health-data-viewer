@@ -917,9 +917,10 @@ class HealthConnectManager(context: Context) {
     // なり得る＝Weight/Sleepより2桁近く多い）。実際の基準は「1レコードが大きなサンプル配列を持たず、
     // Health Connect SDK内部の変換コストが低いか」で、Heart Rateだけがこれに該当しない（1レコードに
     // 多数のサンプルを含み、継続記録ソースでは全件走査がOutOfMemoryErrorを起こす実例がある。
-    // lessons.md 6.7）。DistanceRecordもStepsと同じ単純な区間+数値1個の構造で該当しないと判断した
-    // （WBS 6.10、実機検証は未実施）。Stepsの全期間全件走査はWBS 3.1・WBS 6.4（lessons.md 6.19）で
-    // クラッシュ・メモリ増大なしを確認済み。
+    // lessons.md 6.7）。DistanceRecordもStepsと同じ単純な区間+数値1個の構造で該当しないと判断した。
+    // Pixel 11実機（実データ、Fit 212,095件・Health 20,202件の計約23万件規模）で実際に全件走査しても
+    // クラッシュ・メモリ増大が起きないことを確認済み（WBS 6.10、D-042）。Stepsの全期間全件走査も
+    // WBS 3.1・WBS 6.4（lessons.md 6.19）でクラッシュ・メモリ増大なしを確認済み。
     //
     // findOldestWeightRecordTime()と同じreadWithHistoryFallback()を使う一回限りの問い合わせで、
     // Recordsタブのページングのような永続的なtokenを扱わないため、SecurityException時の
