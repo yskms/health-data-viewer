@@ -21,6 +21,9 @@
     <string name="home_loading">Loading…</string>
     <string name="home_error">Failed to load.</string>
     <string name="home_no_data">No data.</string>
+    <!-- WBS 6.10: shared by the "latest value + delta" cards (Weight, Resting Heart Rate) so the date of
+         the shown record is always visible, even if it's old. -->
+    <string name="home_latest_record_date">Latest record: %1$s</string>
     <string name="home_weight_title">Weight</string>
     <string name="home_weight_value">%1$s kg</string>
     <string name="home_weight_delta">vs. previous: %1$s kg</string>

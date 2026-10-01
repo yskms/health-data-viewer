@@ -71,6 +71,9 @@ import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import java.time.temporal.ChronoUnit
 import java.time.temporal.TemporalAdjusters
 import java.text.NumberFormat
@@ -657,6 +660,23 @@ private fun isTotalCaloriesCardHidden(
         currentResult is TotalCaloriesAggregateTotalResult.Success &&
         currentResult.totalKilocalories == null
 
+// WeightCard/RestingHeartRateCard共通（コードレビュー指摘への対応）: 「最新値＋前回比」カードは
+// 期間タブに依存せずHealth Connectに保存されている最新のレコードをそのまま表示するため、そのソースが
+// 書き込みを止めている・記録間隔が空いているなどの理由で実際には何ヶ月も前の値だった場合でも、画面上は
+// 「今の値」のように見えてしまう（findLatestWeightRecords()/findLatestRestingHeartRateRecords()の
+// コメント参照。Pixel 11実機のResting Heart Rateで実際に約10ヶ月前の値が表示される事例を確認した）。
+// その値がいつの記録かを必ず併記することで、カード単体でも古さに気付けるようにする。
+@Composable
+private fun LatestRecordDateText(time: Instant, zoneOffset: ZoneOffset?) {
+    val locale = LocalLocale.current.platformLocale
+    val zone = zoneOffset ?: ZoneId.systemDefault()
+    val formattedDate =
+        remember(time, zone, locale) {
+            DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(time.atZone(zone).toLocalDate())
+        }
+    Text(text = stringResource(id = R.string.home_latest_record_date, formattedDate), style = MaterialTheme.typography.bodySmall)
+}
+
 @Composable
 private fun WeightCard(
     permissionsCheckState: PermissionsCheckState,
@@ -687,6 +707,7 @@ private fun WeightCard(
                         text = stringResource(id = R.string.home_weight_value, String.format(locale, "%.2f", latest.weight.inKilograms)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
                     val previous = records.getOrNull(1)
                     if (previous != null) {
                         val diffKg = latest.weight.inKilograms - previous.weight.inKilograms
@@ -796,10 +817,11 @@ private fun HeartRateCard(
 }
 
 // WeightCardと同じ形（D-044。「最新値＋前回比」、beatsPerMinuteはLongのため.inKilogramsのような
-// 単位変換・小数書式は不要）。WeightCardと同じ既知の制約も引き継ぐ: 「最新値」「前回比」は記録日付を
-// 画面に出さないため、記録に抜けがある期間に見ると、表示されている2値がどちらも「最新」に見えて
-// 実際には数日離れた記録同士の比較になっていることに気付きにくい（コードレビュー指摘）。WeightCardで
-// 既に許容されている簡略化のため、本カードだけ記録日付を追加する変更は本タスクでは行わない。
+// 単位変換・小数書式は不要）。WeightCardと同じLatestRecordDateText()も表示する: そのソースが書き込みを
+// 止めている・大きく間隔が空いているといった場合、「最新値＋前回比」だけでは何ヶ月も前の値を今の値で
+// あるかのように見せてしまう（コードレビュー指摘。Pixel 11実機のFitソースで実際に発生: 最新レコードは
+// 2025/11/26で、確認日2026-10-02から見て約10ヶ月前の値が「54 bpm・前回比+1 bpm」として表示されていた。
+// findLatestRestingHeartRateRecords()のコメント参照）。
 @Composable
 private fun RestingHeartRateCard(
     permissionsCheckState: PermissionsCheckState,
@@ -829,6 +851,7 @@ private fun RestingHeartRateCard(
                         text = stringResource(id = R.string.home_resting_heart_rate_value, latest.beatsPerMinute),
                         style = MaterialTheme.typography.headlineSmall,
                     )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
                     val previous = records.getOrNull(1)
                     if (previous != null) {
                         val diffBpm = latest.beatsPerMinute - previous.beatsPerMinute

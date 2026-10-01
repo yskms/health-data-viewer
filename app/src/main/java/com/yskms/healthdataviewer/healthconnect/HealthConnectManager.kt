@@ -195,6 +195,8 @@ class HealthConnectManager(context: Context) {
     // WBS 6.1: ホーム画面の体重カード（「最新値＋前回比」、期間タブに依存しない）用。
     // findOldestWeightRecordTime()と同じ形（全件ページング不要）だが、降順・pageSize = limitで
     // 直近limit件を取得する。records[0]が最新値、records.getOrNull(1)との差が前回比になる。
+    // records[0]がいつの記録かは、呼び出し元（HomeScreen.WeightCard）がLatestRecordDateText()で
+    // 併記する（WBS 6.10、コードレビュー指摘。findLatestRestingHeartRateRecords()のコメント参照）。
     suspend fun findLatestWeightRecords(limit: Int, historyPermissionGranted: Boolean): WeightRecordsResult {
         suspend fun readLatest(filter: TimeRangeFilter): List<WeightRecord> =
             client
@@ -348,8 +350,16 @@ class HealthConnectManager(context: Context) {
     // Health Connect連携アプリの傾向としての想定。実装前の設計判断の時点ではこのアプリでの実測はまだ
     // 無かった）ため、期間タブごとのAggregateではなくWeightと同じ「最新値＋前回比」を採用した。
     // Pixel 11実機のFitソースで2025/10/25〜2025/11/26の33日間に32件（1日あたりほぼ1件、ほぼ連続した
-    // 日次記録。欠けていたのは33日中1日のみ）を確認でき、この想定と一致した（D-044、単一ソース・
-    // 短い期間のみの確認）。
+    // 日次記録。欠けていたのは2025/11/10の1日のみであることをRecordsタブで直接確認した）を確認でき、
+    // この想定と一致した（D-044、単一ソース・短い期間のみの確認）。
+    //
+    // **この関数が返す「最新2件」は、確認時点（実機の端末日付）に近いとは限らない**（コードレビュー
+    // 指摘）。上記の実機データはこのソースが2025/11/26を最後に書き込みを止めており、確認日
+    // （2026-10-02）から見て最新レコードは既に約10ヶ月前だった。この関数はHealth Connectに実際に
+    // 保存されている最新のレコードを返すだけで、それが「いつの記録か」自体はこの関数の戻り値だけからは
+    // 分からない。呼び出し元（HomeScreen.RestingHeartRateCard/WeightCard）がLatestRecordDateText()で
+    // 記録日を併記することで、カード単体でも古さに気付けるようにしている（WBS 6.10、この指摘を受けて
+    // WeightCard側も合わせて対応した）。
     suspend fun findLatestRestingHeartRateRecords(limit: Int, historyPermissionGranted: Boolean): RestingHeartRateRecordsResult {
         suspend fun readLatest(filter: TimeRangeFilter): List<RestingHeartRateRecord> =
             client
