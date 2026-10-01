@@ -96,12 +96,28 @@ fun PeriodTabs(period: GraphPeriod, onPeriodChange: (GraphPeriod) -> Unit) {
 // `active`になった最初のタイミングでのみ`load()`を実行する。再試行は`retryKey`を変えることで行う
 // （結果をnullに戻してから再取得する）。画面回転時はActivity再生成によりこの`remember`自体が破棄され、
 // 他のタブ・既存のRecordsタブと同様に再取得される（D-035(4)と一貫した設計）。
+//
+// **`load()`の起動を一度トリガーした後は、`active`をLaunchedEffectのkeyに含めない**（2回目の
+// コードレビューで発見・修正）。初版は`LaunchedEffect(active, retryKey)`としており、Sourcesタブの
+// 読み込み中（Stepsだと最大約65秒）に別のタブへ切り替えると`active`の変化でこの実行中のコルーチンが
+// キャンセルされ、`loadedForRetryKey`が更新されないまま戻ってしまっていた。その結果、タブを離れて
+// 戻るとそれまでのIPCがすべて無駄になり、最初からやり直しになっていた（この修正が解決しようとした
+// 問題がタブの往復では再現せず、読み込み中にタブを離れた場合だけ再現する、紛らわしいバグだった）。
+// `started`（一度でも`active`になったか）を別のLaunchedEffectで一方向にラッチし、本体の読み込みは
+// `started`と`retryKey`だけをkeyにすることで、タブを離れても画面から出るまで（または画面回転まで）は
+// 読み込みを継続させる。
 @Composable
 fun <T> rememberLazyTabResult(active: Boolean, retryKey: Int, load: suspend () -> T): T? {
     var result by remember { mutableStateOf<T?>(null) }
     var loadedForRetryKey by remember { mutableStateOf<Int?>(null) }
-    LaunchedEffect(active, retryKey) {
-        if (!active || loadedForRetryKey == retryKey) return@LaunchedEffect
+    var started by remember { mutableStateOf(false) }
+
+    LaunchedEffect(active) {
+        if (active) started = true
+    }
+
+    LaunchedEffect(started, retryKey) {
+        if (!started || loadedForRetryKey == retryKey) return@LaunchedEffect
         result = null
         result = load()
         loadedForRetryKey = retryKey
