@@ -113,6 +113,20 @@
 -   **根拠**: 実機確認（Pixel 11、Android 17。PoC 4（Sleep）でREAD_SLEEP・READ_HEALTH_DATA_HISTORYの付与・取り消しに`pm grant`/`pm revoke`を使い、アプリが実際にその権限を認識して動作することを確認、2026-09-30）
 -   **確認日**: 2026-09-30
 
+### 3.7 手元の端末に実データが無いデータ型は、Google公式の「Health Connect Toolbox」でテストレコードを書き込んで実機確認できる
+
+-   **知見**: WBS 6.10（Blood Pressure追加）で、この端末にBlood Pressureの実データが無かったため、Health Connect本体の開発元が配布する公式テストツール「Health Connect Toolbox」（`developer.android.com/health-and-fitness/health-connect/test/health-connect-toolbox`、APKをZIPで配布、Play Storeには出ない）を使い、`Insert Health Record`からBloodPressureRecordのテストレコードを直接Health Connectへ書き込んで実機確認した。導入は`adb install`でのサイドロードだが、この端末ではPlay Protectが`INSTALL_FAILED_VERIFICATION_FAILURE`でインストール自体をブロックした。Play ストアアプリの「Play Protect」設定で「アプリを確認するためのPlay Protectによるスキャン」を一時的にオフにすることで回避できた（ユーザー本人の端末設定変更が必要。確認後はオンに戻す）。書き込みには対象データ型のWRITE権限（例: `android.permission.health.WRITE_BLOOD_PRESSURE`）が別途必要で、こちらも3.6と同じ`adb shell pm grant`で直接付与できた
+-   **Viewerへの適用**: このアプリはRead-onlyが原則（CLAUDE.md）のため、テストデータの書き込みはアプリ自身ではなく外部の公式ツールに行わせ、確認後は必ず削除する。削除はHealth Connect本体アプリの「データとアクセス」→対象データ型→エントリを選択→削除アイコンから行える（アプリ別ではなくデータ型別の削除画面）。この手順は、手元の端末に実データが無い他の優先度Aデータ型（Body Fat、HRV、Exercise、Blood Glucose、Oxygen Saturation等）を今後追加する際にも、同じ考え方（Toolboxで投入→実機確認→削除）でそのまま使い回せる
+-   **根拠**: 実機確認（Pixel 11、Android 17。Health Connect Toolbox ToolboxApp-2.3.5でBloodPressureRecordを2件（2026-09-30、2026-10-02）挿入し、Viewer側のホームカード・グラフ・Records・Sourcesタブでの表示を確認後、Health Connect本体アプリの「データとアクセス」から全件削除・Toolbox自体もアンインストールして確認、2026-10-02）
+-   **確認日**: 2026-10-02
+
+### 3.8 adbで実機を操作する際、スクリーンショットを撮る前にフォアグラウンドアプリが対象アプリであることを確認する
+
+-   **知見**: WBS 6.10（Blood Pressure追加）の実機確認中、`adb shell input tap`の座標誤り・`am force-stop`後の再起動タイミングにより、意図せず対象アプリ以外（端末の持ち主が普段使っている別のアプリ）がフォアグラウンドにある状態でスクリーンショットを撮ってしまう事故が複数回発生した。1回目は撮影後に気付いてファイルを削除、2回目は撮影前に`adb shell dumpsys activity activities | grep topResumedActivity`（または`mFocusedWindow`）でテキストベースにフォアグラウンドのパッケージ名を確認する運用に切り替え、対象アプリでないことを画像を見る前に検知できた
+-   **Viewerへの適用**: 実機確認でスクリーンショットを使う場合、`adb exec-out screencap`の直前に必ず`dumpsys activity activities`等でフォアグラウンドが確認対象のパッケージ名（`com.yskms.healthdataviewer`等）であることを確認する。この確認を省略すると、`input tap`の座標計算ミス（画面解像度と表示解像度の取り違え等）や、画面遷移中のタイミングのずれにより、端末の持ち主の私的なデータ（他アプリの画面）を意図せず記録してしまうおそれがある
+-   **根拠**: 実機確認（Pixel 11、Android 17、2026-10-02）
+-   **確認日**: 2026-10-02
+
 ------------------------------------------------------------------------
 
 ## 4. エラー処理
