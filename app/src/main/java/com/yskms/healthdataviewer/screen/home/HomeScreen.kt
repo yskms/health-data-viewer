@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.ActiveCaloriesAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.BloodPressureRecordsResult
+import com.yskms.healthdataviewer.healthconnect.BodyFatRecordsResult
 import com.yskms.healthdataviewer.healthconnect.DistanceAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
@@ -60,6 +61,7 @@ import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.ActiveCaloriesAccent
 import com.yskms.healthdataviewer.ui.theme.BloodPressureAccent
+import com.yskms.healthdataviewer.ui.theme.BodyFatAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.RestingHeartRateAccent
@@ -179,6 +181,7 @@ fun HomeScreen(
     onOpenActiveCalories: (historyPermissionGranted: Boolean) -> Unit,
     onOpenTotalCalories: (historyPermissionGranted: Boolean) -> Unit,
     onOpenBloodPressure: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenBodyFatGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -257,6 +260,7 @@ fun HomeScreen(
                 val activeCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.ACTIVE_CALORIES_READ)
                 val totalCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.TOTAL_CALORIES_READ)
                 val bloodPressureGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_PRESSURE_READ)
+                val bodyFatGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BODY_FAT_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -269,6 +273,7 @@ fun HomeScreen(
                         activeCaloriesGranted,
                         totalCaloriesGranted,
                         bloodPressureGranted,
+                        bodyFatGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -284,6 +289,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.ACTIVE_CALORIES_READ)
                                     add(HealthConnectPermissions.TOTAL_CALORIES_READ)
                                     add(HealthConnectPermissions.BLOOD_PRESSURE_READ)
+                                    add(HealthConnectPermissions.BODY_FAT_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -327,7 +333,7 @@ fun HomeScreen(
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
-                // 7つのLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
+                // 10個のLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
                 // 戻すと、表示指標トグルがOFFの状態で「データなし」と確定していたカードが、画面復帰
                 // （resumeKeyの変化）や期間タブ切り替えのたびに一瞬「読み込み中」として出現してから
                 // また消える、というちらつきが起きる。前回の結果を表示したまま裏で再取得し、新しい
@@ -360,6 +366,14 @@ fun HomeScreen(
                     if (bloodPressureGranted != true) return@LaunchedEffect
                     bloodPressureLoad =
                         healthConnectManager.findLatestBloodPressureRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                }
+
+                // Body Fatカード（WBS 6.10、D-046）: BodyFatRecordもWeight/RestingHeartRate/BloodPressureと
+                // 同じ単一時刻・単一レコードの構造のため、同じ「最新値＋前回比」パターンを採用した。
+                var bodyFatLoad by remember { mutableStateOf<BodyFatRecordsResult?>(null) }
+                LaunchedEffect(bodyFatGranted, historyPermissionGranted, resumeKey) {
+                    if (bodyFatGranted != true) return@LaunchedEffect
+                    bodyFatLoad = healthConnectManager.findLatestBodyFatRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -473,7 +487,8 @@ fun HomeScreen(
                         isDistanceCardHidden(distanceGranted, distanceResult, showMetricsWithoutData) &&
                         isActiveCaloriesCardHidden(activeCaloriesGranted, activeCaloriesResult, showMetricsWithoutData) &&
                         isTotalCaloriesCardHidden(totalCaloriesGranted, totalCaloriesResult, showMetricsWithoutData) &&
-                        isBloodPressureCardHidden(bloodPressureGranted, bloodPressureLoad, historyFeatureAvailable, showMetricsWithoutData)
+                        isBloodPressureCardHidden(bloodPressureGranted, bloodPressureLoad, historyFeatureAvailable, showMetricsWithoutData) &&
+                        isBodyFatCardHidden(bodyFatGranted, bodyFatLoad, historyFeatureAvailable, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -544,6 +559,14 @@ fun HomeScreen(
                     historyFeatureAvailable = historyFeatureAvailable,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenBloodPressure(historyPermissionGranted) },
+                )
+                BodyFatCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = bodyFatGranted,
+                    load = bodyFatLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenBodyFatGraph(historyPermissionGranted) },
                 )
             }
         }
@@ -650,6 +673,19 @@ private fun isBloodPressureCardHidden(
     !showMetricsWithoutData &&
         granted == true &&
         load is BloodPressureRecordsResult.Success &&
+        load.records.isEmpty() &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+// isWeightCardHidden()と同じ理由・同じ形（D-046。WeightCardと同じ「最新値＋前回比」パターンのため）。
+private fun isBodyFatCardHidden(
+    granted: Boolean?,
+    load: BodyFatRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is BodyFatRecordsResult.Success &&
         load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
@@ -972,6 +1008,57 @@ private fun BloodPressureCard(
     }
 }
 
+// WeightCard()と同じ形（D-046。BodyFatRecordもWeightと同じ単一時刻・単一値の構造のため）。
+@Composable
+private fun BodyFatCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    load: BodyFatRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isBodyFatCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_body_fat_title),
+        accentColor = BodyFatAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            load == null -> Text(text = stringResource(id = R.string.home_loading))
+            load is BodyFatRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is BodyFatRecordsResult.Success -> {
+                val records = load.records
+                val latest = records.firstOrNull()
+                if (latest == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_body_fat_value, String.format(locale, "%.2f", latest.percentage.value)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
+                    val previous = records.getOrNull(1)
+                    if (previous != null) {
+                        val diffPercent = latest.percentage.value - previous.percentage.value
+                        Text(
+                            text = stringResource(id = R.string.home_body_fat_delta, formatSignedPercent(diffPercent, locale)),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                // WeightCardのhistoryLimited通知と同じ理由（期間タブに依存しないカードのため、
+                // DashboardPeriod.isHistoryLimited()では検知できない）。
+                if (load.historyLimited && historyFeatureAvailable != false) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SleepCard(
     permissionsCheckState: PermissionsCheckState,
@@ -1142,6 +1229,18 @@ private fun formatSleepDuration(duration: Duration): String {
 // -0.0の表示ゆれも吸収する）。
 private fun formatSignedKg(diffKg: Double, locale: Locale): String {
     val rounded = Math.round(diffKg * 100) / 100.0
+    val sign =
+        when {
+            rounded > 0 -> "+"
+            rounded < 0 -> "-"
+            else -> "±"
+        }
+    return sign + String.format(locale, "%.2f", kotlin.math.abs(rounded))
+}
+
+// formatSignedKg()と同じ役割・同じ形（D-046。%記号はkgと異なりスペースなしで数値の直後に付ける）。
+private fun formatSignedPercent(diffPercent: Double, locale: Locale): String {
+    val rounded = Math.round(diffPercent * 100) / 100.0
     val sign =
         when {
             rounded > 0 -> "+"

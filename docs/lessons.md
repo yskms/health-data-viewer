@@ -393,6 +393,13 @@
 -   **根拠**: 実機確認（Pixel 11、実データ。一時的な診断コードで`AggregateRequest`の結果・所要時間をlogcatへ出力し確認、2026-10-01）。非公開のプラットフォーム側実装の挙動を外部から観測した結果であり、正確な計算式・発生条件・所要時間は未確定（計測のたびに大きくばらついた）
 -   **確認日**: 2026-10-01
 
+### 6.27 `BodyFatRecord`には公式の`AggregateMetric`が存在しない。Chartのbucket集計はRawレコードを自前で行う
+
+-   **知見**: WBS 6.10でBody Fatを実装するにあたり、`WeightRecord.WEIGHT_AVG/MIN/MAX`に相当するAggregateMetricが`BodyFatRecord`にあるかを確認するため、`connect-client-1.1.0-api.jar`の`BodyFatRecord.class`・そのCompanionを`javap -p`で逆コンパイルしたが、`AggregateMetric`型のstatic fieldが一切見つからなかった。jarファイル全体を`AggregateMetric<Percentage>`のシグネチャで`javap -p`＋`grep`検索しても該当クラスは0件で、`BodyFatRecord`には本当に公式Aggregate Metricが存在しないと確認できた（requirements.md §22.2が「Body Fat / Blood Glucose / SpO2 / HRV」の行で「要確認」としていた内容がBody Fatについて確定した）。これはWeight/Steps/Distance/Heart Rate/Resting Heart Rate/Sleep/Calories/Blood Pressureまでの8データ型すべてに公式AggregateMetricが存在していたのとは異なる、初めての例外。あわせて`Percentage`型（`percentage: Percentage`が`BodyFatRecord`の唯一の値フィールド）のKotlinプロパティ名を`.class`バイナリの文字列直接検索で確認したところ、`Mass.inKilograms`等と異なり`@JvmName`差し替えが**されておらず**、単純に`value`（javapで見える`getValue()`のまま）だった。`<init>`/`<clinit>`のバイトコードから、`percentage.value`は0〜100の範囲（`requireNonNegative`・`requireNotMore(..., 100)`で検証）で、0〜1のfractionではないことも確認した
+-   **Viewerへの適用**: 詳細画面のChart用集計（`HealthConnectManager.readBodyFatAggregates()`）は、`aggregateGroupByPeriod()`を呼ぶ既存7データ型の実装（Weightの`readWeightAggregates()`等）を複製できず、Rawレコードを全件走査してアプリ側でbucket集計する新規ロジックとして実装した（D-046(3)）。`resolveDetailGraphRange()`が返す`TimeRangeFilter`はLocalDateTimeベース（`aggregateGroupByPeriod()`向け、lessons.md 6.5）だが、`readRecords()`での全件走査にはInstantベースのfilterが必要なため、`TimeRangeFilter.localStartTime`/`localEndTime`（公開プロパティ、javapで`isBasedOnLocalTime$connect_client_release()`のような`$`付きinternal関数ではないことを確認済み）を`ZoneId.systemDefault()`でInstantへ変換してから読み取る。bucket境界は`aggregateGroupByPeriod()`の実際の挙動（lessons.md 7.5: 開始時刻を起点にPeriod単位で機械的に等間隔区切り）を自前で再現し、レコードが1件もないbucketもnullのまま残す（`WeightAggregateBucket`と同じ「0で埋めない」方針）。この自前集計パターンは、今後Blood Glucose / SpO2 / HRV（同じく§22.2で「要確認」）を実装する際、javapで同じAggregateMetric有無チェックをした上でそのまま再利用できる見込み。なお`percentage.value`が既に0〜100スケールのため、0〜1スケール前提の`NumberFormat.getPercentInstance()`は使わないこと（22.5%のつもりが2250%になる）
+-   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の`records/BodyFatRecord.class`・`records/BodyFatRecord$Companion.class`・`units/Percentage.class`を`javap -p -c`、jar全体を`grep -a`でバイナリ内の文字列・シグネチャを直接検索。2026-10-02）
+-   **確認日**: 2026-10-02
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる

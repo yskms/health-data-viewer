@@ -10,6 +10,7 @@ import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BloodPressureRecord
+import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
@@ -28,6 +29,7 @@ import java.io.IOException
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.Period
+import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 import kotlin.reflect.KClass
 
@@ -561,6 +563,196 @@ class HealthConnectManager(context: Context) {
         ) {
             is HistoryFallbackOutcome.Success -> BloodPressureAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> BloodPressureAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: Body Fatを追加。BodyFatRecordもWeight/RestingHeartRate/
+    // BloodPressureRecordと同じ単一時刻のレコード（InstantaneousRecord、サンプル配列を持たない、
+    // 公式の重複処理もない。requirements.md §22.2）のため、Records/Sources/ホームカード用の3関数は
+    // Weight用の3関数をそのまま踏襲する（D-046(1)）。
+    fun bodyFatRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<BodyFatRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = BodyFatRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestWeightRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestBodyFatRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = BodyFatRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.time
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // WBS 6.10: ホーム画面のBody Fatカード（「最新値＋前回比」、期間タブに依存しない）用。
+    // findLatestWeightRecords()と同じ形・同じ理由。体組成計による体脂肪率測定もWeightと同程度の
+    // 低頻度（1日1回程度）が一般的という想定だが、このアプリの実データでは未確認のまま採用する
+    // （D-044(2)/D-045(2)と同じ基準、D-046(2)）。
+    suspend fun findLatestBodyFatRecords(limit: Int, historyPermissionGranted: Boolean): BodyFatRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<BodyFatRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = BodyFatRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                BodyFatRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> BodyFatRecordsResult.Failure
+        }
+    }
+
+    // WBS 6.10（D-046(3)）: BodyFatRecordには公式のAggregateMetricが存在しない（javap逆コンパイルで
+    // 確認。WeightRecord.WEIGHT_AVG等に相当するものが無い。CLAUDE.md・lessons.md 6.27参照）。
+    // そのためreadWeightAggregates()のようにaggregateGroupByPeriod()を呼ぶだけでは実装できず、
+    // Rawレコードを全件読み取ってアプリ側でbucket集計する（requirements.md §22.2の
+    // 「Aggregateがなければ、読み込んだRawから自前で集約する」方針の最初の適用例）。
+    //
+    // timeRangeFilterは呼び出し元（BodyFatDetailScreen）からWeightと同じ形（resolveDetailGraphRange()が
+    // 返すLocalDateTimeベースのTimeRangeFilter）で渡ってくるが、readRecords()はInstantベースのfilterしか
+    // 受け付けない（lessons.md 6.5の逆方向の制約）ため、まずInstantベースに変換してから全件走査する。
+    // bucket境界（bucket: Period刻み）は、aggregateGroupByPeriod()の実際の挙動（lessons.md 7.5: 開始時刻を
+    // 起点に機械的に等間隔区切り、暦日・暦月への自動整列はしない）を自前で再現する。呼び出し元
+    // （resolveDetailGraphRange()）が渡すfilterの開始時刻は既に暦日・暦月に切り捨て済みのため、
+    // ここでは単純に「開始時刻からPeriod刻みで区切る」だけでよい。
+    suspend fun readBodyFatAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): BodyFatAggregatesResult {
+        val zone = ZoneId.systemDefault()
+
+        // localFilter（LocalDateTimeベース）をInstantベースに変換し、readRecords()で全件走査する。
+        // ZoneId.systemDefault()を使うのは、呼び出し元resolveDetailGraphRange()がLocalDateTime.now()・
+        // 端末の暦日/暦月境界を基準にfilterを組み立てているため。
+        suspend fun readAllRecords(localFilter: TimeRangeFilter): List<BodyFatRecord> {
+            val start = localFilter.localStartTime?.atZone(zone)?.toInstant()
+            val end = localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()
+            val instantFilter = if (start != null) TimeRangeFilter.between(start, end) else TimeRangeFilter.before(end)
+
+            val records = mutableListOf<BodyFatRecord>()
+            var pageToken: String? = null
+            do {
+                val response =
+                    client.readRecords(
+                        ReadRecordsRequest(recordType = BodyFatRecord::class, timeRangeFilter = instantFilter, pageToken = pageToken),
+                    )
+                records += response.records
+                pageToken = response.pageToken?.ifEmpty { null }
+            } while (pageToken != null)
+            return records
+        }
+
+        suspend fun toBuckets(localFilter: TimeRangeFilter): List<BodyFatAggregateBucket> {
+            val records = readAllRecords(localFilter)
+            if (records.isEmpty()) return emptyList()
+
+            // rangeStart: bucket列の起点。通常はlocalFilter.localStartTime（呼び出し元
+            // resolveDetailGraphRange()が暦日/暦月に切り捨て済み）をそのまま使う。ALLで
+            // findOldestBodyFatRecordTime()自体が失敗した場合（開始無制限のfilter、
+            // WeightDetailScreen.ktのoldestGateForAllコメントと同じ状況）はlocalStartTimeがnullになる
+            // ため、実際に読めたレコードの中で最も古いものの時刻を暦日/暦月に切り捨てて起点にする。
+            val rangeStart =
+                localFilter.localStartTime ?: run {
+                    val earliestDate = records.minOf { it.time }.atZone(zone).toLocalDate()
+                    if (bucket.months != 0 || bucket.years != 0) earliestDate.withDayOfMonth(1).atStartOfDay() else earliestDate.atStartOfDay()
+                }
+            val rangeEnd = localFilter.localEndTime ?: LocalDateTime.now()
+
+            val bucketStarts = mutableListOf<LocalDateTime>()
+            var current = rangeStart
+            while (current.isBefore(rangeEnd)) {
+                bucketStarts += current
+                current = current.plus(bucket)
+            }
+            if (bucketStarts.isEmpty()) return emptyList()
+
+            // レコードが1件もないbucketもnullのまま残す（WeightAggregateBucketと同じ「0で埋めない」方針。
+            // BodyFatAggregateChart側がnullのbucketを自動的にスキップする）。
+            val valuesByBucket = Array(bucketStarts.size) { mutableListOf<Double>() }
+            for (record in records) {
+                val localDateTime = record.time.atZone(record.zoneOffset ?: zone).toLocalDateTime()
+                val bucketIndex = bucketStarts.indexOfLast { !it.isAfter(localDateTime) }
+                if (bucketIndex >= 0) {
+                    valuesByBucket[bucketIndex] += record.percentage.value
+                }
+            }
+
+            return bucketStarts.mapIndexed { index, start ->
+                val values = valuesByBucket[index]
+                BodyFatAggregateBucket(
+                    periodStart = start,
+                    average = values.takeIf { it.isNotEmpty() }?.average(),
+                    min = values.minOrNull(),
+                    max = values.maxOrNull(),
+                )
+            }
+        }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> BodyFatAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> BodyFatAggregatesResult.Failure
         }
     }
 

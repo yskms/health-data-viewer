@@ -3,6 +3,7 @@ package com.yskms.healthdataviewer.healthconnect
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BloodPressureRecord
+import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
@@ -40,5 +41,6 @@ object HealthConnectPermissions {
     val ACTIVE_CALORIES_READ: String = HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
     val TOTAL_CALORIES_READ: String = HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
     val BLOOD_PRESSURE_READ: String = HealthPermission.getReadPermission(BloodPressureRecord::class)
+    val BODY_FAT_READ: String = HealthPermission.getReadPermission(BodyFatRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

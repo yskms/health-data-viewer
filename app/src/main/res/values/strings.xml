@@ -46,6 +46,9 @@
     <string name="home_blood_pressure_title">Blood Pressure</string>
     <string name="home_blood_pressure_value">%1$d/%2$d mmHg</string>
     <string name="home_blood_pressure_delta">vs. previous: %1$s/%2$s mmHg</string>
+    <string name="home_body_fat_title">Body Fat</string>
+    <string name="home_body_fat_value">%1$s%%</string>
+    <string name="home_body_fat_delta">vs. previous: %1$s%%</string>
     <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
@@ -123,7 +126,9 @@
     <string name="detail_blood_pressure_aggregation_avg">Aggregation: %1$s average systolic / diastolic in mmHg (official Aggregate API)</string>
     <string name="detail_blood_pressure_chart_legend">Upper line: systolic · Lower line: diastolic</string>
     <string name="detail_blood_pressure_record_summary">%1$s  %2$d/%3$d mmHg</string>
-    <!-- WBS 6.3 (WBS 6.10 added Distance, Active Calories, Total Calories, Blood Pressure): Records tab (paged raw record list), shared across data types. -->
+    <string name="detail_body_fat_title">Body fat</string>
+    <string name="detail_body_fat_aggregation_avg">Aggregation: %1$s average / min / max (no official Aggregate API; computed from raw records)</string>
+    <!-- WBS 6.3 (WBS 6.10 added Distance, Active Calories, Total Calories, Blood Pressure, Body Fat): Records tab (paged raw record list), shared across data types. -->
     <string name="detail_tab_chart">Chart</string>
     <string name="detail_tab_records">Records</string>
     <string name="detail_records_empty">No records found in the readable range.</string>
