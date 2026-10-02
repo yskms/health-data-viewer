@@ -9,6 +9,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.Record
@@ -427,6 +428,139 @@ class HealthConnectManager(context: Context) {
             is HistoryFallbackOutcome.Success ->
                 RestingHeartRateAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> RestingHeartRateAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: Blood Pressureを追加。BloodPressureRecordもWeight/
+    // RestingHeartRateRecordと同じ単一時刻・単一レコード（InstantaneousRecord、サンプル配列を持たない、
+    // 公式の重複処理もない。requirements.md §22.2）のため、Weight用の4関数と同じ構造をそのまま踏襲する。
+    // 値フィールドがsystolic/diastolicの2つ（いずれもPressure型）ある点のみWeight/RestingHeartRateと異なる
+    // （D-045）。
+    fun bloodPressureRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<BloodPressureRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = BloodPressureRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestWeightRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestBloodPressureRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = BloodPressureRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.time
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // WBS 6.10: ホーム画面のBlood Pressureカード（「最新値＋前回比」、期間タブに依存しない）用。
+    // findLatestWeightRecords()/findLatestRestingHeartRateRecords()と同じ形・同じ理由（D-045）。
+    // 「最新値」がいつの記録かは、呼び出し元（HomeScreen.BloodPressureCard）がLatestRecordDateText()で
+    // 併記する（findLatestRestingHeartRateRecords()のコメント参照。Resting Heart Rateで実際に約10ヶ月前の
+    // 値が「今の値」のように見えた事例があるため、血圧でも同じ対応を最初から組み込む）。
+    suspend fun findLatestBloodPressureRecords(limit: Int, historyPermissionGranted: Boolean): BloodPressureRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<BloodPressureRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = BloodPressureRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                BloodPressureRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> BloodPressureRecordsResult.Failure
+        }
+    }
+
+    // readWeightAggregates()と同じ形。metricsはSYSTOLIC_AVG/DIASTOLIC_AVGの2つのみ（BloodPressureAggregateBucket
+    // のコメント参照: MIN/MAXも公式Aggregate Metricとして存在するが、グラフでの表示方法としてAVGのみを
+    // 採用したため取得しない。Pressure型の実際のKotlinプロパティ名inMillimetersOfMercuryは、Energy型の
+    // inKilocalories確認時（D-043(3)）と同じ方法（javap逆コンパイル+.classバイナリの文字列直接検索）で
+    // 確認した、D-045）。
+    suspend fun readBloodPressureAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): BloodPressureAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(BloodPressureRecord.SYSTOLIC_AVG, BloodPressureRecord.DIASTOLIC_AVG),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                BloodPressureAggregateBucket(
+                    periodStart = grouped.startTime,
+                    systolicAverage = grouped.result[BloodPressureRecord.SYSTOLIC_AVG]?.inMillimetersOfMercury,
+                    diastolicAverage = grouped.result[BloodPressureRecord.DIASTOLIC_AVG]?.inMillimetersOfMercury,
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> BloodPressureAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> BloodPressureAggregatesResult.Failure
         }
     }
 

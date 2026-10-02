@@ -360,9 +360,9 @@
 ### 6.24 Health Connect SDKの単位クラス（`Mass`/`Length`等）のKotlinプロパティ名は、`javap`で見えるJVMメソッド名と異なることがある
 
 -   **知見**: WBS 6.10でDistance用のAggregateMetric（`DistanceRecord.DISTANCE_TOTAL`、型は`Length`）をkmへ変換するプロパティ名を確認するため、`connect-client-1.1.0-api.jar`の`Length.class`を`javap -p`で逆コンパイルしたところ、`getKilometers()`/`getMeters()`しか見つからず、既存コード（`WeightAggregateBucket`等）が使っている`Mass.inKilograms`と同じ命名規則（`inXxx`）のメソッドが存在しないように見えた。`strings`コマンドで`.class`ファイルのバイナリを直接検索したところ、`kotlin.Metadata`アノテーションの文字列プール内に`inKilograms`/`inKilometers`/`inMeters`という文字列が実際に埋め込まれていることが分かった。これはKotlinコンパイラが`@JvmName`等でJVM上のメソッド名（`getKilograms()`）とKotlinソース上のプロパティ名（`inKilograms`）を意図的に分けているためで、`javap`はJVMメソッド名しか表示しないためこの分離を見落とす
--   **Viewerへの適用**: Health Connect SDKの単位クラス（`Mass`/`Length`/`Energy`/`Power`等）のプロパティ名を`javap`だけで調べると誤った結論（「`inXxx`という名前のプロパティは存在しない」）に至る。正しいKotlinプロパティ名を確認するには、(1) 既存コードで同じ系統のクラス（`Mass.inKilograms`等）がどう呼ばれているか確認する、(2) `.class`ファイルのバイナリを`strings`/`grep -a`で直接検索し、`kotlin.Metadata`の文字列プールに含まれる名前を探す、のいずれかを使う。`Length`の場合は`inMeters`/`inKilometers`/`inMiles`/`inInches`/`inFeet`、`Energy`の場合は`inCalories`/`inKilocalories`/`inJoules`/`inKilojoules`が実際のKotlinプロパティ名だった（`Energy`はWBS 6.10のCalories実装時、D-043(3)で確認）
--   **根拠**: 実機非依存の逆コンパイル確認（`androidx.health.connect:connect-client:1.1.0`の`units/Mass.class`・`units/Length.class`・`units/Energy.class`を`javap -p`、および`grep -a -o`でバイナリ内の文字列を直接検索。2026-10-01）
--   **確認日**: 2026-10-01
+-   **Viewerへの適用**: Health Connect SDKの単位クラス（`Mass`/`Length`/`Energy`/`Power`等）のプロパティ名を`javap`だけで調べると誤った結論（「`inXxx`という名前のプロパティは存在しない」）に至る。正しいKotlinプロパティ名を確認するには、(1) 既存コードで同じ系統のクラス（`Mass.inKilograms`等）がどう呼ばれているか確認する、(2) `.class`ファイルのバイナリを`strings`/`grep -a`で直接検索し、`kotlin.Metadata`の文字列プールに含まれる名前を探す、のいずれかを使う。`Length`の場合は`inMeters`/`inKilometers`/`inMiles`/`inInches`/`inFeet`、`Energy`の場合は`inCalories`/`inKilocalories`/`inJoules`/`inKilojoules`、`Pressure`の場合は`inMillimetersOfMercury`が実際のKotlinプロパティ名だった（`Energy`はWBS 6.10のCalories実装時にD-043(3)、`Pressure`はWBS 6.10のBlood Pressure実装時にD-045(4)で確認）
+-   **根拠**: 実機非依存の逆コンパイル確認（`androidx.health.connect:connect-client:1.1.0`の`units/Mass.class`・`units/Length.class`・`units/Energy.class`・`units/Pressure.class`を`javap -p`、および`grep -a -o`でバイナリ内の文字列を直接検索。2026-10-01〜2026-10-02）
+-   **確認日**: 2026-10-01（`Pressure`は2026-10-02追記）
 
 ### 6.25 Health Connect上の「Calories」は`ActiveCaloriesBurnedRecord`/`TotalCaloriesBurnedRecord`という2つの独立したRecord型で、実機では記録頻度・ソース構成がDistance/Stepsと異なる
 

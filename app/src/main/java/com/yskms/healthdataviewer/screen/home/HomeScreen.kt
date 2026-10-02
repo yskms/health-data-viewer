@@ -42,6 +42,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.ActiveCaloriesAggregateTotalResult
+import com.yskms.healthdataviewer.healthconnect.BloodPressureRecordsResult
 import com.yskms.healthdataviewer.healthconnect.DistanceAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
@@ -58,6 +59,7 @@ import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.ActiveCaloriesAccent
+import com.yskms.healthdataviewer.ui.theme.BloodPressureAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.RestingHeartRateAccent
@@ -67,6 +69,7 @@ import com.yskms.healthdataviewer.ui.theme.TotalCaloriesAccent
 import com.yskms.healthdataviewer.ui.theme.WeightAccent
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
@@ -175,6 +178,7 @@ fun HomeScreen(
     onOpenDistance: (historyPermissionGranted: Boolean) -> Unit,
     onOpenActiveCalories: (historyPermissionGranted: Boolean) -> Unit,
     onOpenTotalCalories: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenBloodPressure: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -252,6 +256,7 @@ fun HomeScreen(
                 val distanceGranted = permissionsCheckState.isGranted(HealthConnectPermissions.DISTANCE_READ)
                 val activeCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.ACTIVE_CALORIES_READ)
                 val totalCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.TOTAL_CALORIES_READ)
+                val bloodPressureGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -263,6 +268,7 @@ fun HomeScreen(
                         distanceGranted,
                         activeCaloriesGranted,
                         totalCaloriesGranted,
+                        bloodPressureGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -277,6 +283,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.DISTANCE_READ)
                                     add(HealthConnectPermissions.ACTIVE_CALORIES_READ)
                                     add(HealthConnectPermissions.TOTAL_CALORIES_READ)
+                                    add(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -344,6 +351,15 @@ fun HomeScreen(
                     if (restingHeartRateGranted != true) return@LaunchedEffect
                     restingHeartRateLoad =
                         healthConnectManager.findLatestRestingHeartRateRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                }
+
+                // Blood Pressureカード（WBS 6.10、D-045）: BloodPressureRecordもWeight/RestingHeartRateと
+                // 同じ単一時刻・単一レコードの構造のため、同じ「最新値＋前回比」パターンを採用した。
+                var bloodPressureLoad by remember { mutableStateOf<BloodPressureRecordsResult?>(null) }
+                LaunchedEffect(bloodPressureGranted, historyPermissionGranted, resumeKey) {
+                    if (bloodPressureGranted != true) return@LaunchedEffect
+                    bloodPressureLoad =
+                        healthConnectManager.findLatestBloodPressureRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -456,7 +472,8 @@ fun HomeScreen(
                         isSleepCardHidden(sleepGranted, sleepResult, showMetricsWithoutData) &&
                         isDistanceCardHidden(distanceGranted, distanceResult, showMetricsWithoutData) &&
                         isActiveCaloriesCardHidden(activeCaloriesGranted, activeCaloriesResult, showMetricsWithoutData) &&
-                        isTotalCaloriesCardHidden(totalCaloriesGranted, totalCaloriesResult, showMetricsWithoutData)
+                        isTotalCaloriesCardHidden(totalCaloriesGranted, totalCaloriesResult, showMetricsWithoutData) &&
+                        isBloodPressureCardHidden(bloodPressureGranted, bloodPressureLoad, historyFeatureAvailable, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -519,6 +536,14 @@ fun HomeScreen(
                     currentResult = totalCaloriesResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenTotalCalories(historyPermissionGranted) },
+                )
+                BloodPressureCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = bloodPressureGranted,
+                    load = bloodPressureLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenBloodPressure(historyPermissionGranted) },
                 )
             }
         }
@@ -612,6 +637,19 @@ private fun isRestingHeartRateCardHidden(
     !showMetricsWithoutData &&
         granted == true &&
         load is RestingHeartRateRecordsResult.Success &&
+        load.records.isEmpty() &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+// isWeightCardHidden()と同じ理由・同じ形（D-045。WeightCardと同じ「最新値＋前回比」パターンのため）。
+private fun isBloodPressureCardHidden(
+    granted: Boolean?,
+    load: BloodPressureRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is BloodPressureRecordsResult.Success &&
         load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
@@ -871,6 +909,69 @@ private fun RestingHeartRateCard(
     }
 }
 
+// WeightCard/RestingHeartRateCardと同じ形（D-045。「最新値＋前回比」）。血圧は収縮期・拡張期の2値を
+// 持つため、一般的な臨床表記「120/80 mmHg」の形でまとめて1つの見出しに表示する（ユーザー指定の設計
+// 判断: 1枚のカードに2値をどう出すかという論点に対する回答。公式Aggregate MetricにはSYSTOLIC/DIASTOLIC
+// それぞれのAVG/MIN/MAXがあるが、このカードは期間タブに依存しない「最新の1件」をそのまま出すため、
+// Aggregateではなくレコードのsystolic/diastolicをそのまま使う）。WeightCardと同じLatestRecordDateText()も
+// 表示する（findLatestBloodPressureRecords()のコメント参照）。
+@Composable
+private fun BloodPressureCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    load: BloodPressureRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isBloodPressureCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_blood_pressure_title),
+        accentColor = BloodPressureAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            load == null -> Text(text = stringResource(id = R.string.home_loading))
+            load is BloodPressureRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is BloodPressureRecordsResult.Success -> {
+                val records = load.records
+                val latest = records.firstOrNull()
+                if (latest == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    val systolic = latest.systolic.inMillimetersOfMercury.roundToInt()
+                    val diastolic = latest.diastolic.inMillimetersOfMercury.roundToInt()
+                    Text(
+                        text = stringResource(id = R.string.home_blood_pressure_value, systolic, diastolic),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
+                    val previous = records.getOrNull(1)
+                    if (previous != null) {
+                        val diffSystolic = systolic - previous.systolic.inMillimetersOfMercury.roundToInt()
+                        val diffDiastolic = diastolic - previous.diastolic.inMillimetersOfMercury.roundToInt()
+                        Text(
+                            text =
+                                stringResource(
+                                    id = R.string.home_blood_pressure_delta,
+                                    formatSignedInt(diffSystolic),
+                                    formatSignedInt(diffDiastolic),
+                                ),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                // WeightCardのhistoryLimited通知と同じ理由（期間タブに依存しないカードのため、
+                // DashboardPeriod.isHistoryLimited()では検知できない）。
+                if (load.historyLimited && historyFeatureAvailable != false) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SleepCard(
     permissionsCheckState: PermissionsCheckState,
@@ -1055,5 +1156,13 @@ private fun formatSignedBpm(diffBpm: Long): String =
     when {
         diffBpm > 0 -> "+$diffBpm"
         diffBpm < 0 -> "-${-diffBpm}"
+        else -> "±0"
+    }
+
+// formatSignedBpm()と同じ役割。収縮期・拡張期とも四捨五入済みのIntの差分のため丸め処理は不要（D-045）。
+private fun formatSignedInt(diff: Int): String =
+    when {
+        diff > 0 -> "+$diff"
+        diff < 0 -> "-${-diff}"
         else -> "±0"
     }

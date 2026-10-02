@@ -39,7 +39,7 @@ Health Connectに保存済みのデータを読み取り専用で可視化・検
 
 ## SDK調査（逆コンパイル）で誤解しやすい点
 
--   Health Connect SDK固有の挙動ではなくKotlin/JVM一般の注意点だが、このSDKの単位クラス（`Mass`/`Length`/`Energy`等）を調べる際に踏みやすいため記録する。`javap`でのクラスファイル逆コンパイルは、KotlinのJvmName差し替えによりKotlinから見える実際のプロパティ名（`inKilograms`/`inKilometers`/`inKilocalories`等）を表示しない（JVM上のメソッド名`getKilograms()`等しか見えない）。`Energy`型はCalories実装時（D-043(3)）に`inKilocalories`であることを確認済みだが、まだ確認していない単位型（`Power`等）を調べる際も同様に、`javap`の出力だけで「このプロパティは存在しない」と判断しないこと（詳細・確認手順は[docs/lessons.md](docs/lessons.md) 6.24）
+-   Health Connect SDK固有の挙動ではなくKotlin/JVM一般の注意点だが、このSDKの単位クラス（`Mass`/`Length`/`Energy`等）を調べる際に踏みやすいため記録する。`javap`でのクラスファイル逆コンパイルは、KotlinのJvmName差し替えによりKotlinから見える実際のプロパティ名（`inKilograms`/`inKilometers`/`inKilocalories`等）を表示しない（JVM上のメソッド名`getKilograms()`等しか見えない）。`Energy`型はCalories実装時（D-043(3)）に`inKilocalories`、`Pressure`型はBlood Pressure実装時（D-045(4)）に`inMillimetersOfMercury`であることをそれぞれ確認済みだが、まだ確認していない単位型（`Power`等）を調べる際も同様に、`javap`の出力だけで「このプロパティは存在しない」と判断しないこと（詳細・確認手順は[docs/lessons.md](docs/lessons.md) 6.24）
 
 ## Gradle設定で誤解しやすい点
 
