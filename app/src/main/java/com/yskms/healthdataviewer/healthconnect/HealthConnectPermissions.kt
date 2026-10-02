@@ -15,6 +15,14 @@ import androidx.health.connect.client.records.WeightRecord
 // 履歴読み取り権限はデータ型を問わない横断的な権限のため、データ型の読み取り権限とは
 // 別に許可状態を扱う（権限リクエストのダイアログ上も別画面で個別に許可・拒否できる。lessons.md 3.5）。
 //
+// このファイルに権限を追加しただけでは、呼び出し側には自動で反映されない（一覧化は共通化
+// しておらず、以下の箇所にそれぞれ手で追加する必要がある。WBS 6.10で、Calories追加時に
+// SettingsScreen.ktへの追加がコードレビューで発見されるまで漏れていた実例がある）。
+// - AndroidManifest.xml の <uses-permission>
+// - HomeScreen.kt: 権限ごとの xxxGranted 変数・バナー表示要否を決める listOf(...).any{...}・
+//   許可リクエストの buildSet
+// - SettingsScreen.kt: PermissionStatusRow の一覧・許可リクエストの buildSet
+//
 // ACTIVE_CALORIES_READ/TOTAL_CALORIES_READ（WBS 6.10、D-043）: ActiveCaloriesBurnedRecord/
 // TotalCaloriesBurnedRecordはHealth Connect上で別々のRecord型のため、getReadPermission()が
 // 返す権限文字列もREAD_ACTIVE_CALORIES_BURNED/READ_TOTAL_CALORIES_BURNEDとそれぞれ別になる。
