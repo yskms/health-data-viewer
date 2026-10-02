@@ -107,12 +107,18 @@ fun detailChartHeight(
     historyLimited: Boolean,
     isCustomPeriod: Boolean,
     showsMeasurementCount: Boolean = false,
+    // WBS 6.10（D-045、コードレビュー指摘）: Blood Pressureのチャート凡例（`detail_blood_pressure_chart_legend`、
+    // デフォルトのTextスタイルで1行、historyLimitedの注記と同じ見た目）用。showsMeasurementCount
+    // （bodySmallスタイル、20dp）とは文字サイズが異なるため、同じFULLSCREEN_NOTICE_HEIGHT（24dp）を
+    // 再利用する（historyLimitedの注記と同じカテゴリの「追加の注記1行」として扱う）。
+    showsChartLegend: Boolean = false,
 ): Dp {
     if (!fullScreenChart) return PORTRAIT_CHART_HEIGHT
     var reserved = FULLSCREEN_PERIOD_TABS_HEIGHT + FULLSCREEN_ELEMENT_SPACING + FULLSCREEN_CAPTION_HEIGHT + FULLSCREEN_ELEMENT_SPACING
     if (isCustomPeriod) reserved += FULLSCREEN_CUSTOM_PICKER_HEIGHT + FULLSCREEN_ELEMENT_SPACING
     if (historyLimited) reserved += FULLSCREEN_NOTICE_HEIGHT + FULLSCREEN_ELEMENT_SPACING
     if (showsMeasurementCount) reserved += FULLSCREEN_MEASUREMENT_COUNT_HEIGHT + FULLSCREEN_ELEMENT_SPACING
+    if (showsChartLegend) reserved += FULLSCREEN_NOTICE_HEIGHT + FULLSCREEN_ELEMENT_SPACING
     return (availableHeight - reserved).coerceAtLeast(FULLSCREEN_CHART_MIN_HEIGHT)
 }
 

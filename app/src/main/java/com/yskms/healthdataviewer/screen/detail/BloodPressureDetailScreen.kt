@@ -230,6 +230,7 @@ fun BloodPressureDetailScreen(
                                                 availableHeight = availableHeight,
                                                 historyLimited = currentResult.historyLimited,
                                                 isCustomPeriod = period == GraphPeriod.CUSTOM,
+                                                showsChartLegend = true,
                                             ),
                                         ),
                                 )
