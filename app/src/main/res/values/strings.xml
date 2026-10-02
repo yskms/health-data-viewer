@@ -121,6 +121,7 @@
     <string name="detail_total_calories_aggregation_avg_per_day">Aggregation: %1$s average calories burned per day in kcal (official Aggregate API)</string>
     <string name="detail_blood_pressure_title">Blood pressure</string>
     <string name="detail_blood_pressure_aggregation_avg">Aggregation: %1$s average systolic / diastolic in mmHg (official Aggregate API)</string>
+    <string name="detail_blood_pressure_chart_legend">Upper line: systolic · Lower line: diastolic</string>
     <string name="detail_blood_pressure_record_summary">%1$s  %2$d/%3$d mmHg</string>
     <!-- WBS 6.3 (WBS 6.10 added Distance, Active Calories, Total Calories, Blood Pressure): Records tab (paged raw record list), shared across data types. -->
     <string name="detail_tab_chart">Chart</string>

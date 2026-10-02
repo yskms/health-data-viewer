@@ -57,8 +57,10 @@ import kotlin.math.roundToInt
 
 // WBS 6.10（D-045）: WeightDetailScreen/RestingHeartRateDetailScreenと同じ共通基盤をそのまま踏襲する。
 // BloodPressureRecordはWeightRecordと同じ単一時刻・単一値のレコード（サンプル配列を持たない、公式の
-// 重複処理もない）で、血圧測定も体重と同様に1日数回程度の低頻度が一般的なため、MetricDensity.HIGH
-// （HeartRateDetailScreen）ではなくWeightと同じLOWを使う。
+// 重複処理もない）で、血圧測定も体重と同様に1日数回程度の低頻度が一般的という想定でMetricDensity.HIGH
+// （HeartRateDetailScreen）ではなくWeightと同じLOWを選んだ。**この記録頻度の想定は実データで確認して
+// いない（コードレビュー指摘、要検証。D-045(2)参照）**。Resting Heart Rateで実際に確認できた
+// 記録頻度（ほぼ日次、D-044）とも異なるデータ型のため、同じ想定が成り立つとは限らない。
 private val BLOOD_PRESSURE_DENSITY = MetricDensity.LOW
 
 // WBS 6.10: RecordsタブのPagingConfig。WeightDetailScreenと同じ理由・同じ値。
@@ -210,6 +212,11 @@ fun BloodPressureDetailScreen(
                                             stringResource(id = granularity.granularityLabelRes()),
                                         ),
                                 )
+                                // コードレビュー指摘: 2系列（収縮期/拡張期）には凡例・系列名がなく、Vicoの
+                                // 既定の色分けだけでは画面上でどちらの線か判別する手段がない（マーカーの
+                                // タップ表示にも系列名が出ない）。収縮期は値の大きさから常に上側の線になる
+                                // ため、その位置関係で区別できることを文言で案内する（D-045）。
+                                Text(text = stringResource(id = R.string.detail_blood_pressure_chart_legend))
                                 if (currentResult.historyLimited) {
                                     Text(text = stringResource(id = R.string.detail_history_limited_notice))
                                 }

@@ -447,7 +447,7 @@ Health Connect SDKの最低APIは26だが、Health Connect自体が利用可能�
 | Calories | 合計 | あり（Activity） | 「Total / Activeの区別あり」は、1つのRecord型内の2フィールドではなく、ActiveCaloriesBurnedRecord / TotalCaloriesBurnedRecordという2つの独立したRecord型を指す。どちらを優先するかをアプリが判断しないよう、2つの独立したデータ型（カード・詳細画面）として実装した（WBS 6.10、D-043(1)）。重複処理についてもDistanceと同様、公式ドキュメント上の分類のみで、ActiveCaloriesBurnedRecord/TotalCaloriesBurnedRecordそれぞれで複数ソース重複時の挙動を実機確認してはいない（要検証、D-043）。さらにTotalCaloriesBurnedRecord.ENERGY_TOTALは、レコードが1件もない期間でもnullを返さないことが分かっており、ホーム画面カードはhasAnyRecord()による実レコード確認で対応済み（詳細画面のChartは別の理由で未対応、§27参照） |
 | Heart Rate | 平均・最小・最大・測定数 | なし | 測定数はサンプル数であり、レコード数ではない |
 | Resting Heart Rate | 平均・最小・最大 | なし | |
-| Blood Pressure | 収縮期・拡張期の平均・最小・最大 | なし | |
+| Blood Pressure | 収縮期・拡張期の平均・最小・最大 | なし | グラフでは収縮期・拡張期それぞれの平均のみを使う。最小・最大は取得しない（凡例のない既存チャート設計で、2指標分の最小・最大まで含めた6系列は判読できなくなるため。WBS 6.10、D-045(3)） |
 | Sleep | 睡眠時間合計（`SLEEP_DURATION_TOTAL`。Session区間の単純合計ではなく、Stageのうち覚醒（`STAGE_TYPE_AWAKE`）区間を除いた時間の合計） | あり（Sleep） | 日付境界をまたぐSessionは、両日のbucketに実時間の重なりに応じて按分される（丸ごと1つのbucketに計上されることはない）。按分の正確な計算根拠、および複数ソースが同じ夜を重ねて記録した場合の重複処理（Source priority）は未確認（単一ソースのみで確認、PoC 4、D-032、lessons.md 6.9、§27） |
 | Exercise | 運動時間合計 | — | |
 | Body Fat / Blood Glucose / SpO2 / HRV | 要確認 | — | Aggregateがなければ、読み込んだRawから自前で集約する |
