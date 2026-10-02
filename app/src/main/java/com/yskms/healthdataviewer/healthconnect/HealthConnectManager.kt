@@ -682,14 +682,31 @@ class HealthConnectManager(context: Context) {
         // 大きく異なる場合（旅行先での記録、オフセットをUTCで書き込むアプリ等）、本来含めるべきレコードが
         // 読み取り範囲の端で漏れうる（コードレビュー指摘）。読み取り範囲を前後にこの分だけ広げておき、
         // toBuckets()側でレコードごとのzoneOffsetで計算した現地時刻がrangeStart〜rangeEndに収まるものだけ
-        // を対象にすることで、広げた分の余分なレコードを取りこぼしなく除外する。
+        // を対象にすることで、広げた分の余分なレコードを除外する。
+        //
+        // **historyPermissionGrantedがfalseの場合、開始側は`Instant.now() - HISTORY_FALLBACK_DAYS`より
+        // 古くしてはいけない**（lessons.md 6.1: それより古い範囲を含めるとreadRecords()はSecurityExceptionに
+        // なる）。呼び出し元（resolveDetailGraphRange()のrecentFloorLocal()、またはreadWithHistoryFallback()の
+        // fallbackFilter＝recentRangeFilterLocal()）が渡すlocalFilterの開始時刻は、この境界ぎりぎりまで
+        // 寄せた値（安全マージンは最大24時間、now の時刻によっては0時間に近い）になっているため、26時間の
+        // 広げ幅をそのまま引くと境界を超えてSecurityExceptionになりうる（コードレビュー指摘。fallback自体も
+        // 同じreadAllRecords()を通るため、2回目の読み取りも同様に失敗しFailureになっていた）。
+        // そのため、historyPermissionGrantedがfalseの間は、広げた開始時刻を境界でクランプする（＝広げる前の
+        // 時点で境界に近いレコードは取りこぼしうるが、これは履歴読み取り権限がない場合の既存の30日近似
+        // （lessons.md 6.1）が元々許容している誤差の範囲に収まる）。
         val maxZoneOffsetSpread = Duration.ofHours(26)
 
         // localFilter（LocalDateTimeベース）をInstantベースに変換し、readRecords()で全件走査する。
         // ZoneId.systemDefault()を使うのは、呼び出し元resolveDetailGraphRange()がLocalDateTime.now()・
         // 端末の暦日/暦月境界を基準にfilterを組み立てているため。
         suspend fun readAllRecords(localFilter: TimeRangeFilter): List<BodyFatRecord> {
-            val start = localFilter.localStartTime?.atZone(zone)?.toInstant()?.minus(maxZoneOffsetSpread)
+            val widenedStart = localFilter.localStartTime?.atZone(zone)?.toInstant()?.minus(maxZoneOffsetSpread)
+            val start =
+                if (!historyPermissionGranted && widenedStart != null) {
+                    maxOf(widenedStart, Instant.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS))
+                } else {
+                    widenedStart
+                }
             val end = (localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()).plus(maxZoneOffsetSpread)
             val instantFilter = if (start != null) TimeRangeFilter.between(start, end) else TimeRangeFilter.before(end)
 
