@@ -26,6 +26,7 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.paging.PagingSource
 import java.io.IOException
+import java.time.Duration
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.Period
@@ -675,12 +676,21 @@ class HealthConnectManager(context: Context) {
     ): BodyFatAggregatesResult {
         val zone = ZoneId.systemDefault()
 
+        // Health Connectのタイムゾーンオフセットはレコードを記録した端末依存でUTC-12〜UTC+14の範囲を
+        // 取り得る（最大スプレッド26時間）。読み取り範囲のInstant変換は端末のタイムゾーン（zone）基準だが、
+        // bucket割り当て（下記toBuckets()）はレコード自身のzoneOffset基準のため、記録側のoffsetが端末と
+        // 大きく異なる場合（旅行先での記録、オフセットをUTCで書き込むアプリ等）、本来含めるべきレコードが
+        // 読み取り範囲の端で漏れうる（コードレビュー指摘）。読み取り範囲を前後にこの分だけ広げておき、
+        // toBuckets()側でレコードごとのzoneOffsetで計算した現地時刻がrangeStart〜rangeEndに収まるものだけ
+        // を対象にすることで、広げた分の余分なレコードを取りこぼしなく除外する。
+        val maxZoneOffsetSpread = Duration.ofHours(26)
+
         // localFilter（LocalDateTimeベース）をInstantベースに変換し、readRecords()で全件走査する。
         // ZoneId.systemDefault()を使うのは、呼び出し元resolveDetailGraphRange()がLocalDateTime.now()・
         // 端末の暦日/暦月境界を基準にfilterを組み立てているため。
         suspend fun readAllRecords(localFilter: TimeRangeFilter): List<BodyFatRecord> {
-            val start = localFilter.localStartTime?.atZone(zone)?.toInstant()
-            val end = localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()
+            val start = localFilter.localStartTime?.atZone(zone)?.toInstant()?.minus(maxZoneOffsetSpread)
+            val end = (localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()).plus(maxZoneOffsetSpread)
             val instantFilter = if (start != null) TimeRangeFilter.between(start, end) else TimeRangeFilter.before(end)
 
             val records = mutableListOf<BodyFatRecord>()
@@ -725,6 +735,11 @@ class HealthConnectManager(context: Context) {
             val valuesByBucket = Array(bucketStarts.size) { mutableListOf<Double>() }
             for (record in records) {
                 val localDateTime = record.time.atZone(record.zoneOffset ?: zone).toLocalDateTime()
+                // readAllRecords()がmaxZoneOffsetSpread分だけ広げて読んでいるため、レコード自身の
+                // zoneOffsetで計算した現地時刻がrangeStart〜rangeEndに実際に収まるものだけを対象にする
+                // （コードレビュー指摘: 上限チェックが無いと、広げた分で余分に読めた範囲外のレコードが
+                // 最後のbucketに混入する。下限はindexOfLast側で自然に除外されるが、ここで両端を明示する）。
+                if (localDateTime.isBefore(rangeStart) || !localDateTime.isBefore(rangeEnd)) continue
                 val bucketIndex = bucketStarts.indexOfLast { !it.isAfter(localDateTime) }
                 if (bucketIndex >= 0) {
                     valuesByBucket[bucketIndex] += record.percentage.value
