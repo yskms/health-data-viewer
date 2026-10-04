@@ -60,7 +60,7 @@ import java.time.format.FormatStyle
 // 必要としたのは、値域が制限されていたからではなく、Vico既定のrangeProvider（Y軸下限を常に0にする）
 // のままだと90〜100%という狭い範囲に値が集まり3系列がグラフ上端付近に潰れて見えたため。血糖値は
 // 正常範囲が70〜180mg/dL程度とSpO2よりレンジが広く、0始まりでも潰れの影響は小さいと判断し、
-// Body Fatと同じくVico既定のまま（レンジプロバイダーを指定しない）にした（D-050(4)）。
+// Body Fatと同じくVico既定のまま（レンジプロバイダーを指定しない）にした（D-050コードレビュー対応(e)）。
 private val BLOOD_GLUCOSE_DENSITY = MetricDensity.LOW
 
 // BodyFatDetailScreenと同じ値（WBS 6.3）。
@@ -260,7 +260,7 @@ fun BloodGlucoseDetailScreen(
 // specimenSource/mealType/relationToMealは今回表示しない（D-050(1)）。単位はmg/dL。ホームカードは
 // 整数表示（日本の血糖値自己測定器の一般的な表記に合わせる、D-050(2)）だが、このタブは小数1桁にする。
 // mmol/Lで記録するソースをmg/dLへ換算すると小数が生じるため、整数表示にすると異なる値が同じ整数に
-// 丸まって見分けられなくなり、重複も含めてすべて表示するという原則（D-007）に反する（D-050(4)）。
+// 丸まって見分けられなくなり、重複も含めてすべて表示するという原則（D-007）に反する（D-050コードレビュー対応(d)）。
 @Composable
 private fun BloodGlucoseRecordRow(record: BloodGlucoseRecord) {
     val context = LocalContext.current
