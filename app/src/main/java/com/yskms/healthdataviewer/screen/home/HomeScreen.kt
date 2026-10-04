@@ -43,6 +43,7 @@ import androidx.health.connect.client.time.TimeRangeFilter
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.ActiveCaloriesAggregateTotalResult
+import com.yskms.healthdataviewer.healthconnect.BloodGlucoseRecordsResult
 import com.yskms.healthdataviewer.healthconnect.BloodPressureRecordsResult
 import com.yskms.healthdataviewer.healthconnect.BodyFatRecordsResult
 import com.yskms.healthdataviewer.healthconnect.DistanceAggregateTotalResult
@@ -64,6 +65,7 @@ import com.yskms.healthdataviewer.screen.common.HealthConnectUnavailableNotice
 import com.yskms.healthdataviewer.screen.common.PermissionsCheckFailedNotice
 import com.yskms.healthdataviewer.settings.UserSettingsRepository
 import com.yskms.healthdataviewer.ui.theme.ActiveCaloriesAccent
+import com.yskms.healthdataviewer.ui.theme.BloodGlucoseAccent
 import com.yskms.healthdataviewer.ui.theme.BloodPressureAccent
 import com.yskms.healthdataviewer.ui.theme.BodyFatAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
@@ -191,6 +193,7 @@ fun HomeScreen(
     onOpenBodyFatGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenHrvGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenOxygenSaturationGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenBloodGlucoseGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -272,6 +275,7 @@ fun HomeScreen(
                 val bodyFatGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BODY_FAT_READ)
                 val hrvGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HRV_READ)
                 val oxygenSaturationGranted = permissionsCheckState.isGranted(HealthConnectPermissions.OXYGEN_SATURATION_READ)
+                val bloodGlucoseGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -287,6 +291,7 @@ fun HomeScreen(
                         bodyFatGranted,
                         hrvGranted,
                         oxygenSaturationGranted,
+                        bloodGlucoseGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -305,6 +310,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.BODY_FAT_READ)
                                     add(HealthConnectPermissions.HRV_READ)
                                     add(HealthConnectPermissions.OXYGEN_SATURATION_READ)
+                                    add(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -409,6 +415,16 @@ fun HomeScreen(
                     if (oxygenSaturationGranted != true) return@LaunchedEffect
                     oxygenSaturationLoad =
                         healthConnectManager.findLatestOxygenSaturationRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                }
+
+                // Blood Glucoseカード（WBS 6.10、D-050）: Weight/BodyFat/SpO2と同じ「最新値＋前回比」
+                // パターン。採用経緯はHealthConnectManager.bloodGlucoseRecordsPagingSource()直前の
+                // コメント参照（実機で記録頻度を確認できなかったため低頻度想定で暫定確定）。
+                var bloodGlucoseLoad by remember { mutableStateOf<BloodGlucoseRecordsResult?>(null) }
+                LaunchedEffect(bloodGlucoseGranted, historyPermissionGranted, resumeKey) {
+                    if (bloodGlucoseGranted != true) return@LaunchedEffect
+                    bloodGlucoseLoad =
+                        healthConnectManager.findLatestBloodGlucoseRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -530,6 +546,12 @@ fun HomeScreen(
                             oxygenSaturationLoad,
                             historyFeatureAvailable,
                             showMetricsWithoutData,
+                        ) &&
+                        isBloodGlucoseCardHidden(
+                            bloodGlucoseGranted,
+                            bloodGlucoseLoad,
+                            historyFeatureAvailable,
+                            showMetricsWithoutData,
                         )
 
                 if (allCardsHidden) {
@@ -625,6 +647,14 @@ fun HomeScreen(
                     historyFeatureAvailable = historyFeatureAvailable,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenOxygenSaturationGraph(historyPermissionGranted) },
+                )
+                BloodGlucoseCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = bloodGlucoseGranted,
+                    load = bloodGlucoseLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenBloodGlucoseGraph(historyPermissionGranted) },
                 )
             }
         }
@@ -771,6 +801,20 @@ private fun isOxygenSaturationCardHidden(
     !showMetricsWithoutData &&
         granted == true &&
         load is OxygenSaturationRecordsResult.Success &&
+        load.records.isEmpty() &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+// isBodyFatCardHidden()と同じ理由・同じ形（Blood GlucoseもWeight/BodyFat/SpO2と同じ「最新値＋前回比」
+// パターンのため、D-050）。
+private fun isBloodGlucoseCardHidden(
+    granted: Boolean?,
+    load: BloodGlucoseRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is BloodGlucoseRecordsResult.Success &&
         load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
@@ -1259,6 +1303,55 @@ private fun OxygenSaturationCard(
                         val diffPercent = latest.percentage.value - previous.percentage.value
                         Text(
                             text = stringResource(id = R.string.home_oxygen_saturation_delta, formatSignedPercent(diffPercent, locale)),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                if (load.historyLimited && historyFeatureAvailable != false) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+// OxygenSaturationCard()と同じ形（Blood GlucoseもBloodGlucoseRecordと同じ単一時刻・単一値の構造の
+// ため、D-050）。levelはmg/dLで整数表示する（日本の血糖値自己測定器の一般的な表記に合わせる）。
+@Composable
+private fun BloodGlucoseCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    load: BloodGlucoseRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isBloodGlucoseCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_blood_glucose_title),
+        accentColor = BloodGlucoseAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            load == null -> Text(text = stringResource(id = R.string.home_loading))
+            load is BloodGlucoseRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is BloodGlucoseRecordsResult.Success -> {
+                val records = load.records
+                val latest = records.firstOrNull()
+                if (latest == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_blood_glucose_value, Math.round(latest.level.inMilligramsPerDeciliter)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
+                    val previous = records.getOrNull(1)
+                    if (previous != null) {
+                        val diffMgPerDl = Math.round(latest.level.inMilligramsPerDeciliter - previous.level.inMilligramsPerDeciliter).toInt()
+                        Text(
+                            text = stringResource(id = R.string.home_blood_glucose_delta, formatSignedInt(diffMgPerDl)),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }

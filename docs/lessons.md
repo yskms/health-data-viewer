@@ -424,6 +424,13 @@
 -   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の全クラスを`javap -p -c`で出力し、`AggregateMetric<Percentage>`・`AggregateMetric<BloodGlucose>`のシグネチャで`grep`検索。2026-10-04）。「データとアクセス」画面の挙動はPixel 11実機1台のみでの観察（ユーザーがHealthアプリ側のHealth Connect同期設定を確認・変更した前後で比較し、同じタイミングで「呼吸数」は新規に表示されるようになった一方、「血中酸素飽和度」は表示されないままだったことを確認）
 -   **確認日**: 2026-10-04
 
+### 6.31 `BloodGlucose`型のKotlinプロパティ名も、Energy/Pressure型と同じくin接頭辞付き（`inMilligramsPerDeciliter`/`inMillimolesPerLiter`）。javapのメソッド名からそのままプロパティ名を推測し、実際にコンパイルエラーになった
+
+-   **知見**: WBS 6.10でBlood Glucoseを実装するにあたり、`BloodGlucoseRecord.level`（`BloodGlucose`型）の値を読む際、`javap`で見えるメソッド名`getMilligramsPerDeciliter()`/`getMillimolesPerLiter()`から、CLAUDE.mdの警告（Energy型は`inKilocalories`、Pressure型は`inMillimetersOfMercury`というin接頭辞付きの罠がある）を認識していながら、`Percentage`型（Body Fat、D-046(4)）が例外的にin接頭辞なし（`value`）だった前例に引きずられ、`milligramsPerDeciliter`とin接頭辞なしで実装してしまった。`./gradlew compileDebugKotlin`が`Unresolved reference 'milligramsPerDeciliter'`で即座に検出し、`.class`バイナリの文字列直接検索（`grep -a -o`、D-043(5)と同じ手法）で確認したところ、実際のプロパティ名は`inMilligramsPerDeciliter`/`inMillimolesPerLiter`だった
+-   **Viewerへの適用**: `HealthConnectManager.readBloodGlucoseAggregates()`・`BloodGlucoseDetailScreen.kt`・`HomeScreen.kt`のBlood Glucoseカードで、いずれも`record.level.inMilligramsPerDeciliter`を使う（D-050(2)）。CLAUDE.mdの「まだ確認していない単位型は機械的に判断しない」という注意点は、同じ単位型ファミリー内に`Percentage`のような例外が1つあっても、他の型（`BloodGlucose`含む）がその例外に倣うとは限らないことを示す実例。新しい単位型を扱う際は、既存の型のどれかと「似ている」という印象だけで判断せず、毎回`.class`バイナリの文字列直接検索で確認すること
+-   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の`androidx/health/connect/client/units/BloodGlucose.class`を`grep -a -o`で検索し、`inMilligramsPerDeciliter`/`inMillimolesPerLiter`という文字列を確認。2026-10-04）。コンパイルエラー自体はこのプロジェクトの`compileDebugKotlin`実行結果
+-   **確認日**: 2026-10-04
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる

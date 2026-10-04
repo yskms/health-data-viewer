@@ -2,6 +2,7 @@ package com.yskms.healthdataviewer.healthconnect
 
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
@@ -49,5 +50,6 @@ object HealthConnectPermissions {
     // 例えばSDNNに相当するRecord型は存在しない）。
     val HRV_READ: String = HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class)
     val OXYGEN_SATURATION_READ: String = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
+    val BLOOD_GLUCOSE_READ: String = HealthPermission.getReadPermission(BloodGlucoseRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

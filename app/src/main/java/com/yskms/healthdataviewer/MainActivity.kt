@@ -20,6 +20,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.screen.detail.ActiveCaloriesDetailScreen
+import com.yskms.healthdataviewer.screen.detail.BloodGlucoseDetailScreen
 import com.yskms.healthdataviewer.screen.detail.BloodPressureDetailScreen
 import com.yskms.healthdataviewer.screen.detail.BodyFatDetailScreen
 import com.yskms.healthdataviewer.screen.detail.DistanceDetailScreen
@@ -79,6 +80,7 @@ private const val ROUTE_BLOOD_PRESSURE_DETAIL = "blood_pressure_detail"
 private const val ROUTE_BODY_FAT_DETAIL = "body_fat_detail"
 private const val ROUTE_HRV_DETAIL = "hrv_detail"
 private const val ROUTE_OXYGEN_SATURATION_DETAIL = "oxygen_saturation_detail"
+private const val ROUTE_BLOOD_GLUCOSE_DETAIL = "blood_glucose_detail"
 private const val ROUTE_SETTINGS = "settings"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
@@ -162,6 +164,10 @@ private fun MainNavHost(
                 onOpenOxygenSaturationGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_OXYGEN_SATURATION_DETAIL)
+                },
+                onOpenBloodGlucoseGraph = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_BLOOD_GLUCOSE_DETAIL)
                 },
                 onOpenSettings = { navController.navigateOnce(ROUTE_SETTINGS) },
             )
@@ -252,6 +258,13 @@ private fun MainNavHost(
         }
         composable(ROUTE_OXYGEN_SATURATION_DETAIL) {
             OxygenSaturationDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_BLOOD_GLUCOSE_DETAIL) {
+            BloodGlucoseDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

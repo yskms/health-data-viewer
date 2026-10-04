@@ -9,6 +9,7 @@ import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
@@ -1257,6 +1258,204 @@ class HealthConnectManager(context: Context) {
             is HistoryFallbackOutcome.Success ->
                 OxygenSaturationAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> OxygenSaturationAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: Blood Glucoseを追加。BloodGlucoseRecordも
+    // Weight/RestingHeartRate/BloodPressure/BodyFat/HRV/OxygenSaturationと同じ単一時刻のレコード
+    // （InstantaneousRecord、公式の重複処理もない。requirements.md §22.2）のため、Records/Sources用の
+    // 2関数はWeight用の関数をそのまま踏襲する（Body Fat/HRV/SpO2と同じ判断）。
+    //
+    // BloodGlucoseRecordにはlevel（BloodGlucose型）の他、specimenSource/mealType/relationToMealという
+    // 3つの分類用int値もあるが、Body Fat/HRV/SpO2が値フィールド1つのみを表示してきたのと同じ方針を
+    // 踏襲し、今回はlevelのみを表示する（D-050(1)）。
+    //
+    // ホームカードはfindLatestBloodGlucoseRecords()による「最新値＋前回比」。SpO2と同じく実装前に
+    // Pixel 11実機の記録頻度を確認できればそれに基づき方式を決める想定だったが、血圧・SpO2と同様に
+    // 実データが無く確認できなかったため、低頻度想定（自己測定の散発測定）に基づきこの方式のまま
+    // 暫定確定し、記録頻度は未確認のまま要検証として残した（D-050、requirements.md §27）。
+    fun bloodGlucoseRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<BloodGlucoseRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = BloodGlucoseRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestBodyFatRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestBloodGlucoseRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = BloodGlucoseRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.time
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // ホーム画面のBlood Glucoseカード用。findLatestBodyFatRecords()と同じ形・同じ理由。
+    suspend fun findLatestBloodGlucoseRecords(limit: Int, historyPermissionGranted: Boolean): BloodGlucoseRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<BloodGlucoseRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = BloodGlucoseRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                BloodGlucoseRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> BloodGlucoseRecordsResult.Failure
+        }
+    }
+
+    // BloodGlucoseRecordには公式のAggregateMetricが存在しない（javap逆コンパイルで確認済み、D-049）。
+    // readBodyFatAggregates()と全く同じロジックをBloodGlucoseRecord・levelに差し替えただけ
+    // （readHrvAggregates()・readOxygenSaturationAggregates()も同様に複製されている）。levelは
+    // BloodGlucose型（CLAUDE.md参照。Energy/Pressure型と同じin接頭辞付きのプロパティ名
+    // inMillimolesPerLiter/inMilligramsPerDeciliterで、javapのメソッド名getMilligramsPerDeciliter()
+    // からそのまま推測したmilligramsPerDeciliterはコンパイルエラーになった。D-050(2)）。
+    // ここではinMilligramsPerDeciliterを使う（単位はmg/dL）。
+    //
+    // コードレビュー指摘（Body Fat/HRV/SpO2実装時）: この関数はreadBodyFatAggregates()・
+    // readHrvAggregates()・readOxygenSaturationAggregates()と同じ広げ幅・クランプ判定ロジックを
+    // 複製している。**このロジックを変更する場合は、必ず他の3関数側の同じロジックにも同じ修正を
+    // 入れること**。要点はreadBodyFatAggregates()側のコメント参照。
+    suspend fun readBloodGlucoseAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): BloodGlucoseAggregatesResult {
+        val zone = ZoneId.systemDefault()
+        val maxZoneOffsetSpread = Duration.ofHours(26)
+
+        suspend fun readAllRecords(localFilter: TimeRangeFilter): List<BloodGlucoseRecord> {
+            val recentFloor = Instant.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS)
+            val unwidenedStart = localFilter.localStartTime?.atZone(zone)?.toInstant()
+            val start =
+                unwidenedStart?.let { s ->
+                    val widened = s.minus(maxZoneOffsetSpread)
+                    if (!s.isBefore(recentFloor)) maxOf(widened, recentFloor) else widened
+                }
+            val end = (localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()).plus(maxZoneOffsetSpread)
+            val instantFilter = if (start != null) TimeRangeFilter.between(start, end) else TimeRangeFilter.before(end)
+
+            val records = mutableListOf<BloodGlucoseRecord>()
+            var pageToken: String? = null
+            do {
+                val response =
+                    client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = BloodGlucoseRecord::class,
+                            timeRangeFilter = instantFilter,
+                            pageToken = pageToken,
+                        ),
+                    )
+                records += response.records
+                pageToken = response.pageToken?.ifEmpty { null }
+            } while (pageToken != null)
+            return records
+        }
+
+        suspend fun toBuckets(localFilter: TimeRangeFilter): List<BloodGlucoseAggregateBucket> {
+            val records = readAllRecords(localFilter)
+            if (records.isEmpty()) return emptyList()
+
+            val rangeStart =
+                localFilter.localStartTime ?: run {
+                    val earliestDate = records.minOf { it.time }.atZone(zone).toLocalDate()
+                    if (bucket.months != 0 || bucket.years != 0) earliestDate.withDayOfMonth(1).atStartOfDay() else earliestDate.atStartOfDay()
+                }
+            val rangeEnd = localFilter.localEndTime ?: LocalDateTime.now()
+
+            val bucketStarts = mutableListOf<LocalDateTime>()
+            var current = rangeStart
+            while (current.isBefore(rangeEnd)) {
+                bucketStarts += current
+                current = current.plus(bucket)
+            }
+            if (bucketStarts.isEmpty()) return emptyList()
+
+            val valuesByBucket = Array(bucketStarts.size) { mutableListOf<Double>() }
+            for (record in records) {
+                val localDateTime = record.time.atZone(record.zoneOffset ?: zone).toLocalDateTime()
+                if (localDateTime.isBefore(rangeStart) || !localDateTime.isBefore(rangeEnd)) continue
+                val bucketIndex = bucketStarts.indexOfLast { !it.isAfter(localDateTime) }
+                if (bucketIndex >= 0) {
+                    valuesByBucket[bucketIndex] += record.level.inMilligramsPerDeciliter
+                }
+            }
+
+            return bucketStarts.mapIndexed { index, start ->
+                val values = valuesByBucket[index]
+                BloodGlucoseAggregateBucket(
+                    periodStart = start,
+                    average = values.takeIf { it.isNotEmpty() }?.average(),
+                    min = values.minOrNull(),
+                    max = values.maxOrNull(),
+                )
+            }
+        }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                BloodGlucoseAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> BloodGlucoseAggregatesResult.Failure
         }
     }
 

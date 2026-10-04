@@ -63,6 +63,9 @@
     <string name="home_oxygen_saturation_title">血中酸素飽和度（SpO2）</string>
     <string name="home_oxygen_saturation_value">%1$s%%</string>
     <string name="home_oxygen_saturation_delta">前回比: %1$s%%</string>
+    <string name="home_blood_glucose_title">血糖値</string>
+    <string name="home_blood_glucose_value">%1$d mg/dL</string>
+    <string name="home_blood_glucose_delta">前回比: %1$s mg/dL</string>
     <string name="home_all_metrics_hidden_notice">「データがない項目も表示する」の設定により、非表示にしています。</string>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
@@ -145,6 +148,8 @@
     <string name="detail_hrv_aggregation_avg">集計方法: %1$s平均・最小・最大ms（Health Connect公式Aggregate APIが無いため、生データから自前で集計）</string>
     <string name="detail_oxygen_saturation_title">血中酸素飽和度（SpO2）</string>
     <string name="detail_oxygen_saturation_aggregation_avg">集計方法: %1$s平均・最小・最大（Health Connect公式Aggregate APIが無いため、生データから自前で集計）</string>
+    <string name="detail_blood_glucose_title">血糖値</string>
+    <string name="detail_blood_glucose_aggregation_avg">集計方法: %1$s平均・最小・最大mg/dL（Health Connect公式Aggregate APIが無いため、生データから自前で集計）</string>
     <!-- WBS 6.3（WBS 6.10でDistance・Active Calories・Total Calories・Blood Pressure・Body Fatを追加）: Recordsタブ（ページング生レコード一覧）。各データ型で共通。 -->
     <string name="detail_tab_chart">グラフ</string>
     <string name="detail_tab_records">レコード</string>

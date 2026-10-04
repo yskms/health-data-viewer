@@ -32,3 +32,7 @@ val HrvAccent = Color(0xFF8E24AA)
 // SleepAccent（青緑）・TotalCaloriesAccent（緑青）のどちらとも離れた0xFF00ACC1（Cyan 600。
 // Cyan 700は0xFF0097A7、コードレビューで誤記を指摘された）に変更した。
 val OxygenSaturationAccent = Color(0xFF00ACC1)
+// WBS 6.10（Blood Glucose追加）: 既存のHeartRateAccent（赤）・RestingHeartRateAccent（ピンク）・
+// Distance/BodyFatAccent（オレンジ〜黄土）・ActiveCaloriesAccent（オレンジ）のいずれとも異なる
+// オリーブ系（黄緑寄り）にし、既存アクセントカラーとの見分けやすさを確保した。
+val BloodGlucoseAccent = Color(0xFF827717)
