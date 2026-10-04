@@ -34,6 +34,7 @@ import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.compose.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.compose.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.compose.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.compose.cartesian.data.lineModel
 import com.patrykandpatrick.vico.compose.cartesian.layer.rememberLineCartesianLayer
@@ -41,6 +42,7 @@ import com.patrykandpatrick.vico.compose.cartesian.marker.rememberDefaultCartesi
 import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.compose.common.ProvideVicoTheme
 import com.patrykandpatrick.vico.compose.common.component.rememberTextComponent
+import com.patrykandpatrick.vico.compose.common.data.ExtraStore
 import com.patrykandpatrick.vico.compose.m3.common.rememberM3VicoTheme
 import com.yskms.healthdataviewer.R
 import com.yskms.healthdataviewer.healthconnect.DataOriginNameResolver
@@ -58,6 +60,19 @@ import java.time.format.FormatStyle
 // OxygenSaturationRecordもBodyFatRecordと同じ単一時刻のレコード、公式AggregateMetricが無く
 // 自前集計、MetricDensity.LOWという構造が共通）。
 private val OXYGEN_SATURATION_DENSITY = MetricDensity.LOW
+
+// コードレビュー指摘: `rememberLineCartesianLayer()`のrangeProviderを省略すると既定値
+// `CartesianLayerRangeProvider.Companion.auto()`が使われるが、このAuto実装はY軸の最小値を、
+// データが全て非負のとき常に0にする（Vico 3.3.1の`compose.aar`をjavap逆コンパイルして確認、
+// lessons.md 7.8）。SpO2の値は90〜100%付近に集まるため、0〜100スケールのままだと平均・最小・最大の
+// 3系列がグラフ上端付近にほぼ重なって見える問題が起きる。データの実際の最小値・最大値を基準に前後
+// 1ポイントだけ余白を取り、Percentageの値域（0〜100、CLAUDE.md参照）にクランプする自前実装にする。
+private val OXYGEN_SATURATION_RANGE_PROVIDER =
+    object : CartesianLayerRangeProvider {
+        override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double = (minY - 1.0).coerceAtLeast(0.0)
+
+        override fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double = (maxY + 1.0).coerceAtMost(100.0)
+    }
 
 // BodyFatDetailScreenと同じ値（WBS 6.3）。
 private const val OXYGEN_SATURATION_RECORDS_PAGE_SIZE = 50
@@ -324,7 +339,7 @@ private fun OxygenSaturationAggregateChart(
         CartesianChartHost(
             chart =
                 rememberCartesianChart(
-                    rememberLineCartesianLayer(),
+                    rememberLineCartesianLayer(rangeProvider = OXYGEN_SATURATION_RANGE_PROVIDER),
                     startAxis = VerticalAxis.rememberStart(),
                     bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = bottomAxisValueFormatter),
                     marker = rememberDefaultCartesianMarker(label = rememberTextComponent()),

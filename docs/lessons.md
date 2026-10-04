@@ -479,6 +479,13 @@
 -   **根拠**: 公式（Jetpack Composeの一般的なレイアウト制約・Activity再生成の仕組み。いずれもHealth Connect固有ではない）／実機確認（Pixel 11、実データ。Weight/Steps/HeartRate/Sleepの4データ型×横画面で、通常表示・Customピッカー表示（実際に日付を選択してグラフを読み込ませた状態）・HeartRateの計測数テキスト付き表示のいずれでもグラフが十分な高さで表示されレイアウト崩れがないこと、期間タブ切替・システムの戻る操作・Records/Sourcesタブでの非全画面維持を確認、2026-10-01）
 -   **確認日**: 2026-10-01
 
+### 7.8 `rememberLineCartesianLayer()`の既定`rangeProvider`（`CartesianLayerRangeProvider.Companion.auto()`）は、データがすべて非負のときY軸の最小値を常に0にする。値が0から離れた狭い範囲に集まるデータ型では、線が上端近くに潰れて見える
+
+-   **知見**: SpO2（WBS 6.10、D-049）のChartレビューで、「値が90〜100%に集まるデータでは、Vicoの既定スケールだと3系列（平均・最小・最大）がグラフ上端付近でほぼ重なって見えるのでは」という指摘を受けた。`OxygenSaturationAggregateChart()`は他のデータ型（Weight/BodyFat/HRV/BloodPressure）と同じく`rememberLineCartesianLayer()`を`rangeProvider`省略で呼んでおり、公式配布されたVico 3.3.1のAARを`javap -p -c`で逆コンパイルして確認したところ、省略時の既定値は`CartesianLayerRangeProvider.Companion.auto()`（`LineCartesianLayerKt.rememberLineCartesianLayer-EUb7tLY()`のバイトコードで確認）で、この`Auto`実装の`getMinY(minY, maxY, extraStore)`は、`minY >= 0`の場合に実際のデータの最小値を無視して常に`0.0`を返す（`minY < 0`の場合のみ実際の値を使って丸める）ことをバイトコードレベルで確認した。`getMaxY()`も同様に、データの最大値を「きりのよい数」に切り上げる。これは特定の端末のデータに依存しない、ライブラリの一般的な仕様としての確認（実機データの実機確認ではなく、配布されたライブラリ本体の逆コンパイル確認）
+-   **Viewerへの適用**: `OxygenSaturationAggregateChart()`に、データの実際の最小値・最大値を基準に前後1ポイントだけ余白を取り、0〜100の範囲にクランプする自前の`CartesianLayerRangeProvider`実装（`OXYGEN_SATURATION_RANGE_PROVIDER`）を追加し、`rememberLineCartesianLayer(rangeProvider = ...)`に渡した。`CartesianLayerRangeProvider.Companion.getIntrinsic()`（データの実際の最小値・最大値をそのまま使う、パディング無し）という選択肢も確認したが、系列が上下端にぴったり接してしまうため採用せず、既存の`.auto()`と同じ「`object : CartesianLayerRangeProvider`で`getMinY`/`getMaxY`だけ上書きする」形を取った。Weight/BodyFat/HRV/BloodPressureは値の分布が0から離れすぎていない（または負の値も取りうる）ため、この問題の影響は小さいと判断し、今回は変更していない。今後、値が0から離れた狭い範囲に集まるデータ型（例: Blood GlucoseのmmolL表記等）を追加する際は、同じ確認・同じ対応が必要になる可能性がある
+-   **根拠**: 公式配布ライブラリの逆コンパイル確認（Gradleキャッシュ内の`com.patrykandpatrick.vico:compose-android:3.3.1`の`compose.aar`を展開し、`CartesianLayerRangeProvider$Companion$Auto.class`・`CartesianLayerRangeProvider$Companion$Intrinsic$1.class`・`LineCartesianLayerKt.class`を`javap -p -c`。2026-10-04、コードレビュー指摘を受けて確認）。実機での見た目の確認はしていない（この端末にSpO2の実データが無いため、lessons.md 6.30参照）
+-   **確認日**: 2026-10-04
+
 ------------------------------------------------------------------------
 
 ## 8. テスト観点チェックリスト

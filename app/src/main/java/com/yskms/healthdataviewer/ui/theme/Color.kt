@@ -26,7 +26,9 @@ val BodyFatAccent = Color(0xFF7B5800)
 // コードレビュー指摘: 当初0xFF1565C0（青）はBloodPressureAccent（インディゴ）・SleepAccent
 // （青緑）と同系統で見分けにくいという指摘を受け、既存のどの色とも異なる紫系に変更した。
 val HrvAccent = Color(0xFF8E24AA)
-// WBS 6.10（SpO2追加）: 既存のBloodPressureAccent（インディゴ）・SleepAccent（青緑）とは異なる
-// 明るい水色系にし、血中酸素飽和度の一般的な配色（パルスオキシメーター表示の水色）に寄せつつ、
-// 既存アクセントカラーとの見分けやすさも確保した。
-val OxygenSaturationAccent = Color(0xFF0277BD)
+// WBS 6.10（SpO2追加）: 当初0xFF0277BD（Light Blue 800）にしたが、コードレビューで、HRVの
+// コメント（上記）が「同系統で見分けにくい」として却下した0xFF1565C0とほぼ同じ色相・明度（RGB差が
+// 20前後）であり、却下理由がそのまま当てはまるという指摘を受けた。はっきりシアン寄りで、
+// SleepAccent（青緑）・TotalCaloriesAccent（緑青）のどちらとも離れた0xFF00ACC1（Cyan 700）に
+// 変更した。
+val OxygenSaturationAccent = Color(0xFF00ACC1)

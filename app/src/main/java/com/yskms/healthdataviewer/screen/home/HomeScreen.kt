@@ -401,8 +401,9 @@ fun HomeScreen(
                     hrvLoad = healthConnectManager.readHrvHomeSummary(historyPermissionGranted = historyPermissionGranted)
                 }
 
-                // Oxygen Saturation（SpO2）カード（WBS 6.10）: まずWeight/BodyFatと同じ「最新値＋前回比」
-                // パターンで実装する（HealthConnectManager.readOxygenSaturationAggregates()のコメント参照）。
+                // Oxygen Saturation（SpO2）カード（WBS 6.10）: Weight/BodyFatと同じ「最新値＋前回比」
+                // パターン。採用経緯はHealthConnectManager.oxygenSaturationRecordsPagingSource()直前の
+                // コメント参照（実機でSpO2の記録頻度を確認できなかったため低頻度想定で暫定確定、D-049）。
                 var oxygenSaturationLoad by remember { mutableStateOf<OxygenSaturationRecordsResult?>(null) }
                 LaunchedEffect(oxygenSaturationGranted, historyPermissionGranted, resumeKey) {
                     if (oxygenSaturationGranted != true) return@LaunchedEffect

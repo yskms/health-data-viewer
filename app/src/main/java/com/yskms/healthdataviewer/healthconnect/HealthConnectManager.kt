@@ -1073,10 +1073,12 @@ class HealthConnectManager(context: Context) {
     // 公式の重複処理もない。requirements.md §22.2）のため、Records/Sources用の2関数はWeight用の関数を
     // そのまま踏襲する（Body Fat/HRVと同じ判断）。
     //
-    // ホームカードはfindLatestOxygenSaturationRecords()による「最新値＋前回比」から始める。HRVが当初
-    // この方式を採用し、実際の記録頻度（1日平均約57件のバースト）が前提と食い違ったため見直しが必要に
-    // なった経緯（D-047→D-048）を踏まえ、このアプリのPixel 11実機でSpO2の実際の記録頻度を確認した上で
-    // 方式を決定する（判断の記録はdocs/wbs.md決定ログ参照）。
+    // ホームカードはfindLatestOxygenSaturationRecords()による「最新値＋前回比」。HRVが当初この方式を
+    // 採用し、実際の記録頻度（1日平均約57件のバースト）が前提と食い違ったため見直しが必要になった経緯
+    // （D-047→D-048）を踏まえ、実装前にPixel 11実機でSpO2の実際の記録頻度を確認してから方式を決める
+    // 方針を立てたが、この端末にはSpO2のレコードが1件も無く確認できなかった。低頻度想定（パルス
+    // オキシメーターでの散発測定）に基づきこの方式のまま暫定確定し、記録頻度は未確認のまま要検証として
+    // 残した（D-049、requirements.md §27）。
     fun oxygenSaturationRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<OxygenSaturationRecord>> {
         val now = Instant.now()
         val filter =
