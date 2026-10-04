@@ -29,6 +29,6 @@ val HrvAccent = Color(0xFF8E24AA)
 // WBS 6.10（SpO2追加）: 当初0xFF0277BD（Light Blue 800）にしたが、コードレビューで、HRVの
 // コメント（上記）が「同系統で見分けにくい」として却下した0xFF1565C0とほぼ同じ色相・明度（RGB差が
 // 20前後）であり、却下理由がそのまま当てはまるという指摘を受けた。はっきりシアン寄りで、
-// SleepAccent（青緑）・TotalCaloriesAccent（緑青）のどちらとも離れた0xFF00ACC1（Cyan 700）に
-// 変更した。
+// SleepAccent（青緑）・TotalCaloriesAccent（緑青）のどちらとも離れた0xFF00ACC1（Cyan 600。
+// Cyan 700は0xFF0097A7、コードレビューで誤記を指摘された）に変更した。
 val OxygenSaturationAccent = Color(0xFF00ACC1)

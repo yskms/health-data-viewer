@@ -50,6 +50,8 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import com.yskms.healthdataviewer.healthconnect.OxygenSaturationAggregateBucket
 import com.yskms.healthdataviewer.healthconnect.OxygenSaturationAggregatesResult
+import kotlin.math.ceil
+import kotlin.math.floor
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -67,11 +69,16 @@ private val OXYGEN_SATURATION_DENSITY = MetricDensity.LOW
 // lessons.md 7.8）。SpO2の値は90〜100%付近に集まるため、0〜100スケールのままだと平均・最小・最大の
 // 3系列がグラフ上端付近にほぼ重なって見える問題が起きる。データの実際の最小値・最大値を基準に前後
 // 1ポイントだけ余白を取り、Percentageの値域（0〜100、CLAUDE.md参照）にクランプする自前実装にする。
+// コードレビュー指摘（2回目）: 余白を加えるだけだと平均値の小数（例: 96.37）がそのままY軸下限になり、
+// `VerticalAxis.rememberStart()`の既定の目盛り配置で半端な目盛り（95.37、96.6…）になりかねない。
+// floor/ceilで整数に丸めてから返す。
 private val OXYGEN_SATURATION_RANGE_PROVIDER =
     object : CartesianLayerRangeProvider {
-        override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double = (minY - 1.0).coerceAtLeast(0.0)
+        override fun getMinY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
+            floor(minY - 1.0).coerceAtLeast(0.0)
 
-        override fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double = (maxY + 1.0).coerceAtMost(100.0)
+        override fun getMaxY(minY: Double, maxY: Double, extraStore: ExtraStore): Double =
+            ceil(maxY + 1.0).coerceAtMost(100.0)
     }
 
 // BodyFatDetailScreenと同じ値（WBS 6.3）。
