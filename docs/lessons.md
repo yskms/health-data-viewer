@@ -417,6 +417,13 @@
 -   **根拠**: Pixel 11実機（実データ、Androidバージョン17、2026-10-04）。権限許可（システムの権限ダイアログで「バイタル」カテゴリ内「心拍変動」として表示されることも確認）、ホームカード、Chart（6期間すべて）、Records（ページング）、Sources（全件走査）の一連の操作をadb経由のUI操作（`uiautomator dump`で座標取得、`input tap`）で実行し、logcatでクラッシュ・例外が一切発生していないことも確認した。性能数値は`countBySource()`/`readAllRecords()`に仕込んだ一時的な`Log.d`（`SystemClock.elapsedRealtime()`で計測、確認後に削除済み）をUI操作ポーリングなしで採取した値
 -   **確認日**: 2026-10-04
 
+### 6.30 `OxygenSaturationRecord`にも公式の`AggregateMetric`が存在しない。同じ検索で`BloodGlucoseRecord`も存在しないことを確認できた。Health Connect本体の「データとアクセス」画面は、実際に1件でもレコードが存在するデータ型しか一覧に表示しない
+
+-   **知見**: WBS 6.10でOxygen Saturation（SpO2）を実装するにあたり、`WeightRecord.WEIGHT_AVG/MIN/MAX`に相当するAggregateMetricが`OxygenSaturationRecord`にあるかを、Body Fat（lessons.md 6.27）・HRV（lessons.md 6.28）と同じ手順（`connect-client-1.1.0-api.jar`の全クラスを`javap -p`で逆コンパイルし、`AggregateMetric<Percentage>`のシグネチャで横断検索）で確認したところ、該当クラスは0件だった（`OxygenSaturationRecord$Companion`自体が存在しないことも確認済み）。**この検索は全クラス横断のため、ついでに`AggregateMetric<BloodGlucose>`のシグネチャでも検索し、`BloodGlucoseRecord`にも公式AggregateMetricが存在しないことを同時に確認できた**（requirements.md §22.2の「Blood Glucose / SpO2」が「要確認」としていた内容のうち、AggregateMetricの有無についてはどちらも確定した。Blood Glucose自体の実装・記録頻度の確認はまだ行っていない）。別件として、Oxygen Saturationの実データ有無をPixel 11実機で確認する過程で、Health Connect本体アプリ（`データとアクセス`画面）の「バイタル」カテゴリに、権限を許可済み・実装済みのデータ型でも**実際にレコードが1件も存在しない型（Oxygen Saturation、Blood Pressureも同様）は一覧に表示されない**ことに気づいた（距離・総消費カロリー等、実データがある型は表示される）。Health Connect自体の仕様として確認できたわけではなく（公式ドキュメントでの裏付けなし、1台の実機での観察のみ）、このアプリが独自に判定しているわけでもない（Health Connect本体アプリ側のUI仕様）
+-   **Viewerへの適用**: `HealthConnectManager.readOxygenSaturationAggregates()`は`readBodyFatAggregates()`のロジック（タイムゾーンオフセットの広げ幅・境界クランプを含む）をそのまま複製し、`record.percentage.value`を使うだけで実装した（D-049(2)）。Blood Glucose実装時は、AggregateMetricの有無チェック自体は本件で確定済みのため省略でき、記録頻度確認から始められる。「データとアクセス」画面に型が出ないことをもって「このアプリの実装・権限が間違っている」と誤診断しないこと（本タスクでは権限ダイアログ自体は正しく「バイタル」カテゴリ内「酸素飽和度」と表示されており、問題はこのアプリ側ではなくHealth Connect内のデータの有無だった）
+-   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の全クラスを`javap -p -c`で出力し、`AggregateMetric<Percentage>`・`AggregateMetric<BloodGlucose>`のシグネチャで`grep`検索。2026-10-04）。「データとアクセス」画面の挙動はPixel 11実機1台のみでの観察（ユーザーがHealthアプリ側のHealth Connect同期設定を確認・変更した前後で比較し、同じタイミングで「呼吸数」は新規に表示されるようになった一方、「血中酸素飽和度」は表示されないままだったことを確認）
+-   **確認日**: 2026-10-04
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる

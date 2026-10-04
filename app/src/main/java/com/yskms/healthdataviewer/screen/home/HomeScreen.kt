@@ -52,6 +52,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.HrvDailySummary
 import com.yskms.healthdataviewer.healthconnect.HrvHomeSummaryResult
+import com.yskms.healthdataviewer.healthconnect.OxygenSaturationRecordsResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.RestingHeartRateRecordsResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
@@ -68,6 +69,7 @@ import com.yskms.healthdataviewer.ui.theme.BodyFatAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.HrvAccent
+import com.yskms.healthdataviewer.ui.theme.OxygenSaturationAccent
 import com.yskms.healthdataviewer.ui.theme.RestingHeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
@@ -188,6 +190,7 @@ fun HomeScreen(
     onOpenBloodPressure: (historyPermissionGranted: Boolean) -> Unit,
     onOpenBodyFatGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenHrvGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenOxygenSaturationGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -268,6 +271,7 @@ fun HomeScreen(
                 val bloodPressureGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                 val bodyFatGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BODY_FAT_READ)
                 val hrvGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HRV_READ)
+                val oxygenSaturationGranted = permissionsCheckState.isGranted(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -282,6 +286,7 @@ fun HomeScreen(
                         bloodPressureGranted,
                         bodyFatGranted,
                         hrvGranted,
+                        oxygenSaturationGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -299,6 +304,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                                     add(HealthConnectPermissions.BODY_FAT_READ)
                                     add(HealthConnectPermissions.HRV_READ)
+                                    add(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -393,6 +399,15 @@ fun HomeScreen(
                 LaunchedEffect(hrvGranted, historyPermissionGranted, resumeKey) {
                     if (hrvGranted != true) return@LaunchedEffect
                     hrvLoad = healthConnectManager.readHrvHomeSummary(historyPermissionGranted = historyPermissionGranted)
+                }
+
+                // Oxygen Saturation（SpO2）カード（WBS 6.10）: まずWeight/BodyFatと同じ「最新値＋前回比」
+                // パターンで実装する（HealthConnectManager.readOxygenSaturationAggregates()のコメント参照）。
+                var oxygenSaturationLoad by remember { mutableStateOf<OxygenSaturationRecordsResult?>(null) }
+                LaunchedEffect(oxygenSaturationGranted, historyPermissionGranted, resumeKey) {
+                    if (oxygenSaturationGranted != true) return@LaunchedEffect
+                    oxygenSaturationLoad =
+                        healthConnectManager.findLatestOxygenSaturationRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -508,7 +523,13 @@ fun HomeScreen(
                         isTotalCaloriesCardHidden(totalCaloriesGranted, totalCaloriesResult, showMetricsWithoutData) &&
                         isBloodPressureCardHidden(bloodPressureGranted, bloodPressureLoad, historyFeatureAvailable, showMetricsWithoutData) &&
                         isBodyFatCardHidden(bodyFatGranted, bodyFatLoad, historyFeatureAvailable, showMetricsWithoutData) &&
-                        isHrvCardHidden(hrvGranted, hrvLoad, historyFeatureAvailable, showMetricsWithoutData)
+                        isHrvCardHidden(hrvGranted, hrvLoad, historyFeatureAvailable, showMetricsWithoutData) &&
+                        isOxygenSaturationCardHidden(
+                            oxygenSaturationGranted,
+                            oxygenSaturationLoad,
+                            historyFeatureAvailable,
+                            showMetricsWithoutData,
+                        )
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -595,6 +616,14 @@ fun HomeScreen(
                     historyFeatureAvailable = historyFeatureAvailable,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenHrvGraph(historyPermissionGranted) },
+                )
+                OxygenSaturationCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = oxygenSaturationGranted,
+                    load = oxygenSaturationLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenOxygenSaturationGraph(historyPermissionGranted) },
                 )
             }
         }
@@ -729,6 +758,19 @@ private fun isHrvCardHidden(
         granted == true &&
         load is HrvHomeSummaryResult.Success &&
         load.latestDay == null &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+// isBodyFatCardHidden()と同じ理由・同じ形（SpO2もWeight/BodyFatと同じ「最新値＋前回比」パターンのため）。
+private fun isOxygenSaturationCardHidden(
+    granted: Boolean?,
+    load: OxygenSaturationRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is OxygenSaturationRecordsResult.Success &&
+        load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
 private fun isStepsCardHidden(granted: Boolean?, currentResult: StepsAggregateTotalResult?, showMetricsWithoutData: Boolean): Boolean =
@@ -1171,6 +1213,55 @@ private fun BodyFatCard(
                 }
                 // WeightCardのhistoryLimited通知と同じ理由（期間タブに依存しないカードのため、
                 // DashboardPeriod.isHistoryLimited()では検知できない）。
+                if (load.historyLimited && historyFeatureAvailable != false) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+// BodyFatCard()と同じ形（SpO2もOxygenSaturationRecordと同じ単一時刻・単一値の構造のため）。
+@Composable
+private fun OxygenSaturationCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    load: OxygenSaturationRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isOxygenSaturationCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_oxygen_saturation_title),
+        accentColor = OxygenSaturationAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            load == null -> Text(text = stringResource(id = R.string.home_loading))
+            load is OxygenSaturationRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is OxygenSaturationRecordsResult.Success -> {
+                val records = load.records
+                val latest = records.firstOrNull()
+                if (latest == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_oxygen_saturation_value, String.format(locale, "%.2f", latest.percentage.value)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
+                    val previous = records.getOrNull(1)
+                    if (previous != null) {
+                        val diffPercent = latest.percentage.value - previous.percentage.value
+                        Text(
+                            text = stringResource(id = R.string.home_oxygen_saturation_delta, formatSignedPercent(diffPercent, locale)),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
                 if (load.historyLimited && historyFeatureAvailable != false) {
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }

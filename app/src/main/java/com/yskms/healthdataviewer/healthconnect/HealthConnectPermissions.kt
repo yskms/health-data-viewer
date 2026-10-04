@@ -7,6 +7,7 @@ import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -47,5 +48,8 @@ object HealthConnectPermissions {
     // HeartRateVariabilityRmssdRecord（RMSSD）1つのみ（javap逆コンパイルで確認。他のHRV指標、
     // 例えばSDNNに相当するRecord型は存在しない）。
     val HRV_READ: String = HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class)
+    // WBS 6.10（SpO2追加）: OxygenSaturationRecordもHeartRateVariabilityRmssdRecordと同じく
+    // javap逆コンパイルで公式AggregateMetricの不在を確認済み（CLAUDE.md参照）。
+    val OXYGEN_SATURATION_READ: String = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

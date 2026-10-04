@@ -14,6 +14,7 @@ import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -1064,6 +1065,196 @@ class HealthConnectManager(context: Context) {
                 )
             }
             HrvAggregatesResult.Failure -> HrvHomeSummaryResult.Failure
+        }
+    }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: Oxygen Saturation（SpO2）を追加。OxygenSaturationRecordも
+    // Weight/RestingHeartRate/BloodPressure/BodyFat/HRVと同じ単一時刻のレコード（InstantaneousRecord、
+    // 公式の重複処理もない。requirements.md §22.2）のため、Records/Sources用の2関数はWeight用の関数を
+    // そのまま踏襲する（Body Fat/HRVと同じ判断）。
+    //
+    // ホームカードはfindLatestOxygenSaturationRecords()による「最新値＋前回比」から始める。HRVが当初
+    // この方式を採用し、実際の記録頻度（1日平均約57件のバースト）が前提と食い違ったため見直しが必要に
+    // なった経緯（D-047→D-048）を踏まえ、このアプリのPixel 11実機でSpO2の実際の記録頻度を確認した上で
+    // 方式を決定する（判断の記録はdocs/wbs.md決定ログ参照）。
+    fun oxygenSaturationRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<OxygenSaturationRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = OxygenSaturationRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestBodyFatRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestOxygenSaturationRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = OxygenSaturationRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.time
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // ホーム画面のOxygen Saturationカード用。findLatestBodyFatRecords()と同じ形・同じ理由。
+    suspend fun findLatestOxygenSaturationRecords(limit: Int, historyPermissionGranted: Boolean): OxygenSaturationRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<OxygenSaturationRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = OxygenSaturationRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                OxygenSaturationRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OxygenSaturationRecordsResult.Failure
+        }
+    }
+
+    // OxygenSaturationRecordには公式のAggregateMetricが存在しない（javap逆コンパイルで確認。
+    // CLAUDE.md参照）。readBodyFatAggregates()と全く同じロジックをOxygenSaturationRecord・
+    // percentageに差し替えただけ（readHrvAggregates()も同様に複製されている）。
+    //
+    // コードレビュー指摘（Body Fat/HRV実装時）: この関数はreadBodyFatAggregates()・readHrvAggregates()
+    // と同じ広げ幅・クランプ判定ロジックを複製している。**このロジックを変更する場合は、必ず他の2関数
+    // 側の同じロジックにも同じ修正を入れること**（Blood Glucoseで複製が増えた場合も同様）。要点は
+    // readBodyFatAggregates()側のコメント参照。
+    suspend fun readOxygenSaturationAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): OxygenSaturationAggregatesResult {
+        val zone = ZoneId.systemDefault()
+        val maxZoneOffsetSpread = Duration.ofHours(26)
+
+        suspend fun readAllRecords(localFilter: TimeRangeFilter): List<OxygenSaturationRecord> {
+            val recentFloor = Instant.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS)
+            val unwidenedStart = localFilter.localStartTime?.atZone(zone)?.toInstant()
+            val start =
+                unwidenedStart?.let { s ->
+                    val widened = s.minus(maxZoneOffsetSpread)
+                    if (!s.isBefore(recentFloor)) maxOf(widened, recentFloor) else widened
+                }
+            val end = (localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()).plus(maxZoneOffsetSpread)
+            val instantFilter = if (start != null) TimeRangeFilter.between(start, end) else TimeRangeFilter.before(end)
+
+            val records = mutableListOf<OxygenSaturationRecord>()
+            var pageToken: String? = null
+            do {
+                val response =
+                    client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = OxygenSaturationRecord::class,
+                            timeRangeFilter = instantFilter,
+                            pageToken = pageToken,
+                        ),
+                    )
+                records += response.records
+                pageToken = response.pageToken?.ifEmpty { null }
+            } while (pageToken != null)
+            return records
+        }
+
+        suspend fun toBuckets(localFilter: TimeRangeFilter): List<OxygenSaturationAggregateBucket> {
+            val records = readAllRecords(localFilter)
+            if (records.isEmpty()) return emptyList()
+
+            val rangeStart =
+                localFilter.localStartTime ?: run {
+                    val earliestDate = records.minOf { it.time }.atZone(zone).toLocalDate()
+                    if (bucket.months != 0 || bucket.years != 0) earliestDate.withDayOfMonth(1).atStartOfDay() else earliestDate.atStartOfDay()
+                }
+            val rangeEnd = localFilter.localEndTime ?: LocalDateTime.now()
+
+            val bucketStarts = mutableListOf<LocalDateTime>()
+            var current = rangeStart
+            while (current.isBefore(rangeEnd)) {
+                bucketStarts += current
+                current = current.plus(bucket)
+            }
+            if (bucketStarts.isEmpty()) return emptyList()
+
+            val valuesByBucket = Array(bucketStarts.size) { mutableListOf<Double>() }
+            for (record in records) {
+                val localDateTime = record.time.atZone(record.zoneOffset ?: zone).toLocalDateTime()
+                if (localDateTime.isBefore(rangeStart) || !localDateTime.isBefore(rangeEnd)) continue
+                val bucketIndex = bucketStarts.indexOfLast { !it.isAfter(localDateTime) }
+                if (bucketIndex >= 0) {
+                    valuesByBucket[bucketIndex] += record.percentage.value
+                }
+            }
+
+            return bucketStarts.mapIndexed { index, start ->
+                val values = valuesByBucket[index]
+                OxygenSaturationAggregateBucket(
+                    periodStart = start,
+                    average = values.takeIf { it.isNotEmpty() }?.average(),
+                    min = values.minOrNull(),
+                    max = values.maxOrNull(),
+                )
+            }
+        }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                OxygenSaturationAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OxygenSaturationAggregatesResult.Failure
         }
     }
 
