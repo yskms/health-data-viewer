@@ -856,9 +856,11 @@ class HealthConnectManager(context: Context) {
     }
 
     // WBS 6.10: ホーム画面のHRVカード（「最新値＋前回比」、期間タブに依存しない）用。
-    // findLatestBodyFatRecords()と同じ形・同じ理由。HRV（RMSSD）は多くのウェアラブルで睡眠中にまとめて
-    // 1日1回算出される指標という想定だが、このアプリの実データでは未確認のまま採用する
-    // （D-044(2)/D-045(2)/D-046(2)と同じ基準、D-047(3)）。
+    // findLatestBodyFatRecords()と同じ形・同じ理由で実装したが、採用時の前提（D-047(3)「HRVは
+    // 多くのウェアラブルで1日1回算出される」）はPixel 11実機で誤りと確定した。実際は1日平均
+    // 約57件、5〜10分間隔のバースト的な記録で、「前回比」が隣接する2サンプルの差という意味の
+    // 薄い値になることを確認済み（lessons.md 6.29、requirements.md §27）。カード設計の見直しは
+    // 別タスクで検討する。
     suspend fun findLatestHrvRecords(limit: Int, historyPermissionGranted: Boolean): HrvRecordsResult {
         suspend fun readLatest(filter: TimeRangeFilter): List<HeartRateVariabilityRmssdRecord> =
             client
