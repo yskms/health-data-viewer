@@ -403,6 +403,13 @@
 -   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の`records/BodyFatRecord.class`・`records/BodyFatRecord$Companion.class`・`units/Percentage.class`を`javap -p -c`、jar全体を`grep -a`でバイナリ内の文字列・シグネチャを直接検索。2026-10-02）
 -   **確認日**: 2026-10-02
 
+### 6.28 `HeartRateVariabilityRmssdRecord`にも公式の`AggregateMetric`が存在しない。値は単位型でラップされていない生の`double`
+
+-   **知見**: WBS 6.10でHRVを実装するにあたり、Health Connectが公開するHRV関連のRecord型を確認したところ、`HeartRateVariabilityRmssdRecord`（RMSSD）1つのみだった（`connect-client-1.1.0-api.jar`を`SDNN`等の他のHRV指標名で検索しても該当クラスは無い）。このRecord・Companionを`javap -p`で逆コンパイルしたところ、`BodyFatRecord`と同じく`AggregateMetric`型のstatic fieldは一切無く、公式Aggregate Metricが存在しないことを確認した（requirements.md §22.2が「Blood Glucose / SpO2 / HRV」の行で「要確認」としていた内容がHRVについて確定した）。唯一の値フィールド`heartRateVariabilityMillis`は、`Mass`/`Percentage`/`Energy`/`Pressure`のような単位型のラッパークラスではなく、javapの出力そのままの単純な`double`（Kotlinプロパティ名もgetterと同じ`heartRateVariabilityMillis`で、`@JvmName`差し替えの余地すらない）。これまで確認してきた単位型（`inKilograms`等の`@JvmName`差し替えがある型、`@JvmName`差し替えが無い`Percentage.value`）とは異なる3つ目のパターンとして、「そもそも単位型でラップされていない生のプリミティブ型」もあり得るとわかった
+-   **Viewerへの適用**: Chart用集計（`HealthConnectManager.readHrvAggregates()`）は`readBodyFatAggregates()`と全く同じロジック（タイムゾーンオフセットの広げ幅・境界クランプを含む）を再利用し、`record.percentage.value`を`record.heartRateVariabilityMillis`に差し替えるだけで実装できた。単位型ではないため、`BodyFatRecordRow`の`record.percentage.value`のような単位変換（プロパティアクセス）は不要で、`record.heartRateVariabilityMillis`をそのまま使う。CLAUDE.md「SDK調査で誤解しやすい点」に、単位型だと決めつけずに生のプリミティブ型のケースもあることを追記した
+-   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の`records/HeartRateVariabilityRmssdRecord.class`・`records/HeartRateVariabilityRmssdRecord$Companion.class`を`javap -p -c`、jar全体を`grep -a`でバイナリ内の文字列・シグネチャを直接検索。2026-10-04）
+-   **確認日**: 2026-10-04
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる
