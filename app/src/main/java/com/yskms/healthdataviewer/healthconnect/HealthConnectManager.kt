@@ -856,12 +856,13 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // WBS 6.10: ホーム画面のHRVカード（「最新値＋前回比」、期間タブに依存しない）用。
-    // findLatestBodyFatRecords()と同じ形・同じ理由で実装したが、採用時の前提（D-047(3)「HRVは
-    // 多くのウェアラブルで1日1回算出される」）はPixel 11実機で誤りと確定した。実際は1日平均
-    // 約57件、5〜10分間隔のバースト的な記録で、「前回比」が隣接する2サンプルの差という意味の
-    // 薄い値になることを確認済み（lessons.md 6.29、requirements.md §27）。カード設計の見直しは
-    // 別タスクで検討する。
+    // WBS 6.10で当初ホーム画面のHRVカード（「最新値＋前回比」）用にfindLatestBodyFatRecords()と
+    // 同じ形で実装したが、採用時の前提（D-047(3)「HRVは多くのウェアラブルで1日1回算出される」）は
+    // Pixel 11実機で誤りと確定した。実際は1日平均約57件、5〜10分間隔のバースト的な記録で、
+    // 「前回比」が隣接する2サンプルの差という意味の薄い値になることを確認済み（lessons.md 6.29、
+    // requirements.md §27）。WBS 6.11（D-048）でホームカードは「最新レコードがある日の平均＋
+    // 前日比」（readHrvHomeSummary()）に変更したが、この関数自体は「最新レコードが何日か」を
+    // 特定する処理としてreadHrvHomeSummary()から引き続き使われている（limit = 1で呼ばれる）。
     suspend fun findLatestHrvRecords(limit: Int, historyPermissionGranted: Boolean): HrvRecordsResult {
         suspend fun readLatest(filter: TimeRangeFilter): List<HeartRateVariabilityRmssdRecord> =
             client
@@ -1036,13 +1037,24 @@ class HealthConnectManager(context: Context) {
             return HrvDailySummary(date = date, average = average, min = min, max = max, count = bucket.count)
         }
 
+        // コードレビュー指摘: bucketsを[前日, 当日]の2要素と決め打ちしてインデックス（0/1）で取り出すと、
+        // readHrvAggregates()が内部でSecurityExceptionによりrecentRangeFilterLocal()
+        // （直近30日・終了無制限、本関数が渡した2日分の範囲とは無関係）にフォールバックした場合に
+        // bucketsが約30個になり、全く別の日のbucketを「最新日」「前日」として扱ってしまう
+        // （最新のHRVレコードが約29〜30日前で、かつ履歴読み取り権限が無い場合に起こりうる。クラッシュ
+        // せず、誤った値を静かに表示する）。periodStartの日付で一致するbucketを探す方式にすれば、
+        // フォールバックでbucket数が変わっても正しいbucketを拾える（見つからなければnull＝「データなし」
+        // として扱われ、安全側に倒れる）。
         return when (aggregatesResult) {
-            is HrvAggregatesResult.Success ->
+            is HrvAggregatesResult.Success -> {
+                val latestBucket = aggregatesResult.buckets.find { it.periodStart.toLocalDate() == latestDate }
+                val previousBucket = aggregatesResult.buckets.find { it.periodStart.toLocalDate() == latestDate.minusDays(1) }
                 HrvHomeSummaryResult.Success(
-                    latestDay = toSummary(latestDate, aggregatesResult.buckets.getOrNull(1)),
-                    previousDay = toSummary(latestDate.minusDays(1), aggregatesResult.buckets.getOrNull(0)),
+                    latestDay = toSummary(latestDate, latestBucket),
+                    previousDay = toSummary(latestDate.minusDays(1), previousBucket),
                     historyLimited = recordsHistoryLimited || aggregatesResult.historyLimited,
                 )
+            }
             HrvAggregatesResult.Failure -> HrvHomeSummaryResult.Failure
         }
     }

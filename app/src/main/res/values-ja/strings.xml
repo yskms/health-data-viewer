@@ -51,8 +51,12 @@
     <string name="home_hrv_value">%1$s ms</string>
     <!-- WBS 6.11（D-048）: 「最新レコードがある日の平均」がどの日の集計かを示す。 -->
     <string name="home_hrv_summary_date">%1$sの平均</string>
-    <!-- WBS 6.11（D-048）: 集計対象日の件数・最小〜最大。 -->
-    <string name="home_hrv_count_range">%1$d件・%2$s–%3$s ms</string>
+    <!-- WBS 6.11（D-048）: 集計対象日の件数・最小〜最大。英語版が「1 records」のような不自然な複数形に
+         ならないようplurals化したため（コードレビュー指摘）、数量による変化が無い日本語でも
+         poc_steps_record_countと同じ形式に揃える。 -->
+    <plurals name="home_hrv_count_range">
+        <item quantity="other">%1$d件・%2$s–%3$s ms</item>
+    </plurals>
     <!-- WBS 6.11（D-048）: 「最新値＋前回比」から「最新レコードがある日の平均＋前日比」に変更したため、
          文言も「前回比」から「前日比」に変更。 -->
     <string name="home_hrv_delta">前日比: %1$s ms</string>

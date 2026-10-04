@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLocale
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -1099,8 +1100,9 @@ private fun HrvCard(
                     HrvSummaryDateText(date = latestDay.date)
                     Text(
                         text =
-                            stringResource(
-                                id = R.string.home_hrv_count_range,
+                            pluralStringResource(
+                                id = R.plurals.home_hrv_count_range,
+                                count = latestDay.count,
                                 latestDay.count,
                                 String.format(locale, "%.2f", latestDay.min),
                                 String.format(locale, "%.2f", latestDay.max),
