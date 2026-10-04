@@ -1043,8 +1043,16 @@ class HealthConnectManager(context: Context) {
         // bucketsが約30個になり、全く別の日のbucketを「最新日」「前日」として扱ってしまう
         // （最新のHRVレコードが約29〜30日前で、かつ履歴読み取り権限が無い場合に起こりうる。クラッシュ
         // せず、誤った値を静かに表示する）。periodStartの日付で一致するbucketを探す方式にすれば、
-        // フォールバックでbucket数が変わっても正しいbucketを拾える（見つからなければnull＝「データなし」
-        // として扱われ、安全側に倒れる）。
+        // フォールバックでbucket数が変わっても正しいbucketを拾える。
+        //
+        // 2回目のコードレビュー指摘: この修正後も次の狭いケースが残る。recentRangeFilterLocal()は
+        // 範囲の始点を「30日前の翌日0時」に切り上げてクランプしている（lessons.md 6.1）ため、最新日が
+        // ちょうど「30日前の日」に当たると、最新日のbucket自体がこの読み直し範囲から外れてしまい、
+        // latestDayがnull（＝「データなし」表示）になる。findLatestHrvRecords()自体はレコードを
+        // 見つけているので、「実際にはあるのにデータなしと表示する」ケースになる（誤った日の値を
+        // 表示していた修正前よりは安全側。historyLimited=trueになるためカードは非表示にならず、
+        // 履歴が制限されている旨の案内と一緒に表示される）。発生条件が「履歴読み取り権限が無い」かつ
+        // 「最新記録がちょうど約30日前」に限られるため、追加のコード対応はしていない。
         return when (aggregatesResult) {
             is HrvAggregatesResult.Success -> {
                 val latestBucket = aggregatesResult.buckets.find { it.periodStart.toLocalDate() == latestDate }
