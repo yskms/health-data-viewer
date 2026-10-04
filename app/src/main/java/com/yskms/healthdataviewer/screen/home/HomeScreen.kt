@@ -1342,14 +1342,15 @@ private fun BloodGlucoseCard(
                 if (latest == null) {
                     Text(text = stringResource(id = R.string.home_no_data))
                 } else {
+                    val latestValue = latest.level.inMilligramsPerDeciliter.roundToInt()
                     Text(
-                        text = stringResource(id = R.string.home_blood_glucose_value, Math.round(latest.level.inMilligramsPerDeciliter)),
+                        text = stringResource(id = R.string.home_blood_glucose_value, latestValue),
                         style = MaterialTheme.typography.headlineSmall,
                     )
                     LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
                     val previous = records.getOrNull(1)
                     if (previous != null) {
-                        val diffMgPerDl = Math.round(latest.level.inMilligramsPerDeciliter - previous.level.inMilligramsPerDeciliter).toInt()
+                        val diffMgPerDl = latestValue - previous.level.inMilligramsPerDeciliter.roundToInt()
                         Text(
                             text = stringResource(id = R.string.home_blood_glucose_delta, formatSignedInt(diffMgPerDl)),
                             style = MaterialTheme.typography.bodySmall,
