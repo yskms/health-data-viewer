@@ -56,8 +56,11 @@ import java.time.format.FormatStyle
 
 // WBS 6.10（Blood Glucose追加、D-050）: BodyFatDetailScreen.ktと同じ構造を複製した（D-046と同じ判断。
 // BloodGlucoseRecordもBodyFatRecordと同じ単一時刻のレコード、公式AggregateMetricが無く自前集計、
-// MetricDensity.LOWという構造が共通）。SpO2のような値域クランプ（0〜100%）は血糖値には無いため、
-// レンジプロバイダーはBody Fatと同じくVico既定のまま（指定しない）。
+// MetricDensity.LOWという構造が共通）。SpO2がY軸範囲の自前クランプ（D-049コードレビュー対応(b)）を
+// 必要としたのは、値域が制限されていたからではなく、Vico既定のrangeProvider（Y軸下限を常に0にする）
+// のままだと90〜100%という狭い範囲に値が集まり3系列がグラフ上端付近に潰れて見えたため。血糖値は
+// 正常範囲が70〜180mg/dL程度とSpO2よりレンジが広く、0始まりでも潰れの影響は小さいと判断し、
+// Body Fatと同じくVico既定のまま（レンジプロバイダーを指定しない）にした（D-050(4)）。
 private val BLOOD_GLUCOSE_DENSITY = MetricDensity.LOW
 
 // BodyFatDetailScreenと同じ値（WBS 6.3）。
@@ -254,15 +257,17 @@ fun BloodGlucoseDetailScreen(
 }
 
 // BodyFatDetailScreen.BodyFatRecordRow()と同じ形式（D-046と同じ理由）。levelのみ表示し、
-// specimenSource/mealType/relationToMealは今回表示しない（D-050(1)）。単位はmg/dL、整数表示
-// （日本の血糖値自己測定器の一般的な表記に合わせる、D-050(2)）。
+// specimenSource/mealType/relationToMealは今回表示しない（D-050(1)）。単位はmg/dL。ホームカードは
+// 整数表示（日本の血糖値自己測定器の一般的な表記に合わせる、D-050(2)）だが、このタブは小数1桁にする。
+// mmol/Lで記録するソースをmg/dLへ換算すると小数が生じるため、整数表示にすると異なる値が同じ整数に
+// 丸まって見分けられなくなり、重複も含めてすべて表示するという原則（D-007）に反する（D-050(4)）。
 @Composable
 private fun BloodGlucoseRecordRow(record: BloodGlucoseRecord) {
     val context = LocalContext.current
     val locale = LocalLocale.current.platformLocale
     val zone = record.zoneOffset ?: ZoneId.systemDefault()
     val formattedDateTime = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM).withLocale(locale).format(record.time.atZone(zone))
-    val formattedLevel = String.format(locale, "%.0f mg/dL", record.level.inMilligramsPerDeciliter)
+    val formattedLevel = String.format(locale, "%.1f mg/dL", record.level.inMilligramsPerDeciliter)
     val sourceName =
         remember(record.metadata.dataOrigin.packageName) {
             DataOriginNameResolver.resolve(context, record.metadata.dataOrigin.packageName)
