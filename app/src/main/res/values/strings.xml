@@ -51,7 +51,13 @@
     <string name="home_body_fat_delta">vs. previous: %1$s%%</string>
     <string name="home_hrv_title">HRV</string>
     <string name="home_hrv_value">%1$s ms</string>
-    <string name="home_hrv_delta">vs. previous: %1$s ms</string>
+    <!-- WBS 6.11 (D-048): what day the "latest day" average (home_hrv_value) summarizes. -->
+    <string name="home_hrv_summary_date">Average for %1$s</string>
+    <!-- WBS 6.11 (D-048): record count and min–max for the summarized day. -->
+    <string name="home_hrv_count_range">%1$d records, %2$s–%3$s ms</string>
+    <!-- WBS 6.11 (D-048): changed from "latest value + delta" to "latest day's average + vs. previous
+         day", so the wording changed from "vs. previous" to "vs. previous day" too. -->
+    <string name="home_hrv_delta">vs. previous day: %1$s ms</string>
     <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>

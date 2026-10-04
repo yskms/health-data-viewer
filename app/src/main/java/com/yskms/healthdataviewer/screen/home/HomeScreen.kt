@@ -49,7 +49,8 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
-import com.yskms.healthdataviewer.healthconnect.HrvRecordsResult
+import com.yskms.healthdataviewer.healthconnect.HrvDailySummary
+import com.yskms.healthdataviewer.healthconnect.HrvHomeSummaryResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.RestingHeartRateRecordsResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
@@ -77,6 +78,7 @@ import kotlin.math.roundToInt
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
@@ -382,13 +384,14 @@ fun HomeScreen(
                     bodyFatLoad = healthConnectManager.findLatestBodyFatRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
-                // HRVカード（WBS 6.10、D-047）: HeartRateVariabilityRmssdRecordもWeight/RestingHeartRate/
-                // BloodPressure/BodyFatと同じ単一時刻・単一レコードの構造のため、同じ「最新値＋前回比」
-                // パターンを採用した。
-                var hrvLoad by remember { mutableStateOf<HrvRecordsResult?>(null) }
+                // HRVカード（WBS 6.10→6.11、D-047→D-048）: 当初はWeight/RestingHeartRate/BloodPressure/
+                // BodyFatと同じ「最新値＋前回比」パターンを採用したが、HRVの実際の記録頻度（1日平均約57件、
+                // 5〜10分間隔のバースト）では前回比の意味が薄かったため、「最新レコードがある日の平均＋
+                // 前日比」に置き換えた（readHrvHomeSummary()参照）。
+                var hrvLoad by remember { mutableStateOf<HrvHomeSummaryResult?>(null) }
                 LaunchedEffect(hrvGranted, historyPermissionGranted, resumeKey) {
                     if (hrvGranted != true) return@LaunchedEffect
-                    hrvLoad = healthConnectManager.findLatestHrvRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                    hrvLoad = healthConnectManager.readHrvHomeSummary(historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -713,17 +716,18 @@ private fun isBodyFatCardHidden(
         load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
-// isWeightCardHidden()と同じ理由・同じ形（D-047。WeightCardと同じ「最新値＋前回比」パターンのため）。
+// isWeightCardHidden()と同じ理由（D-048でカード方式を「最新レコードがある日の平均＋前日比」に
+// 変更したため、「データが無い」の判定もrecords.isEmpty()ではなくlatestDay == nullで行う）。
 private fun isHrvCardHidden(
     granted: Boolean?,
-    load: HrvRecordsResult?,
+    load: HrvHomeSummaryResult?,
     historyFeatureAvailable: Boolean?,
     showMetricsWithoutData: Boolean,
 ): Boolean =
     !showMetricsWithoutData &&
         granted == true &&
-        load is HrvRecordsResult.Success &&
-        load.records.isEmpty() &&
+        load is HrvHomeSummaryResult.Success &&
+        load.latestDay == null &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
 private fun isStepsCardHidden(granted: Boolean?, currentResult: StepsAggregateTotalResult?, showMetricsWithoutData: Boolean): Boolean =
@@ -786,6 +790,19 @@ private fun LatestRecordDateText(time: Instant, zoneOffset: ZoneOffset?) {
             DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(time.atZone(zone).toLocalDate())
         }
     Text(text = stringResource(id = R.string.home_latest_record_date, formattedDate), style = MaterialTheme.typography.bodySmall)
+}
+
+// WBS 6.11（D-048）: HrvCardの見出し（latestDay.average）がどの日を集計した値かを示す。
+// LatestRecordDateText()と似た役割だが、個別レコードの記録日ではなく「複数レコードを平均した
+// 対象日」を示すため意味が異なり、専用の文言（home_hrv_summary_date）を使う。
+@Composable
+private fun HrvSummaryDateText(date: LocalDate) {
+    val locale = LocalLocale.current.platformLocale
+    val formattedDate =
+        remember(date, locale) {
+            DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(date)
+        }
+    Text(text = stringResource(id = R.string.home_hrv_summary_date, formattedDate), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
@@ -1045,14 +1062,16 @@ private fun BloodPressureCard(
     }
 }
 
-// WeightCard()と同じ形（D-047。HeartRateVariabilityRmssdRecordもWeightと同じ単一時刻・単一値の
-// 構造のため）。heartRateVariabilityMillisはPercentage/Mass等と異なり単位型でラップされていない
-// 生のdouble（CLAUDE.md参照）のため単位変換は不要。
+// WBS 6.11（ホームカード方式見直し、D-048）: 当初はWeightCard()と同じ「最新値＋前回比」だったが、
+// HRVの実際の記録頻度（1日平均約57件、5〜10分間隔のバースト、D-047(3)、lessons.md 6.29）では
+// 前回比が隣接する2サンプルの差という意味の薄い値になっていたため、「最新レコードがある日の平均＋
+// 前日比」（件数・最小〜最大も添える）に置き換えた。heartRateVariabilityMillisはPercentage/Mass等と
+// 異なり単位型でラップされていない生のdouble（CLAUDE.md参照）のため単位変換は不要。
 @Composable
 private fun HrvCard(
     permissionsCheckState: PermissionsCheckState,
     granted: Boolean?,
-    load: HrvRecordsResult?,
+    load: HrvHomeSummaryResult?,
     historyFeatureAvailable: Boolean?,
     showMetricsWithoutData: Boolean,
     onClick: () -> Unit,
@@ -1067,25 +1086,30 @@ private fun HrvCard(
         when {
             granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
             load == null -> Text(text = stringResource(id = R.string.home_loading))
-            load is HrvRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
-            load is HrvRecordsResult.Success -> {
-                val records = load.records
-                val latest = records.firstOrNull()
-                if (latest == null) {
+            load is HrvHomeSummaryResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is HrvHomeSummaryResult.Success -> {
+                val latestDay = load.latestDay
+                if (latestDay == null) {
                     Text(text = stringResource(id = R.string.home_no_data))
                 } else {
                     Text(
-                        text =
-                            stringResource(
-                                id = R.string.home_hrv_value,
-                                String.format(locale, "%.2f", latest.heartRateVariabilityMillis),
-                            ),
+                        text = stringResource(id = R.string.home_hrv_value, String.format(locale, "%.2f", latestDay.average)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
-                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
-                    val previous = records.getOrNull(1)
-                    if (previous != null) {
-                        val diffMillis = latest.heartRateVariabilityMillis - previous.heartRateVariabilityMillis
+                    HrvSummaryDateText(date = latestDay.date)
+                    Text(
+                        text =
+                            stringResource(
+                                id = R.string.home_hrv_count_range,
+                                latestDay.count,
+                                String.format(locale, "%.2f", latestDay.min),
+                                String.format(locale, "%.2f", latestDay.max),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    val previousDay = load.previousDay
+                    if (previousDay != null) {
+                        val diffMillis = latestDay.average - previousDay.average
                         Text(
                             text = stringResource(id = R.string.home_hrv_delta, formatSignedMillis(diffMillis, locale)),
                             style = MaterialTheme.typography.bodySmall,

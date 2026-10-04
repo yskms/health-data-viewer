@@ -49,7 +49,13 @@
     <string name="home_body_fat_delta">前回比: %1$s%%</string>
     <string name="home_hrv_title">HRV（心拍変動）</string>
     <string name="home_hrv_value">%1$s ms</string>
-    <string name="home_hrv_delta">前回比: %1$s ms</string>
+    <!-- WBS 6.11（D-048）: 「最新レコードがある日の平均」がどの日の集計かを示す。 -->
+    <string name="home_hrv_summary_date">%1$sの平均</string>
+    <!-- WBS 6.11（D-048）: 集計対象日の件数・最小〜最大。 -->
+    <string name="home_hrv_count_range">%1$d件・%2$s–%3$s ms</string>
+    <!-- WBS 6.11（D-048）: 「最新値＋前回比」から「最新レコードがある日の平均＋前日比」に変更したため、
+         文言も「前回比」から「前日比」に変更。 -->
+    <string name="home_hrv_delta">前日比: %1$s ms</string>
     <string name="home_all_metrics_hidden_notice">「データがない項目も表示する」の設定により、非表示にしています。</string>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>

@@ -29,6 +29,7 @@ import androidx.paging.PagingSource
 import java.io.IOException
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.Period
 import java.time.ZoneId
@@ -982,6 +983,7 @@ class HealthConnectManager(context: Context) {
                     average = values.takeIf { it.isNotEmpty() }?.average(),
                     min = values.minOrNull(),
                     max = values.maxOrNull(),
+                    count = values.size,
                 )
             }
         }
@@ -997,6 +999,51 @@ class HealthConnectManager(context: Context) {
         ) {
             is HistoryFallbackOutcome.Success -> HrvAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> HrvAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.11（ホームカード方式見直し、D-048）: findLatestHrvRecords()が前提にしていた「最新値＋前回比」
+    // パターンは、HRVの実際の記録頻度（1日平均約57件、5〜10分間隔のバースト、D-047(3)、lessons.md 6.29）
+    // では前回比が隣接する2サンプルの差という意味の薄い値になっていた。「最新レコードがある日の平均＋
+    // 前日比」に置き換える（件数・最小〜最大も添える、コードレビュー提案）。
+    //
+    // タイムゾーン対応・30日境界のクランプといった複雑なロジックはreadHrvAggregates()が既に持っている
+    // ため複製しない。「最新レコードがある日の前日0時〜翌日0時」という2日分の範囲をbucket=1日で
+    // readHrvAggregates()に渡し、返ってきた2bucket（前日・当日）をそのまま使うだけで実装できる。
+    suspend fun readHrvHomeSummary(historyPermissionGranted: Boolean): HrvHomeSummaryResult {
+        val latestRecordsResult = findLatestHrvRecords(limit = 1, historyPermissionGranted = historyPermissionGranted)
+        val latest: HeartRateVariabilityRmssdRecord
+        val recordsHistoryLimited: Boolean
+        when (latestRecordsResult) {
+            is HrvRecordsResult.Success -> {
+                recordsHistoryLimited = latestRecordsResult.historyLimited
+                latest =
+                    latestRecordsResult.records.firstOrNull()
+                        ?: return HrvHomeSummaryResult.Success(latestDay = null, previousDay = null, historyLimited = recordsHistoryLimited)
+            }
+            HrvRecordsResult.Failure -> return HrvHomeSummaryResult.Failure
+        }
+
+        val latestDate = latest.time.atZone(latest.zoneOffset ?: ZoneId.systemDefault()).toLocalDate()
+        val timeRangeFilter = TimeRangeFilter.between(latestDate.minusDays(1).atStartOfDay(), latestDate.plusDays(1).atStartOfDay())
+        val aggregatesResult =
+            readHrvAggregates(timeRangeFilter = timeRangeFilter, bucket = Period.ofDays(1), historyPermissionGranted = historyPermissionGranted)
+
+        fun toSummary(date: LocalDate, bucket: HrvAggregateBucket?): HrvDailySummary? {
+            val average = bucket?.average ?: return null
+            val min = bucket.min ?: return null
+            val max = bucket.max ?: return null
+            return HrvDailySummary(date = date, average = average, min = min, max = max, count = bucket.count)
+        }
+
+        return when (aggregatesResult) {
+            is HrvAggregatesResult.Success ->
+                HrvHomeSummaryResult.Success(
+                    latestDay = toSummary(latestDate, aggregatesResult.buckets.getOrNull(1)),
+                    previousDay = toSummary(latestDate.minusDays(1), aggregatesResult.buckets.getOrNull(0)),
+                    historyLimited = recordsHistoryLimited || aggregatesResult.historyLimited,
+                )
+            HrvAggregatesResult.Failure -> HrvHomeSummaryResult.Failure
         }
     }
 
