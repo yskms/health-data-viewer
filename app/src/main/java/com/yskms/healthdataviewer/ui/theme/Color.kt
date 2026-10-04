@@ -23,4 +23,6 @@ val ActiveCaloriesAccent = Color(0xFFE65100)
 val TotalCaloriesAccent = Color(0xFF00695C)
 val BloodPressureAccent = Color(0xFF3949AB)
 val BodyFatAccent = Color(0xFF7B5800)
-val HrvAccent = Color(0xFF1565C0)
+// コードレビュー指摘: 当初0xFF1565C0（青）はBloodPressureAccent（インディゴ）・SleepAccent
+// （青緑）と同系統で見分けにくいという指摘を受け、既存のどの色とも異なる紫系に変更した。
+val HrvAccent = Color(0xFF8E24AA)

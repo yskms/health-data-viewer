@@ -677,6 +677,10 @@ class HealthConnectManager(context: Context) {
     ): BodyFatAggregatesResult {
         val zone = ZoneId.systemDefault()
 
+        // コードレビュー指摘（WBS 6.10、HRV追加時）: この関数は`readHrvAggregates()`にそのまま複製されて
+        // いる。**この広げ幅・クランプ判定ロジックを変更する場合は、必ず`readHrvAggregates()`側の同じ
+        // ロジックにも同じ修正を入れること**（Blood Glucose / SpO2で複製が増えた場合も同様）。
+        //
         // Health Connectのタイムゾーンオフセットはレコードを記録した端末依存でUTC-12〜UTC+14の範囲を
         // 取り得る（最大スプレッド26時間）。読み取り範囲のInstant変換は端末のタイムゾーン（zone）基準だが、
         // bucket割り当て（下記toBuckets()）はレコード自身のzoneOffset基準のため、記録側のoffsetが端末と
@@ -886,10 +890,23 @@ class HealthConnectManager(context: Context) {
     // WBS 6.10（D-047(4)）: HeartRateVariabilityRmssdRecordにもBodyFatRecordと同じく公式の
     // AggregateMetricが存在しない（javap逆コンパイルで確認。CLAUDE.md・lessons.md 6.28参照）。
     // readBodyFatAggregates()と全く同じロジックをHeartRateVariabilityRmssdRecord・
-    // heartRateVariabilityMillisに差し替えただけ（タイムゾーンオフセットの広げ幅・境界クランプの
-    // 理由も同一、D-046(3)のコメント参照）。heartRateVariabilityMillisはPercentage/Mass等と異なり
-    // 単位型でラップされていない生のdouble（CLAUDE.md「SDK調査で誤解しやすい点」参照）のため、
+    // heartRateVariabilityMillisに差し替えただけ。heartRateVariabilityMillisはPercentage/Mass等と
+    // 異なり単位型でラップされていない生のdouble（CLAUDE.md「SDK調査で誤解しやすい点」参照）のため、
     // 単位変換は不要。
+    //
+    // コードレビュー指摘（レビューで3回修正されたreadBodyFatAggregates()のクランプ判定ロジックを、
+    // 理由の説明なしに複製していた点）: **このロジックを変更する場合は、必ずreadBodyFatAggregates()側
+    // の同じロジックにも同じ修正を入れること**。要点だけ以下に残す（完全な経緯はreadBodyFatAggregates()
+    // 側のコメント、D-046(3)のコードレビュー1〜3回目参照）。
+    // - タイムゾーンオフセットの取り得る範囲（UTC-12〜UTC+14、最大スプレッド26時間）分だけ読み取り
+    //   範囲を前後に広げて読む（レコード自身のzoneOffsetが端末のzoneと食い違う場合に備える）。
+    // - **広げる前の開始時刻が既にHISTORY_FALLBACK_DAYS（30日）の内側にある場合、広げた結果を
+    //   `Instant.now() - HISTORY_FALLBACK_DAYS`より古くしてはいけない**（それより古い範囲を含めると
+    //   readRecords()がSecurityExceptionになる、lessons.md 6.1）。
+    // - **この判定はhistoryPermissionGrantedフラグでは行わず、広げる前の開始時刻が実際に境界の内側に
+    //   あるかどうかという値そのもので行うこと**。フラグで判定すると、履歴読み取り権限が詳細画面を開いた
+    //   後に取り消されたケースで、readWithHistoryFallback()の2回目（fallback）の読み取りもまた26時間
+    //   広げられたままになり、2回目もSecurityExceptionになってFailure（Chartエラー表示）になる。
     suspend fun readHrvAggregates(
         timeRangeFilter: TimeRangeFilter,
         bucket: Period,
@@ -904,6 +921,7 @@ class HealthConnectManager(context: Context) {
             val start =
                 unwidenedStart?.let { s ->
                     val widened = s.minus(maxZoneOffsetSpread)
+                    // ↑の指摘: ここをhistoryPermissionGrantedで分岐しないこと。
                     if (!s.isBefore(recentFloor)) maxOf(widened, recentFloor) else widened
                 }
             val end = (localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()).plus(maxZoneOffsetSpread)

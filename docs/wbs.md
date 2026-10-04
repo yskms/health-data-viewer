@@ -77,7 +77,7 @@
 |---|---|---|---|---|---|
 | 8.1 | プライバシーポリシーの作成・公開 | ⬜ | | | 文言確定後、権限説明画面（rationale intent、lessons.md 2.1）に反映する。現状はMainActivityが起動するだけで、プライバシーポリシーの文言も出ず、権限リクエストUIが出てしまう（本来この経路では出すべきでない）。この経路専用の画面に分けるか、MainActivity内で起動元インテントに応じて表示を切り替えるかをここで決める |
 | 8.2 | Data Safetyセクション（広告SDKの収集データを含む） | ⬜ | | | |
-| 8.3 | Health Connect権限の申告（Play Console） | ⬜ | | | 審査に時間がかかる可能性あり |
+| 8.3 | Health Connect権限の申告（Play Console） | ⬜ | | | 審査に時間がかかる可能性あり。申告対象の権限一覧は`HealthConnectPermissions.kt`・`AndroidManifest.xml`の`<uses-permission android:name="android.permission.health.*">`を正とする（データ型追加のたびに増えるため、着手時に最新を確認すること。WBS 6.10、コードレビュー指摘） |
 | 8.4 | 広告ID（AD_ID）の宣言 | ⬜ | | | |
 | 8.5 | ストア掲載情報（日本語 / English）、スクリーンショット | ⬜ | | | |
 | 8.6 | テスト配信（内部テストなど） | ⬜ | | | 公開実績のあるアカウントのため、クローズドテストの12人・14日要件は対象外 |
