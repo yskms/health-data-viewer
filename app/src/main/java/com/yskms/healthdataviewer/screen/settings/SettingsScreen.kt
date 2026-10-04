@@ -203,6 +203,11 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                     permissionsCheckState = permissionsCheckState,
                     permission = HealthConnectPermissions.BODY_FAT_READ,
                 )
+                PermissionStatusRow(
+                    title = stringResource(id = R.string.home_hrv_title),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.HRV_READ,
+                )
                 if (historyFeatureAvailable == false) {
                     Text(text = stringResource(id = R.string.health_connect_history_not_supported), style = MaterialTheme.typography.bodySmall)
                 } else {
@@ -227,6 +232,7 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                                 add(HealthConnectPermissions.TOTAL_CALORIES_READ)
                                 add(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                                 add(HealthConnectPermissions.BODY_FAT_READ)
+                                add(HealthConnectPermissions.HRV_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                             }
                         requestPermissions.launch(permissions)

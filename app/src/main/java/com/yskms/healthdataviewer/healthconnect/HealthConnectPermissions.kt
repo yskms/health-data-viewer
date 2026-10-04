@@ -6,6 +6,7 @@ import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
@@ -42,5 +43,9 @@ object HealthConnectPermissions {
     val TOTAL_CALORIES_READ: String = HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
     val BLOOD_PRESSURE_READ: String = HealthPermission.getReadPermission(BloodPressureRecord::class)
     val BODY_FAT_READ: String = HealthPermission.getReadPermission(BodyFatRecord::class)
+    // WBS 6.10（HRV追加、D-047(2)）: Health Connectが公開するHRV関連のRecord型は
+    // HeartRateVariabilityRmssdRecord（RMSSD）1つのみ（javap逆コンパイルで確認。他のHRV指標、
+    // 例えばSDNNに相当するRecord型は存在しない）。
+    val HRV_READ: String = HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

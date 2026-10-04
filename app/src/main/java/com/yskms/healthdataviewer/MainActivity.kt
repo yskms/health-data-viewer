@@ -24,6 +24,7 @@ import com.yskms.healthdataviewer.screen.detail.BloodPressureDetailScreen
 import com.yskms.healthdataviewer.screen.detail.BodyFatDetailScreen
 import com.yskms.healthdataviewer.screen.detail.DistanceDetailScreen
 import com.yskms.healthdataviewer.screen.detail.HeartRateDetailScreen
+import com.yskms.healthdataviewer.screen.detail.HrvDetailScreen
 import com.yskms.healthdataviewer.screen.detail.RestingHeartRateDetailScreen
 import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
 import com.yskms.healthdataviewer.screen.detail.StepsDetailScreen
@@ -75,6 +76,7 @@ private const val ROUTE_ACTIVE_CALORIES_DETAIL = "active_calories_detail"
 private const val ROUTE_TOTAL_CALORIES_DETAIL = "total_calories_detail"
 private const val ROUTE_BLOOD_PRESSURE_DETAIL = "blood_pressure_detail"
 private const val ROUTE_BODY_FAT_DETAIL = "body_fat_detail"
+private const val ROUTE_HRV_DETAIL = "hrv_detail"
 private const val ROUTE_SETTINGS = "settings"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
@@ -151,6 +153,10 @@ private fun MainNavHost(
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_BODY_FAT_DETAIL)
                 },
+                onOpenHrvGraph = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_HRV_DETAIL)
+                },
                 onOpenSettings = { navController.navigateOnce(ROUTE_SETTINGS) },
             )
         }
@@ -226,6 +232,13 @@ private fun MainNavHost(
         }
         composable(ROUTE_BODY_FAT_DETAIL) {
             BodyFatDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_HRV_DETAIL) {
+            HrvDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

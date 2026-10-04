@@ -49,6 +49,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
+import com.yskms.healthdataviewer.healthconnect.HrvRecordsResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.RestingHeartRateRecordsResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
@@ -64,6 +65,7 @@ import com.yskms.healthdataviewer.ui.theme.BloodPressureAccent
 import com.yskms.healthdataviewer.ui.theme.BodyFatAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
+import com.yskms.healthdataviewer.ui.theme.HrvAccent
 import com.yskms.healthdataviewer.ui.theme.RestingHeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
 import com.yskms.healthdataviewer.ui.theme.StepsAccent
@@ -182,6 +184,7 @@ fun HomeScreen(
     onOpenTotalCalories: (historyPermissionGranted: Boolean) -> Unit,
     onOpenBloodPressure: (historyPermissionGranted: Boolean) -> Unit,
     onOpenBodyFatGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenHrvGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -261,6 +264,7 @@ fun HomeScreen(
                 val totalCaloriesGranted = permissionsCheckState.isGranted(HealthConnectPermissions.TOTAL_CALORIES_READ)
                 val bloodPressureGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                 val bodyFatGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BODY_FAT_READ)
+                val hrvGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HRV_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -274,6 +278,7 @@ fun HomeScreen(
                         totalCaloriesGranted,
                         bloodPressureGranted,
                         bodyFatGranted,
+                        hrvGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -290,6 +295,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.TOTAL_CALORIES_READ)
                                     add(HealthConnectPermissions.BLOOD_PRESSURE_READ)
                                     add(HealthConnectPermissions.BODY_FAT_READ)
+                                    add(HealthConnectPermissions.HRV_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -374,6 +380,15 @@ fun HomeScreen(
                 LaunchedEffect(bodyFatGranted, historyPermissionGranted, resumeKey) {
                     if (bodyFatGranted != true) return@LaunchedEffect
                     bodyFatLoad = healthConnectManager.findLatestBodyFatRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                }
+
+                // HRVカード（WBS 6.10、D-047）: HeartRateVariabilityRmssdRecordもWeight/RestingHeartRate/
+                // BloodPressure/BodyFatと同じ単一時刻・単一レコードの構造のため、同じ「最新値＋前回比」
+                // パターンを採用した。
+                var hrvLoad by remember { mutableStateOf<HrvRecordsResult?>(null) }
+                LaunchedEffect(hrvGranted, historyPermissionGranted, resumeKey) {
+                    if (hrvGranted != true) return@LaunchedEffect
+                    hrvLoad = healthConnectManager.findLatestHrvRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
                 }
 
                 var stepsLoad by remember { mutableStateOf<StepsCardLoad?>(null) }
@@ -488,7 +503,8 @@ fun HomeScreen(
                         isActiveCaloriesCardHidden(activeCaloriesGranted, activeCaloriesResult, showMetricsWithoutData) &&
                         isTotalCaloriesCardHidden(totalCaloriesGranted, totalCaloriesResult, showMetricsWithoutData) &&
                         isBloodPressureCardHidden(bloodPressureGranted, bloodPressureLoad, historyFeatureAvailable, showMetricsWithoutData) &&
-                        isBodyFatCardHidden(bodyFatGranted, bodyFatLoad, historyFeatureAvailable, showMetricsWithoutData)
+                        isBodyFatCardHidden(bodyFatGranted, bodyFatLoad, historyFeatureAvailable, showMetricsWithoutData) &&
+                        isHrvCardHidden(hrvGranted, hrvLoad, historyFeatureAvailable, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -567,6 +583,14 @@ fun HomeScreen(
                     historyFeatureAvailable = historyFeatureAvailable,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenBodyFatGraph(historyPermissionGranted) },
+                )
+                HrvCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = hrvGranted,
+                    load = hrvLoad,
+                    historyFeatureAvailable = historyFeatureAvailable,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenHrvGraph(historyPermissionGranted) },
                 )
             }
         }
@@ -686,6 +710,19 @@ private fun isBodyFatCardHidden(
     !showMetricsWithoutData &&
         granted == true &&
         load is BodyFatRecordsResult.Success &&
+        load.records.isEmpty() &&
+        !(load.historyLimited && historyFeatureAvailable != false)
+
+// isWeightCardHidden()と同じ理由・同じ形（D-047。WeightCardと同じ「最新値＋前回比」パターンのため）。
+private fun isHrvCardHidden(
+    granted: Boolean?,
+    load: HrvRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        load is HrvRecordsResult.Success &&
         load.records.isEmpty() &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
@@ -1008,6 +1045,63 @@ private fun BloodPressureCard(
     }
 }
 
+// WeightCard()と同じ形（D-047。HeartRateVariabilityRmssdRecordもWeightと同じ単一時刻・単一値の
+// 構造のため）。heartRateVariabilityMillisはPercentage/Mass等と異なり単位型でラップされていない
+// 生のdouble（CLAUDE.md参照）のため単位変換は不要。
+@Composable
+private fun HrvCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    load: HrvRecordsResult?,
+    historyFeatureAvailable: Boolean?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isHrvCardHidden(granted, load, historyFeatureAvailable, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_hrv_title),
+        accentColor = HrvAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            load == null -> Text(text = stringResource(id = R.string.home_loading))
+            load is HrvRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is HrvRecordsResult.Success -> {
+                val records = load.records
+                val latest = records.firstOrNull()
+                if (latest == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text =
+                            stringResource(
+                                id = R.string.home_hrv_value,
+                                String.format(locale, "%.2f", latest.heartRateVariabilityMillis),
+                            ),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
+                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
+                    val previous = records.getOrNull(1)
+                    if (previous != null) {
+                        val diffMillis = latest.heartRateVariabilityMillis - previous.heartRateVariabilityMillis
+                        Text(
+                            text = stringResource(id = R.string.home_hrv_delta, formatSignedMillis(diffMillis, locale)),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+                // WeightCardのhistoryLimited通知と同じ理由（期間タブに依存しないカードのため、
+                // DashboardPeriod.isHistoryLimited()では検知できない）。
+                if (load.historyLimited && historyFeatureAvailable != false) {
+                    Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
 // WeightCard()と同じ形（D-046。BodyFatRecordもWeightと同じ単一時刻・単一値の構造のため）。
 @Composable
 private fun BodyFatCard(
@@ -1241,6 +1335,19 @@ private fun formatSignedKg(diffKg: Double, locale: Locale): String {
 // formatSignedKg()と同じ役割・同じ形（D-046。%記号はkgと異なりスペースなしで数値の直後に付ける）。
 private fun formatSignedPercent(diffPercent: Double, locale: Locale): String {
     val rounded = Math.round(diffPercent * 100) / 100.0
+    val sign =
+        when {
+            rounded > 0 -> "+"
+            rounded < 0 -> "-"
+            else -> "±"
+        }
+    return sign + String.format(locale, "%.2f", kotlin.math.abs(rounded))
+}
+
+// formatSignedKg()と同じ役割・同じ形（D-047。"ms"はkg/bpm/mmHgと同じく数値から半角スペースを
+// 空けて付ける）。
+private fun formatSignedMillis(diffMillis: Double, locale: Locale): String {
+    val rounded = Math.round(diffMillis * 100) / 100.0
     val sign =
         when {
             rounded > 0 -> "+"

@@ -13,6 +13,7 @@ import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.HeartRateRecord
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -790,6 +791,192 @@ class HealthConnectManager(context: Context) {
         ) {
             is HistoryFallbackOutcome.Success -> BodyFatAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> BodyFatAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: HRVを追加。HeartRateVariabilityRmssdRecordもWeight/
+    // RestingHeartRate/BloodPressure/BodyFatと同じ単一時刻のレコード（InstantaneousRecord、サンプル
+    // 配列を持たない、公式の重複処理もない。requirements.md §22.2）のため、Records/Sources/ホーム
+    // カード用の3関数はWeight用の3関数をそのまま踏襲する（Body Fatと同じ判断、D-047(1)）。
+    fun hrvRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<HeartRateVariabilityRmssdRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateVariabilityRmssdRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestBodyFatRecordTime()と同じ理由・同じ形。
+    suspend fun findOldestHrvRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateVariabilityRmssdRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.time
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // WBS 6.10: ホーム画面のHRVカード（「最新値＋前回比」、期間タブに依存しない）用。
+    // findLatestBodyFatRecords()と同じ形・同じ理由。HRV（RMSSD）は多くのウェアラブルで睡眠中にまとめて
+    // 1日1回算出される指標という想定だが、このアプリの実データでは未確認のまま採用する
+    // （D-044(2)/D-045(2)/D-046(2)と同じ基準、D-047(3)）。
+    suspend fun findLatestHrvRecords(limit: Int, historyPermissionGranted: Boolean): HrvRecordsResult {
+        suspend fun readLatest(filter: TimeRangeFilter): List<HeartRateVariabilityRmssdRecord> =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = HeartRateVariabilityRmssdRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = limit,
+                    ),
+                ).records
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readLatest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success ->
+                HrvRecordsResult.Success(records = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> HrvRecordsResult.Failure
+        }
+    }
+
+    // WBS 6.10（D-047(4)）: HeartRateVariabilityRmssdRecordにもBodyFatRecordと同じく公式の
+    // AggregateMetricが存在しない（javap逆コンパイルで確認。CLAUDE.md・lessons.md 6.28参照）。
+    // readBodyFatAggregates()と全く同じロジックをHeartRateVariabilityRmssdRecord・
+    // heartRateVariabilityMillisに差し替えただけ（タイムゾーンオフセットの広げ幅・境界クランプの
+    // 理由も同一、D-046(3)のコメント参照）。heartRateVariabilityMillisはPercentage/Mass等と異なり
+    // 単位型でラップされていない生のdouble（CLAUDE.md「SDK調査で誤解しやすい点」参照）のため、
+    // 単位変換は不要。
+    suspend fun readHrvAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): HrvAggregatesResult {
+        val zone = ZoneId.systemDefault()
+        val maxZoneOffsetSpread = Duration.ofHours(26)
+
+        suspend fun readAllRecords(localFilter: TimeRangeFilter): List<HeartRateVariabilityRmssdRecord> {
+            val recentFloor = Instant.now().minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS)
+            val unwidenedStart = localFilter.localStartTime?.atZone(zone)?.toInstant()
+            val start =
+                unwidenedStart?.let { s ->
+                    val widened = s.minus(maxZoneOffsetSpread)
+                    if (!s.isBefore(recentFloor)) maxOf(widened, recentFloor) else widened
+                }
+            val end = (localFilter.localEndTime?.atZone(zone)?.toInstant() ?: Instant.now()).plus(maxZoneOffsetSpread)
+            val instantFilter = if (start != null) TimeRangeFilter.between(start, end) else TimeRangeFilter.before(end)
+
+            val records = mutableListOf<HeartRateVariabilityRmssdRecord>()
+            var pageToken: String? = null
+            do {
+                val response =
+                    client.readRecords(
+                        ReadRecordsRequest(
+                            recordType = HeartRateVariabilityRmssdRecord::class,
+                            timeRangeFilter = instantFilter,
+                            pageToken = pageToken,
+                        ),
+                    )
+                records += response.records
+                pageToken = response.pageToken?.ifEmpty { null }
+            } while (pageToken != null)
+            return records
+        }
+
+        suspend fun toBuckets(localFilter: TimeRangeFilter): List<HrvAggregateBucket> {
+            val records = readAllRecords(localFilter)
+            if (records.isEmpty()) return emptyList()
+
+            val rangeStart =
+                localFilter.localStartTime ?: run {
+                    val earliestDate = records.minOf { it.time }.atZone(zone).toLocalDate()
+                    if (bucket.months != 0 || bucket.years != 0) earliestDate.withDayOfMonth(1).atStartOfDay() else earliestDate.atStartOfDay()
+                }
+            val rangeEnd = localFilter.localEndTime ?: LocalDateTime.now()
+
+            val bucketStarts = mutableListOf<LocalDateTime>()
+            var current = rangeStart
+            while (current.isBefore(rangeEnd)) {
+                bucketStarts += current
+                current = current.plus(bucket)
+            }
+            if (bucketStarts.isEmpty()) return emptyList()
+
+            val valuesByBucket = Array(bucketStarts.size) { mutableListOf<Double>() }
+            for (record in records) {
+                val localDateTime = record.time.atZone(record.zoneOffset ?: zone).toLocalDateTime()
+                if (localDateTime.isBefore(rangeStart) || !localDateTime.isBefore(rangeEnd)) continue
+                val bucketIndex = bucketStarts.indexOfLast { !it.isAfter(localDateTime) }
+                if (bucketIndex >= 0) {
+                    valuesByBucket[bucketIndex] += record.heartRateVariabilityMillis
+                }
+            }
+
+            return bucketStarts.mapIndexed { index, start ->
+                val values = valuesByBucket[index]
+                HrvAggregateBucket(
+                    periodStart = start,
+                    average = values.takeIf { it.isNotEmpty() }?.average(),
+                    min = values.minOrNull(),
+                    max = values.maxOrNull(),
+                )
+            }
+        }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> HrvAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> HrvAggregatesResult.Failure
         }
     }
 
