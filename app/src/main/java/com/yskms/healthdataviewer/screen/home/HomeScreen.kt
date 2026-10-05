@@ -364,9 +364,7 @@ fun HomeScreen(
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
-                // 14個のLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘。
-                // WBS 6.10でExerciseを追加した際、この数が実際には13個（HRV/SpO2/Blood Glucose追加分の
-                // 更新漏れ）のまま止まっていたことに気付き、14個に修正した）。
+                // 以下のLaunchedEffectはいずれも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
                 // 戻すと、表示指標トグルがOFFの状態で「データなし」と確定していたカードが、画面復帰
                 // （resumeKeyの変化）や期間タブ切り替えのたびに一瞬「読み込み中」として出現してから
                 // また消える、というちらつきが起きる。前回の結果を表示したまま裏で再取得し、新しい
@@ -1585,7 +1583,13 @@ private fun ExerciseCard(
                 if (total == null) {
                     Text(text = stringResource(id = R.string.home_no_data))
                 } else {
+                    // コードレビュー指摘: h:mm形式だけだと、年・全期間タブで"312:45"のような値になり、
+                    // 単一セッションの長さや時刻と紛らわしい（Distanceのkm等と異なり単位が無いため）。
+                    // Sleepカードが平均値に「1日あたり平均」と注記するのと対になる形で、こちらは常に
+                    // 期間合計である旨を注記する（SleepのisAveragedのような条件分岐は無く、Exerciseの
+                    // ホームカードは常に合計のため無条件で表示する）。
                     Text(text = formatSleepDuration(total), style = MaterialTheme.typography.headlineSmall)
+                    Text(text = stringResource(id = R.string.home_exercise_total_notice), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }

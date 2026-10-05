@@ -36,9 +36,11 @@ val OxygenSaturationAccent = Color(0xFF00ACC1)
 // Distance/BodyFatAccent（オレンジ〜黄土）・ActiveCaloriesAccent（オレンジ）のいずれとも異なる
 // オリーブ系（黄緑寄り）にし、既存アクセントカラーとの見分けやすさを確保した。
 val BloodGlucoseAccent = Color(0xFF827717)
-// WBS 6.10（Exercise追加）: 既存12色のうち4色（Sleep・BloodPressure・OxygenSaturation・
-// 残りの青緑〜シアン系）が199〜231度あたりの近い色相に集中している（過去のHRV/SpO2のコードレビューで
-// 「同系統で見分けにくい」と指摘された範囲）ため、より彩度・明度の高い純粋な青（Material Blue 900）に
-// した。既存のどの色とも重ならない最後の未使用枠だが、他の追加時と同様コードレビューで見分けにくいと
-// 指摘されれば変更する前提の暫定選択。
-val ExerciseAccent = Color(0xFF0D47A1)
+// WBS 6.10（Exercise追加）: 当初0xFF0D47A1（Material Blue 900、色相約216°）にしたが、コードレビューで
+// 実際にHSL色相を計算した結果、Sleep（約198°）〜BloodPressure（約232°）という、HRV/SpO2のレビューで
+// 「同系統で見分けにくい」として却下された0xFF1565C0（約212°）とほぼ同じ帯のただ中にあり、
+// 「その帯を避けた」というコメントの説明と実際の値が矛盾していた指摘を受けた（「明度が高い」という
+// 説明も、L=34%という暗い部類の値と逆だった）。既存12色すべての色相を計算し直し、Steps（約101°、
+// 緑）とTotalCaloriesAccent（約173°、緑青）の間に72度ある未使用の帯（黄緑〜若草色）を見つけ、
+// その中央付近の若草色0xFF1B8A3D（色相約138°、両隣とおよそ37度ずつ離れる）に変更した。
+val ExerciseAccent = Color(0xFF1B8A3D)

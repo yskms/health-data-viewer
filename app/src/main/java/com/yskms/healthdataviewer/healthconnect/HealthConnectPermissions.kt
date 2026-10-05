@@ -53,9 +53,11 @@ object HealthConnectPermissions {
     val OXYGEN_SATURATION_READ: String = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
     val BLOOD_GLUCOSE_READ: String = HealthPermission.getReadPermission(BloodGlucoseRecord::class)
     // WBS 6.10（Exercise追加、D-051）: ExerciseSessionRecordのGPSルート（exerciseRouteResult）は
-    // 別のpermission（READ_EXERCISE_ROUTE）とExerciseRouteRequestContract経由の専用同意フローが必要
-    // （javap逆コンパイルで確認。HealthPermission.getReadPermission()が返す通常のHealthPermission文字列
-    // ではない）。本アプリはルート表示機能自体を実装しないため、READ_EXERCISEのみ追加する。
+    // 通常のHealthPermission文字列ではなく、`androidx.health.action.REQUEST_EXERCISE_ROUTE`という
+    // Intent（ExerciseRouteRequestContract経由）でセッションごとに個別の同意を得る仕組み
+    // （javap逆コンパイルで確認。HealthPermissionクラスに読み取り用のREAD_EXERCISE_ROUTE相当の
+    // 文字列定数は存在しない。PERMISSION_WRITE_EXERCISE_ROUTEはあるが書き込み用で別物）。
+    // 本アプリはルート表示機能自体を実装しないため、READ_EXERCISEのみ追加する。
     val EXERCISE_READ: String = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

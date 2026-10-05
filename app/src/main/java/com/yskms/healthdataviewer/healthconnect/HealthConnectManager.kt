@@ -2405,13 +2405,15 @@ class HealthConnectManager(context: Context) {
     //
     // ExerciseSessionRecordはSleepには無い要素（exerciseType、segments、laps、exerciseRouteResult、
     // title、notes、plannedExerciseSessionId）を持つ、このアプリで最も複雑なRecord型だが、今回はスコープを
-    // 絞った（D-051）。表示するのは開始〜終了時刻・運動時間・exerciseType（ExerciseTypeLabels.kt参照）・
-    // ソースのみで、以下は表示しない。
+    // 絞った（D-051）。表示するのは開始〜終了時刻・運動時間・exerciseType（ExerciseDetailScreen.
+    // exerciseTypeLabelRes()参照）・ソースのみで、以下は表示しない。
     // - segments/laps: 筋トレの種目・レップ数やラップごとの距離など、Session単位の表示に対して
     //   細かすぎる分類（Blood Glucoseのspecimen/mealType等を表示しない判断、D-050(1)と同じ考え方）
-    // - exerciseRouteResult（GPSルート）: `READ_EXERCISE_ROUTE`という別permissionと、
-    //   ExerciseRouteRequestContract経由の専用同意フローが必要（通常のHealthPermissionの許可状態とは
-    //   別立て、javap逆コンパイルで確認）。地図表示機能も要件に無いため完全に対象外とした
+    // - exerciseRouteResult（GPSルート）: 通常のHealthPermission文字列（`READ_EXERCISE`等）ではなく、
+    //   `androidx.health.action.REQUEST_EXERCISE_ROUTE`というIntent（`ExerciseRouteRequestContract`
+    //   経由）でセッションごとに個別の同意を得る仕組み（javap逆コンパイルで確認。`HealthPermission`
+    //   クラスに読み取り用の`READ_EXERCISE_ROUTE`相当の文字列定数は存在しない。`PERMISSION_WRITE_
+    //   EXERCISE_ROUTE`はあるが書き込み用で別物）。地図表示機能も要件に無いため完全に対象外とした
     // - title/notes: アプリ側が自由記述する任意フィールド。表示する場合の方針（nullの扱い等）が
     //   未検討のため見送った
     // - plannedExerciseSessionId: 計画ワークアウト（PlannedExerciseSessionRecordという別のRecord型）

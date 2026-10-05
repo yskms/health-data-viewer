@@ -330,6 +330,16 @@ private fun exerciseTypeLabelRes(exerciseType: Int): Int =
     }
 
 // SleepDetailScreen.SleepRecordRow()と同じ形。exerciseTypeの文言を1行追加する点のみ異なる。
+//
+// **durationはSession区間（startTime〜endTime）の単純な長さで、公式AggregateMetricのEXERCISE_
+// DURATION_TOTALと一致する保証はない**（コードレビュー指摘、要検証）。ExerciseSegmentには
+// EXERCISE_SEGMENT_TYPE_PAUSE/EXERCISE_SEGMENT_TYPE_RESTという休憩中を示す定数が存在し
+// （javap逆コンパイルで確認）、SleepのSLEEP_DURATION_TOTALが覚醒区間を除いた値になっている
+// （D-032、lessons.md 6.9）のと同様に、EXERCISE_DURATION_TOTALもPAUSE/REST区間を除いて計算
+// されている可能性がある。ただし実際の計算はHealth Connectプラットフォーム側（非公開実装）が
+// 行うため、このアプリ側の逆コンパイルでは確認できない。一時停止を含むセッションの実データで
+// Recordsタブの値とChart/ホームカードの値を突き合わせるまで未確認のまま残る
+// （requirements.md §27、lessons.md 6.32）。
 @Composable
 private fun ExerciseRecordRow(record: ExerciseSessionRecord) {
     val context = LocalContext.current
@@ -376,9 +386,19 @@ private fun perDayDuration(
         duration.dividedBy(daysCoveredBy(effectiveStart, bucket.periodEnd))
     }
 
-private data class ExerciseChartPoint(val x: Long, val hours: Double)
+private data class ExerciseChartPoint(val x: Long, val minutes: Double)
 
-// SleepDetailScreen.SleepAggregateChart()と同じ形（合計1系列のみ）。
+// SleepDetailScreen.SleepAggregateChart()とは2点異なる（コードレビュー指摘）。
+// (1) 値がnullのbucket（＝その期間に運動していない日）を`mapNotNull`で除外せず、Duration.ZEROとして
+// 点を必ず打つ。Sleep/Distanceはほぼ毎日値があるため`mapNotNull`で除外しても実質的に影響しないが、
+// ExerciseはD-051(2)の通り運動しない日が混在するのが前提のデータで、除外すると間の空白期間が
+// 折れ線で補間され、実際には運動していない日にも運動があったかのような誤った印象を与える
+// （例: 月曜60分・木曜30分のみの場合、除外すると火・水に運動があったかのような斜線になる）。
+// bucket自体はaggregateGroupByPeriod()が問い合わせ範囲全体に対して隙間なく返すため（値が無い
+// bucketも`result[METRIC]`がnullなだけでbucketのエントリ自体は存在する）、mapNotNullをmapに
+// 変えてZERO埋めするだけで、問い合わせ範囲外（最古レコードより前等）を誤って0件扱いにする心配はない。
+// (2) 単位をhours（小数）ではなくminutes（整数寄りの小数）にする。Exerciseの1日あたりの値は
+// 数分〜数十分程度で、特に月bucketの平均は時間単位だと0.1台の読みにくい小数になるため。
 @Composable
 private fun ExerciseAggregateChart(
     buckets: List<ExerciseAggregateBucket>,
@@ -390,11 +410,10 @@ private fun ExerciseAggregateChart(
     val modelProducer = remember { CartesianChartModelProducer() }
     val points =
         remember(buckets, granularity, denominatorFloor) {
-            buckets.mapNotNull { bucket ->
-                bucket.totalExerciseDuration?.let { duration ->
-                    val normalized = perDayDuration(bucket, granularity, duration, denominatorFloor)
-                    ExerciseChartPoint(x = granularity.xValue(bucket.periodStart), hours = normalized.toMinutes() / 60.0)
-                }
+            buckets.map { bucket ->
+                val duration = bucket.totalExerciseDuration ?: Duration.ZERO
+                val normalized = perDayDuration(bucket, granularity, duration, denominatorFloor)
+                ExerciseChartPoint(x = granularity.xValue(bucket.periodStart), minutes = normalized.toMinutes().toDouble())
             }
         }
 
@@ -408,7 +427,7 @@ private fun ExerciseAggregateChart(
     LaunchedEffect(points) {
         modelProducer.runTransaction {
             lineModel {
-                series(x = points.map { it.x }, y = points.map { it.hours })
+                series(x = points.map { it.x }, y = points.map { it.minutes })
             }
         }
     }

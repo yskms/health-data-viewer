@@ -69,6 +69,7 @@
     <string name="home_blood_glucose_value">%1$d mg/dL</string>
     <string name="home_blood_glucose_delta">vs. previous: %1$s mg/dL</string>
     <string name="home_exercise_title">Exercise</string>
+    <string name="home_exercise_total_notice">Total for this period</string>
     <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
