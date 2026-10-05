@@ -6,6 +6,7 @@ import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
@@ -51,5 +52,10 @@ object HealthConnectPermissions {
     val HRV_READ: String = HealthPermission.getReadPermission(HeartRateVariabilityRmssdRecord::class)
     val OXYGEN_SATURATION_READ: String = HealthPermission.getReadPermission(OxygenSaturationRecord::class)
     val BLOOD_GLUCOSE_READ: String = HealthPermission.getReadPermission(BloodGlucoseRecord::class)
+    // WBS 6.10（Exercise追加、D-051）: ExerciseSessionRecordのGPSルート（exerciseRouteResult）は
+    // 別のpermission（READ_EXERCISE_ROUTE）とExerciseRouteRequestContract経由の専用同意フローが必要
+    // （javap逆コンパイルで確認。HealthPermission.getReadPermission()が返す通常のHealthPermission文字列
+    // ではない）。本アプリはルート表示機能自体を実装しないため、READ_EXERCISEのみ追加する。
+    val EXERCISE_READ: String = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

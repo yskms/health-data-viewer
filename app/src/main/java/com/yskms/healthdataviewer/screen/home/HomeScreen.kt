@@ -47,6 +47,7 @@ import com.yskms.healthdataviewer.healthconnect.BloodGlucoseRecordsResult
 import com.yskms.healthdataviewer.healthconnect.BloodPressureRecordsResult
 import com.yskms.healthdataviewer.healthconnect.BodyFatRecordsResult
 import com.yskms.healthdataviewer.healthconnect.DistanceAggregateTotalResult
+import com.yskms.healthdataviewer.healthconnect.ExerciseAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.HealthConnectAvailability
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
@@ -69,6 +70,7 @@ import com.yskms.healthdataviewer.ui.theme.BloodGlucoseAccent
 import com.yskms.healthdataviewer.ui.theme.BloodPressureAccent
 import com.yskms.healthdataviewer.ui.theme.BodyFatAccent
 import com.yskms.healthdataviewer.ui.theme.DistanceAccent
+import com.yskms.healthdataviewer.ui.theme.ExerciseAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.HrvAccent
 import com.yskms.healthdataviewer.ui.theme.OxygenSaturationAccent
@@ -162,6 +164,10 @@ private data class ActiveCaloriesCardLoad(val period: DashboardPeriod, val resul
 
 private data class TotalCaloriesCardLoad(val period: DashboardPeriod, val result: TotalCaloriesAggregateTotalResult?)
 
+// WBS 6.10（Exercise追加、D-051）: DistanceCardLoadと同じ形（期間合計、Sleepのような平均化はしない。
+// 理由はExerciseAggregateTotalResult.kt参照）。
+private data class ExerciseCardLoad(val period: DashboardPeriod, val result: ExerciseAggregateTotalResult?)
+
 private data class HeartRateCardLoad(val period: DashboardPeriod, val result: HeartRateAggregateSummaryResult?)
 
 // 週/月/年タブは「期間合計 ÷ 経過日数」の単純な1日あたり平均（記録のない日も分母に含む近似。
@@ -194,6 +200,7 @@ fun HomeScreen(
     onOpenHrvGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenOxygenSaturationGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenBloodGlucoseGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenExerciseGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -276,6 +283,7 @@ fun HomeScreen(
                 val hrvGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HRV_READ)
                 val oxygenSaturationGranted = permissionsCheckState.isGranted(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                 val bloodGlucoseGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
+                val exerciseGranted = permissionsCheckState.isGranted(HealthConnectPermissions.EXERCISE_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -292,6 +300,7 @@ fun HomeScreen(
                         hrvGranted,
                         oxygenSaturationGranted,
                         bloodGlucoseGranted,
+                        exerciseGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -311,6 +320,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.HRV_READ)
                                     add(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                                     add(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
+                                    add(HealthConnectPermissions.EXERCISE_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -354,7 +364,9 @@ fun HomeScreen(
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }
 
-                // 10個のLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘）。
+                // 14個のLaunchedEffectとも、再取得開始時に結果をnullへ戻さない（コードレビュー指摘。
+                // WBS 6.10でExerciseを追加した際、この数が実際には13個（HRV/SpO2/Blood Glucose追加分の
+                // 更新漏れ）のまま止まっていたことに気付き、14個に修正した）。
                 // 戻すと、表示指標トグルがOFFの状態で「データなし」と確定していたカードが、画面復帰
                 // （resumeKeyの変化）や期間タブ切り替えのたびに一瞬「読み込み中」として出現してから
                 // また消える、というちらつきが起きる。前回の結果を表示したまま裏で再取得し、新しい
@@ -511,6 +523,16 @@ fun HomeScreen(
                         TotalCaloriesCardLoad(period = selectedPeriod, result = healthConnectManager.readTotalCaloriesAggregateTotal(filter))
                 }
 
+                // Exerciseカード（WBS 6.10、D-051）: Distance/Steps/Caloriesと同じ「期間合計」パターン
+                // （Sleepの「1日あたり平均」ではない理由はExerciseAggregateTotalResult.kt参照）。
+                var exerciseLoad by remember { mutableStateOf<ExerciseCardLoad?>(null) }
+                LaunchedEffect(selectedPeriod, exerciseGranted, historyPermissionGranted, resumeKey) {
+                    if (exerciseGranted != true) return@LaunchedEffect
+                    val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
+                    exerciseLoad =
+                        ExerciseCardLoad(period = selectedPeriod, result = healthConnectManager.readExerciseAggregateTotal(filter))
+                }
+
                 // period違いの結果を弾くガード（Steps/HeartRate/Sleep/Distance/Calories共通）。各Cardの描画と
                 // 「表示指標」での非表示判定（isXxxCardHidden()）の両方がこれを使うため、親で
                 // 一度だけ計算する（コードレビュー指摘: 全カードが非表示になった場合に理由が
@@ -521,6 +543,7 @@ fun HomeScreen(
                 val distanceResult = if (distanceLoad?.period == selectedPeriod) distanceLoad?.result else null
                 val activeCaloriesResult = if (activeCaloriesLoad?.period == selectedPeriod) activeCaloriesLoad?.result else null
                 val totalCaloriesResult = if (totalCaloriesLoad?.period == selectedPeriod) totalCaloriesLoad?.result else null
+                val exerciseResult = if (exerciseLoad?.period == selectedPeriod) exerciseLoad?.result else null
                 val showMetricsWithoutData = settings.showMetricsWithoutData
 
                 val allCardsHidden =
@@ -552,7 +575,8 @@ fun HomeScreen(
                             bloodGlucoseLoad,
                             historyFeatureAvailable,
                             showMetricsWithoutData,
-                        )
+                        ) &&
+                        isExerciseCardHidden(exerciseGranted, exerciseResult, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -655,6 +679,13 @@ fun HomeScreen(
                     historyFeatureAvailable = historyFeatureAvailable,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenBloodGlucoseGraph(historyPermissionGranted) },
+                )
+                ExerciseCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = exerciseGranted,
+                    currentResult = exerciseResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenExerciseGraph(historyPermissionGranted) },
                 )
             }
         }
@@ -836,6 +867,13 @@ private fun isDistanceCardHidden(granted: Boolean?, currentResult: DistanceAggre
         granted == true &&
         currentResult is DistanceAggregateTotalResult.Success &&
         currentResult.totalKilometers == null
+
+// WBS 6.10（Exercise追加、D-051）: isDistanceCardHiddenと同じ形。
+private fun isExerciseCardHidden(granted: Boolean?, currentResult: ExerciseAggregateTotalResult?, showMetricsWithoutData: Boolean): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        currentResult is ExerciseAggregateTotalResult.Success &&
+        currentResult.totalDuration == null
 
 private fun isActiveCaloriesCardHidden(
     granted: Boolean?,
@@ -1515,6 +1553,39 @@ private fun TotalCaloriesCard(
                         text = stringResource(id = R.string.home_total_calories_value, numberFormat.format(total)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
+                }
+            }
+        }
+    }
+}
+
+// WBS 6.10（Exercise追加、D-051）: DistanceCardと同じ形（期間合計をそのまま表示）。duration表示は
+// SleepCardと同じformatSleepDuration()（h:mm）をそのまま再利用する（ファイルをまたいだ複製ではなく
+// 同一ファイル内の既存関数の再利用のため、formatSignedKg()等が複製されている理由とは状況が異なる）。
+@Composable
+private fun ExerciseCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    currentResult: ExerciseAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isExerciseCardHidden(granted, currentResult, showMetricsWithoutData)) return
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_exercise_title),
+        accentColor = ExerciseAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
+            currentResult is ExerciseAggregateTotalResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            currentResult is ExerciseAggregateTotalResult.Success -> {
+                val total = currentResult.totalDuration
+                if (total == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(text = formatSleepDuration(total), style = MaterialTheme.typography.headlineSmall)
                 }
             }
         }

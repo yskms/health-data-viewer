@@ -36,3 +36,9 @@ val OxygenSaturationAccent = Color(0xFF00ACC1)
 // Distance/BodyFatAccent（オレンジ〜黄土）・ActiveCaloriesAccent（オレンジ）のいずれとも異なる
 // オリーブ系（黄緑寄り）にし、既存アクセントカラーとの見分けやすさを確保した。
 val BloodGlucoseAccent = Color(0xFF827717)
+// WBS 6.10（Exercise追加）: 既存12色のうち4色（Sleep・BloodPressure・OxygenSaturation・
+// 残りの青緑〜シアン系）が199〜231度あたりの近い色相に集中している（過去のHRV/SpO2のコードレビューで
+// 「同系統で見分けにくい」と指摘された範囲）ため、より彩度・明度の高い純粋な青（Material Blue 900）に
+// した。既存のどの色とも重ならない最後の未使用枠だが、他の追加時と同様コードレビューで見分けにくいと
+// 指摘されれば変更する前提の暫定選択。
+val ExerciseAccent = Color(0xFF0D47A1)

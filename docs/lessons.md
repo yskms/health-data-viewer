@@ -431,6 +431,13 @@
 -   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の`androidx/health/connect/client/units/BloodGlucose.class`を`grep -a -o`で検索し、`inMilligramsPerDeciliter`/`inMillimolesPerLiter`という文字列を確認。2026-10-04）。コンパイルエラー自体はこのプロジェクトの`compileDebugKotlin`実行結果
 -   **確認日**: 2026-10-04
 
+### 6.32 `ExerciseSessionRecord`には公式`AggregateMetric<Duration>`（`EXERCISE_DURATION_TOTAL`）が存在する。GPSルート（`exerciseRouteResult`）だけは通常のHealthPermissionとは別の権限・同意フローが必要
+
+-   **知見**: WBS 6.10でExerciseを実装するにあたり、Body Fat〜Blood Glucose（lessons.md 6.27・6.28・6.30）で続いた「公式AggregateMetricが存在しない」という結果を機械的に期待せず、同じ手順（`javap -p`での逆コンパイル）で`ExerciseSessionRecord`を確認したところ、今回は`EXERCISE_DURATION_TOTAL`（`AggregateMetric<Duration>`）が存在することが分かった。`SleepSessionRecord.SLEEP_DURATION_TOTAL`と同じ構造（IntervalRecord＋Duration合計1系列）で、Sleepの実装パターンをそのまま流用できた。あわせて`ExerciseSessionRecord`のクラス構成を確認したところ、`exerciseRouteResult`（GPSルート）は`ExerciseRouteRequestContract`・`ExerciseRouteRequestAppContract`という専用の`ActivityResultContract`経由で読み取る設計になっており、`HealthPermission.getReadPermission()`が返す通常の権限文字列（`READ_EXERCISE`等）とは別物だった。`HealthPermission`クラスの文字列定数を検索しても`READ_EXERCISE_ROUTE`に相当する読み取り用の定数は見当たらず（`WRITE_EXERCISE_ROUTE`はある）、ルートの読み取りはセッションごとにユーザーの同意を求める別フロー（Health Connect公式のレコード単位の同意UI）であることが推測される
+-   **Viewerへの適用**: `HealthConnectManager.readExerciseAggregates()`/`readExerciseAggregateTotal()`/`exerciseSessionRecordsPagingSource()`/`findOldestExerciseSessionRecordTime()`は、いずれも`readSleepAggregates()`等のSleep用関数をそのまま複製した（D-051）。本アプリはGPSルート表示機能自体を実装しないため、`HealthConnectPermissions.EXERCISE_READ`（`READ_EXERCISE`のみ）を追加し、ルート用の別権限・同意フローには一切触れていない。将来Exerciseのルート表示を追加する場合、通常の権限リクエストに`READ_EXERCISE_ROUTE`を足すだけでは済まず、`ExerciseRouteRequestContract`経由の専用フローの実装が必要になる点に注意
+-   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の`ExerciseSessionRecord`・`ExerciseSegment`・`ExerciseLap`・`ExerciseRoute`関連クラスを`javap -p`で出力、および`HealthPermission.class`を`strings`/`grep -a`で検索。2026-10-05）。実データでの動作確認はPixel 11実機ではなくAndroid 16（API 36）エミュレータ（`Filto_API_36` AVD）で行い、`pm grant`での権限付与とホーム画面・Exercise詳細画面（Chart/Records/Sourcesの空状態）がクラッシュなく動作することを確認したのみで、Exerciseの実データでの検証（exerciseTypeラベル・運動時間フォーマット・Chart描画）は行っていない
+-   **確認日**: 2026-10-05
+
 ## 7. グラフ描画（Vico、WBS 2.4）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる

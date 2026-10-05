@@ -13,6 +13,7 @@ import androidx.health.connect.client.records.BloodGlucoseRecord
 import androidx.health.connect.client.records.BloodPressureRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
+import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
@@ -2388,6 +2389,145 @@ class HealthConnectManager(context: Context) {
             TotalCaloriesAggregateTotalResult.Failure
         } catch (e: SecurityException) {
             TotalCaloriesAggregateTotalResult.Failure
+        }
+
+    // WBS 6.10（優先度Aのデータ型を順次対応）: Exerciseを追加（要件§16優先度Aの最後の1つ、D-051）。
+    // ExerciseSessionRecordはSleepSessionRecordと同じIntervalRecord（開始〜終了時刻を持つSession型）で、
+    // 公式AggregateMetric<Duration>のEXERCISE_DURATION_TOTALが存在する（javap逆コンパイルで確認。
+    // Body Fat/HRV/SpO2/Blood Glucoseのような「公式Aggregateが無い」ケースではない）。そのため
+    // readSleepAggregates()/sleepSessionRecordsPagingSource()/findOldestSleepSessionRecordTime()と
+    // 同じ形でそのまま実装する。
+    //
+    // requirements.md §22.2のExercise行の重複処理欄は「—」のまま確定させていない。Steps/Distance/
+    // Caloriesのような「あり（Activity）」、SleepのようなAggregateMetric名からの示唆（SLEEP_DURATION_
+    // TOTALがSleep用と分かる）のいずれにも相当する公式ドキュメント上の根拠が見当たらず、「未検証」
+    // ではなく分類自体が公式に示されていないため、要検証のまま残す（D-051）。
+    //
+    // ExerciseSessionRecordはSleepには無い要素（exerciseType、segments、laps、exerciseRouteResult、
+    // title、notes、plannedExerciseSessionId）を持つ、このアプリで最も複雑なRecord型だが、今回はスコープを
+    // 絞った（D-051）。表示するのは開始〜終了時刻・運動時間・exerciseType（ExerciseTypeLabels.kt参照）・
+    // ソースのみで、以下は表示しない。
+    // - segments/laps: 筋トレの種目・レップ数やラップごとの距離など、Session単位の表示に対して
+    //   細かすぎる分類（Blood Glucoseのspecimen/mealType等を表示しない判断、D-050(1)と同じ考え方）
+    // - exerciseRouteResult（GPSルート）: `READ_EXERCISE_ROUTE`という別permissionと、
+    //   ExerciseRouteRequestContract経由の専用同意フローが必要（通常のHealthPermissionの許可状態とは
+    //   別立て、javap逆コンパイルで確認）。地図表示機能も要件に無いため完全に対象外とした
+    // - title/notes: アプリ側が自由記述する任意フィールド。表示する場合の方針（nullの扱い等）が
+    //   未検討のため見送った
+    // - plannedExerciseSessionId: 計画ワークアウト（PlannedExerciseSessionRecordという別のRecord型）
+    //   との紐付け。計画ワークアウト自体を実装していないため対応しようがない
+    fun exerciseSessionRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<ExerciseSessionRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = ExerciseSessionRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestSleepSessionRecordTime()と同じ理由・同じ形。SleepSessionRecordと同じくIntervalRecord
+    // 共通のstartTimeを使う。
+    suspend fun findOldestExerciseSessionRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = ExerciseSessionRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // readSleepAggregates()と同じ形。metricsをEXERCISE_DURATION_TOTALに差し替えるだけ。
+    suspend fun readExerciseAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): ExerciseAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                ExerciseAggregateBucket(
+                    periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
+                    totalExerciseDuration = grouped.result[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL],
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> ExerciseAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> ExerciseAggregatesResult.Failure
+        }
+    }
+
+    // WBS 6.10: ホーム画面のExerciseカード用。readDistanceAggregateTotal()と同じ形（bucket分割なしの
+    // 単発Aggregate）。Sleepカード（期間内の1日あたり平均、readSleepAggregateSummary()）ではなく
+    // Distance/Steps/Caloriesと同じ「期間合計」を採用した理由はExerciseAggregateTotalResult.ktのコメント
+    // 参照（D-051）。
+    suspend fun readExerciseAggregateTotal(timeRangeFilter: TimeRangeFilter): ExerciseAggregateTotalResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(ExerciseSessionRecord.EXERCISE_DURATION_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            ExerciseAggregateTotalResult.Success(totalDuration = result[ExerciseSessionRecord.EXERCISE_DURATION_TOTAL])
+        } catch (e: RemoteException) {
+            ExerciseAggregateTotalResult.Failure
+        } catch (e: IOException) {
+            ExerciseAggregateTotalResult.Failure
+        } catch (e: SecurityException) {
+            ExerciseAggregateTotalResult.Failure
         }
 
     // WBS 6.4（WBS 6.10でDistance・Active Calories・Total Calories、Resting Heart Rateも追加）:
