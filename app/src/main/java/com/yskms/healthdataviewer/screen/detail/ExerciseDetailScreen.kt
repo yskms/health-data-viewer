@@ -49,6 +49,7 @@ import com.yskms.healthdataviewer.healthconnect.ExerciseAggregatesResult
 import com.yskms.healthdataviewer.healthconnect.HealthConnectManager
 import com.yskms.healthdataviewer.healthconnect.OldestRecordResult
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -221,6 +222,7 @@ fun ExerciseDetailScreen(
                                     buckets = currentResult.buckets,
                                     granularity = granularity,
                                     denominatorFloor = currentExerciseLoad.denominatorFloor,
+                                    oldestRecordTime = (oldestResult as? OldestRecordResult.Success)?.time,
                                     modifier =
                                         Modifier.fillMaxWidth().height(
                                             detailChartHeight(
@@ -388,8 +390,8 @@ private fun perDayDuration(
 
 private data class ExerciseChartPoint(val x: Long, val minutes: Double)
 
-// SleepDetailScreen.SleepAggregateChart()とは2点異なる（コードレビュー指摘、2回目のレビューで
-// さらに訂正）。
+// SleepDetailScreen.SleepAggregateChart()とは3点異なる（コードレビュー指摘、2回目・3回目の
+// レビューでさらに訂正）。
 // (1) 値がnullのbucket（＝その期間に運動していない日）を`mapNotNull`で除外せず、Duration.ZEROとして
 // 点を必ず打つ。Sleep/Distanceはほぼ毎日値があるため`mapNotNull`で除外しても実質的に影響しないが、
 // ExerciseはD-051(2)の通り運動しない日が混在するのが前提のデータで、除外すると間の空白期間が
@@ -405,11 +407,24 @@ private data class ExerciseChartPoint(val x: Long, val minutes: Double)
 // 以前と同じ空状態の案内が出る。
 // (2) 単位をhours（小数）ではなくminutes（小数）にする。Exerciseの1日あたりの値は数分〜数十分程度で、
 // 特に月bucketの平均は時間単位だと0.1台の読みにくい小数になるため。
+// (3) **(1)のZERO埋めは、範囲の一部にしか運動データが無い場合（WEEK〜YEARのトレイリング期間で、
+// 最古レコードより前の部分を含む範囲を問い合わせた場合）、最古レコードより前のbucketまで「運動0分」
+// として描いてしまう（3回目のレビュー指摘）。最古レコードより前は「運動していない」のではなく
+// 「そもそも記録されていない」ため、他の日と同列の0分点にするのは不正確**。oldestRecordTime
+// （呼び出し元がfindOldestExerciseSessionRecordTime()で取得済み、ALL以外の期間でも常に取得している）
+// より後ろ（bucket.periodEndが同時刻以降）のbucketのみ対象にし、それより前のbucketはmapNotNullで
+// 除外する（除外した場合の見え方は(1)が無かった場合と同じ＝前後の点が線でつながるが、この範囲は
+// 「運動していない」という確定情報ではなく「不明」なので、既存のSleep/Distance等と同じ扱いに留める）。
+// なお履歴読み取り権限が無く問い合わせ範囲が狭められるケース（readWithHistoryFallback()）は、
+// bucketの個数自体が実際に読めた範囲に合わせて短くなる（SecurityExceptionで全く別のfilterに
+// 差し替えて再実行するため、元の範囲の前半がnullのbucketとして残ることはない）ため、この対応は不要
+// （3回目のレビュー指摘を受けて確認済み）。
 @Composable
 private fun ExerciseAggregateChart(
     buckets: List<ExerciseAggregateBucket>,
     granularity: BucketGranularity,
     denominatorFloor: LocalDateTime?,
+    oldestRecordTime: Instant?,
     modifier: Modifier = Modifier,
 ) {
     val locale = LocalLocale.current.platformLocale
@@ -423,8 +438,13 @@ private fun ExerciseAggregateChart(
     }
 
     val points =
-        remember(buckets, granularity, denominatorFloor) {
-            buckets.map { bucket ->
+        remember(buckets, granularity, denominatorFloor, oldestRecordTime) {
+            buckets.mapNotNull { bucket ->
+                if (oldestRecordTime != null &&
+                    bucket.periodEnd.atZone(ZoneId.systemDefault()).toInstant().isBefore(oldestRecordTime)
+                ) {
+                    return@mapNotNull null
+                }
                 val duration = bucket.totalExerciseDuration ?: Duration.ZERO
                 val normalized = perDayDuration(bucket, granularity, duration, denominatorFloor)
                 // toMinutes()（整数切り捨て）ではなくtoMillis()から計算し、小数の端数を残す

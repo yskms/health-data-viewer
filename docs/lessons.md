@@ -446,8 +446,7 @@
 -   **残る未確認事項**: `ExerciseSegment`のPAUSE/REST区間が`EXERCISE_DURATION_TOTAL`の計算から除外されているか（lessons.md 6.32の別件）は、この確認方法（Chart・Recordsの目視比較）では判別できず、未確認のまま残る。ExerciseAccent（若草色）とStepsAccent（緑）の見分けやすさも実機で目視したが、0xFF1B8A3D周りのコメント参照の通り判断が割れる程度の近さで、確定的な結論は出していない
 -   **根拠**: 実機確認（Pixel 11、ユーザー提供の実機、実データ。READ_EXERCISE権限を`pm grant`で付与。2026-10-05）。logcat確認（`adb logcat -d --pid`で本アプリのプロセスに絞り、fatal/exception/errorを検索して該当なしを確認）
 -   **確認日**: 2026-10-05
-
-## 7. グラフ描画（Vico、WBS 2.4）
+-   **追記（2026-10-06、3回目のコードレビュー対応）**: 上記(1)のZERO埋めが、範囲の一部（最古レコードより前を含むトレイリング期間・Custom範囲）にしか運動データが無い場合、最古レコードより前のbucketまで「運動0分」として描いてしまう問題が見つかった。`ExerciseAggregateChart`に`oldestRecordTime`パラメータを追加し、`bucket.periodEnd`が最古レコードより前のbucketは0分埋めせずmapNotNullで除外する（プロット対象外にする＝最古レコード以降とは異なる扱いにする）よう修正した。Pixel 11実機でCustom期間（2020/01/01〜2026/10/06、最古レコード2023/04/17）を指定して確認した結果、グラフが2020年からではなく実際に2023年4月から描画され、それより前は0分線にもならず単純に描画対象外になることを確認した。履歴読み取り権限が無く範囲が狭められるケースは、`readWithHistoryFallback()`がSecurityException時に全く別の（狭い）filterで再実行する仕組みのため同様の対応は不要（D-051参照）
 
 ### 7.1 Vico 3.xはMaterial3のカラースキームに自動追従できる
 
