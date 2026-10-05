@@ -207,32 +207,49 @@ fun ExerciseDetailScreen(
                                 }
                             }
                             is ExerciseAggregatesResult.Success -> {
-                                val granularity = currentExerciseLoad.granularity
-                                val aggregationLabelRes =
-                                    if (granularity == BucketGranularity.DAY) {
-                                        R.string.detail_exercise_aggregation_total
-                                    } else {
-                                        R.string.detail_exercise_aggregation_avg_per_day
+                                // コードレビュー指摘: 最古レコードの取得（retryKeyのLaunchedEffect）と
+                                // グラフ用Aggregateの取得（period等のLaunchedEffect）はALL以外の期間では
+                                // 並行して走り、後者が先に終わるとoldestResultがまだnullのままChartが
+                                // 一瞬描画される。oldestRecordTimeがnullだと最古レコードより前のbucketを
+                                // 除外できず（ExerciseAggregateChartのコメント参照）、その一瞬だけ最古
+                                // レコードより前も0分埋めされて見える可能性がある。oldestResultが届くまで
+                                // Chartをローディング表示のまま待たせることで防ぐ（ALLはaggregatesLoadの
+                                // 生成自体がoldestGateForAllの成功を前提にしているため、この時点で
+                                // oldestResultは既にSuccess/Failureのどちらかになっており影響しない）。
+                                // findOldestExerciseSessionRecordTime()自体がFailureになった場合はnullでは
+                                // なくFailureが入るため待ち続けず、oldestRecordTime=nullのまま進む
+                                // （この場合はOldestRecordInfo()がエラー表示するため実害は小さい）。
+                                if (oldestResult == null) {
+                                    CircularProgressIndicator()
+                                    Text(text = stringResource(id = R.string.detail_loading))
+                                } else {
+                                    val granularity = currentExerciseLoad.granularity
+                                    val aggregationLabelRes =
+                                        if (granularity == BucketGranularity.DAY) {
+                                            R.string.detail_exercise_aggregation_total
+                                        } else {
+                                            R.string.detail_exercise_aggregation_avg_per_day
+                                        }
+                                    Text(text = stringResource(id = aggregationLabelRes, stringResource(id = granularity.granularityLabelRes())))
+                                    if (currentResult.historyLimited) {
+                                        Text(text = stringResource(id = R.string.detail_history_limited_notice))
                                     }
-                                Text(text = stringResource(id = aggregationLabelRes, stringResource(id = granularity.granularityLabelRes())))
-                                if (currentResult.historyLimited) {
-                                    Text(text = stringResource(id = R.string.detail_history_limited_notice))
-                                }
-                                ExerciseAggregateChart(
-                                    buckets = currentResult.buckets,
-                                    granularity = granularity,
-                                    denominatorFloor = currentExerciseLoad.denominatorFloor,
-                                    oldestRecordTime = (oldestResult as? OldestRecordResult.Success)?.time,
-                                    modifier =
-                                        Modifier.fillMaxWidth().height(
-                                            detailChartHeight(
-                                                fullScreenChart = fullScreenChart,
-                                                availableHeight = availableHeight,
-                                                historyLimited = currentResult.historyLimited,
-                                                isCustomPeriod = period == GraphPeriod.CUSTOM,
+                                    ExerciseAggregateChart(
+                                        buckets = currentResult.buckets,
+                                        granularity = granularity,
+                                        denominatorFloor = currentExerciseLoad.denominatorFloor,
+                                        oldestRecordTime = (oldestResult as? OldestRecordResult.Success)?.time,
+                                        modifier =
+                                            Modifier.fillMaxWidth().height(
+                                                detailChartHeight(
+                                                    fullScreenChart = fullScreenChart,
+                                                    availableHeight = availableHeight,
+                                                    historyLimited = currentResult.historyLimited,
+                                                    isCustomPeriod = period == GraphPeriod.CUSTOM,
+                                                ),
                                             ),
-                                        ),
-                                )
+                                    )
+                                }
                             }
                         }
                     }
@@ -417,8 +434,11 @@ private data class ExerciseChartPoint(val x: Long, val minutes: Double)
 // 「運動していない」という確定情報ではなく「不明」なので、既存のSleep/Distance等と同じ扱いに留める）。
 // なお履歴読み取り権限が無く問い合わせ範囲が狭められるケース（readWithHistoryFallback()）は、
 // bucketの個数自体が実際に読めた範囲に合わせて短くなる（SecurityExceptionで全く別のfilterに
-// 差し替えて再実行するため、元の範囲の前半がnullのbucketとして残ることはない）ため、この対応は不要
-// （3回目のレビュー指摘を受けて確認済み）。
+// 差し替えて再実行するため、元の範囲の前半がnullのbucketとして残ることはない）ため、この対応は不要。
+// 権限が無い状態で30日より前を読むとSecurityExceptionになること（lessons.md 6.1）、`pm revoke`で
+// 実際にこのフォールバック経路に入り、別の狭いfilterで正しく再実行されることを確認済み（ただし1M・
+// 日bucketでの確認であり、ALL・月bucketでのフォールバックはlessons.md 7.5の既知の制約が残る点は
+// このExercise固有の対応では未確認、lessons.md 7.5(c)参照）。
 @Composable
 private fun ExerciseAggregateChart(
     buckets: List<ExerciseAggregateBucket>,
