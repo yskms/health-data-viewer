@@ -388,17 +388,23 @@ private fun perDayDuration(
 
 private data class ExerciseChartPoint(val x: Long, val minutes: Double)
 
-// SleepDetailScreen.SleepAggregateChart()とは2点異なる（コードレビュー指摘）。
+// SleepDetailScreen.SleepAggregateChart()とは2点異なる（コードレビュー指摘、2回目のレビューで
+// さらに訂正）。
 // (1) 値がnullのbucket（＝その期間に運動していない日）を`mapNotNull`で除外せず、Duration.ZEROとして
 // 点を必ず打つ。Sleep/Distanceはほぼ毎日値があるため`mapNotNull`で除外しても実質的に影響しないが、
 // ExerciseはD-051(2)の通り運動しない日が混在するのが前提のデータで、除外すると間の空白期間が
 // 折れ線で補間され、実際には運動していない日にも運動があったかのような誤った印象を与える
 // （例: 月曜60分・木曜30分のみの場合、除外すると火・水に運動があったかのような斜線になる）。
-// bucket自体はaggregateGroupByPeriod()が問い合わせ範囲全体に対して隙間なく返すため（値が無い
-// bucketも`result[METRIC]`がnullなだけでbucketのエントリ自体は存在する）、mapNotNullをmapに
-// 変えてZERO埋めするだけで、問い合わせ範囲外（最古レコードより前等）を誤って0件扱いにする心配はない。
-// (2) 単位をhours（小数）ではなくminutes（整数寄りの小数）にする。Exerciseの1日あたりの値は
-// 数分〜数十分程度で、特に月bucketの平均は時間単位だと0.1台の読みにくい小数になるため。
+// **初版では「bucket自体はaggregateGroupByPeriod()が隙間なく返すため安全」と断定していたが、
+// これはlessons.md 7.2が明示的に「未検証」としている前提を無根拠に確定扱いしてしまっていた
+// という指摘を受けた**。実際にbucketが隙間なく返るかどうかに関わらずこの実装が正しく動くよう、
+// 代わりに「range全体に運動データが1件も無い（＝全bucketのtotalExerciseDurationがnull）」場合を
+// 下記で明示的に判定し、その場合は通常の0分埋めグラフではなくdetail_empty（レコードが無い旨の
+// 案内）を表示するようにした。これにより、bucketが密に返る場合（0分埋めの折れ線が増える）・
+// 疎にしか返らない場合（元々mapNotNullでも同じ結果）のどちらでも、「運動データが全く無い」利用者には
+// 以前と同じ空状態の案内が出る。
+// (2) 単位をhours（小数）ではなくminutes（小数）にする。Exerciseの1日あたりの値は数分〜数十分程度で、
+// 特に月bucketの平均は時間単位だと0.1台の読みにくい小数になるため。
 @Composable
 private fun ExerciseAggregateChart(
     buckets: List<ExerciseAggregateBucket>,
@@ -408,21 +414,25 @@ private fun ExerciseAggregateChart(
 ) {
     val locale = LocalLocale.current.platformLocale
     val modelProducer = remember { CartesianChartModelProducer() }
-    val points =
-        remember(buckets, granularity, denominatorFloor) {
-            buckets.map { bucket ->
-                val duration = bucket.totalExerciseDuration ?: Duration.ZERO
-                val normalized = perDayDuration(bucket, granularity, duration, denominatorFloor)
-                ExerciseChartPoint(x = granularity.xValue(bucket.periodStart), minutes = normalized.toMinutes().toDouble())
-            }
-        }
 
-    if (points.isEmpty()) {
+    if (buckets.all { it.totalExerciseDuration == null }) {
         Box(modifier = modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(text = stringResource(id = R.string.detail_empty))
         }
         return
     }
+
+    val points =
+        remember(buckets, granularity, denominatorFloor) {
+            buckets.map { bucket ->
+                val duration = bucket.totalExerciseDuration ?: Duration.ZERO
+                val normalized = perDayDuration(bucket, granularity, duration, denominatorFloor)
+                // toMinutes()（整数切り捨て）ではなくtoMillis()から計算し、小数の端数を残す
+                // （コードレビュー指摘: 月bucketの1日あたり平均は60分未満になることが多く、
+                // 切り捨てると実際には運動した月でも0分に潰れ、ZERO埋め（上記(1)）と区別できなくなる）。
+                ExerciseChartPoint(x = granularity.xValue(bucket.periodStart), minutes = normalized.toMillis() / 60_000.0)
+            }
+        }
 
     LaunchedEffect(points) {
         modelProducer.runTransaction {
