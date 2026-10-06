@@ -423,6 +423,8 @@
 -   **Viewerへの適用**: `HealthConnectManager.readOxygenSaturationAggregates()`は`readBodyFatAggregates()`のロジック（タイムゾーンオフセットの広げ幅・境界クランプを含む）をそのまま複製し、`record.percentage.value`を使うだけで実装した（D-049(2)）。Blood Glucose実装時は、AggregateMetricの有無チェック自体は本件で確定済みのため省略でき、記録頻度確認から始められる。「データとアクセス」画面に型が出ないことをもって「このアプリの実装・権限が間違っている」と誤診断しないこと（本タスクでは権限ダイアログ自体は正しく「バイタル」カテゴリ内「酸素飽和度」と表示されており、問題はこのアプリ側ではなくHealth Connect内のデータの有無だった）
 -   **根拠**: 実機非依存の逆コンパイル確認（`connect-client-1.1.0-api.jar`の全クラスを`javap -p -c`で出力し、`AggregateMetric<Percentage>`・`AggregateMetric<BloodGlucose>`のシグネチャで`grep`検索。2026-10-04）。「データとアクセス」画面の挙動はPixel 11実機1台のみでの観察（ユーザーがHealthアプリ側のHealth Connect同期設定を確認・変更した前後で比較し、同じタイミングで「呼吸数」は新規に表示されるようになった一方、「血中酸素飽和度」は表示されないままだったことを確認）
 -   **確認日**: 2026-10-04
+-   **追記（2026-10-06、SpO2が出ない原因）**: Fitbit Inspire 3 + Google Healthアプリの端末で、Googleのアプリには血中酸素（ウェルネス値）が表示されるのに、Health Connectの「データとアクセス」にも本アプリにも出ない事象があった。原因は本アプリの権限・実装ではなく、書き込み元側にある。Google Healthアプリのヘルプ「How do I use Health Connect with the Google Health app?」では、血中酸素飽和度（Oxygen saturation）は**読み取る**データ型にのみ載っており、**書き込む**データ型（Vitalsは皮膚温・血糖・心拍数・HRV・呼吸数・安静時心拍数）には載っていない。つまりGoogle Health（Fitbit）自身はSpO2をHealth Connectへ書き出さない。Googleのアプリ上で血中酸素が見えるのは、デバイスから同社側へ直接同期した値を表示しているためで、Health Connectを経由していない。Health Connect本体の権限画面で書き込み権限が許可済みでも、実際に書き込まれなければレコードは0件のまま（上記のとおり0件の型は「データとアクセス」にも出ない）。上の「呼吸数は出るが血中酸素は出ない」という観察とも整合する。Fitbit系のユーザーでSpO2が表示されない問い合わせを受けたら、権限・実装の不具合を疑う前にこの点を確認する。ストア文言・FAQでも、Fitbit等のSpO2が表示される印象を与えないこと
+    -   **根拠区分**: 公式（ヘルプの記載）＋実機確認（Inspire 3、ユーザー観察）。ヘルプの表はWebFetchの要約経由と検索結果の2経路で一致を確認したが、原文の表の目視確認はしていない。Google Health側の更新で書き込み対象が増える可能性はある（要再確認）
 
 ### 6.31 `BloodGlucose`型のKotlinプロパティ名も、Energy/Pressure型と同じくin接頭辞付き（`inMilligramsPerDeciliter`/`inMillimolesPerLiter`）。javapのメソッド名からそのままプロパティ名を推測し、実際にコンパイルエラーになった
 
