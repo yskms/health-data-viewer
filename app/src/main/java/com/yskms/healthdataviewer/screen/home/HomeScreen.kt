@@ -1,6 +1,7 @@
 package com.yskms.healthdataviewer.screen.home
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -54,7 +55,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.HrvDailySummary
 import com.yskms.healthdataviewer.healthconnect.HrvHomeSummaryResult
-import com.yskms.healthdataviewer.healthconnect.OxygenSaturationRecordsResult
+import com.yskms.healthdataviewer.healthconnect.OxygenSaturationHomeSummaryResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.RestingHeartRateRecordsResult
 import com.yskms.healthdataviewer.healthconnect.SleepAggregateSummaryResult
@@ -417,14 +418,15 @@ fun HomeScreen(
                     hrvLoad = healthConnectManager.readHrvHomeSummary(historyPermissionGranted = historyPermissionGranted)
                 }
 
-                // Oxygen Saturation（SpO2）カード（WBS 6.10）: Weight/BodyFatと同じ「最新値＋前回比」
-                // パターン。採用経緯はHealthConnectManager.oxygenSaturationRecordsPagingSource()直前の
-                // コメント参照（実機でSpO2の記録頻度を確認できなかったため低頻度想定で暫定確定、D-049）。
-                var oxygenSaturationLoad by remember { mutableStateOf<OxygenSaturationRecordsResult?>(null) }
+                // Oxygen Saturation（SpO2）カード（WBS 6.10→D-052）: 当初はWeight/BodyFatと同じ
+                // 「最新値＋前回比」パターンを低頻度想定で暫定確定したが（D-049）、実データで1分間隔の
+                // 連続サンプルと判明し前回比の意味が薄かったため、HRVと同じ「最新レコードがある日の
+                // 平均＋前日比」に置き換えた（readOxygenSaturationHomeSummary()参照）。
+                var oxygenSaturationLoad by remember { mutableStateOf<OxygenSaturationHomeSummaryResult?>(null) }
                 LaunchedEffect(oxygenSaturationGranted, historyPermissionGranted, resumeKey) {
                     if (oxygenSaturationGranted != true) return@LaunchedEffect
                     oxygenSaturationLoad =
-                        healthConnectManager.findLatestOxygenSaturationRecords(limit = 2, historyPermissionGranted = historyPermissionGranted)
+                        healthConnectManager.readOxygenSaturationHomeSummary(historyPermissionGranted = historyPermissionGranted)
                 }
 
                 // Blood Glucoseカード（WBS 6.10、D-050）: Weight/BodyFat/SpO2と同じ「最新値＋前回比」
@@ -820,17 +822,18 @@ private fun isHrvCardHidden(
         load.latestDay == null &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
-// isBodyFatCardHidden()と同じ理由・同じ形（SpO2もWeight/BodyFatと同じ「最新値＋前回比」パターンのため）。
+// isHrvCardHidden()と同じ理由・同じ形（D-052でSpO2もカード方式を「最新レコードがある日の平均＋
+// 前日比」に変更したため、「データが無い」の判定もrecords.isEmpty()ではなくlatestDay == nullで行う）。
 private fun isOxygenSaturationCardHidden(
     granted: Boolean?,
-    load: OxygenSaturationRecordsResult?,
+    load: OxygenSaturationHomeSummaryResult?,
     historyFeatureAvailable: Boolean?,
     showMetricsWithoutData: Boolean,
 ): Boolean =
     !showMetricsWithoutData &&
         granted == true &&
-        load is OxygenSaturationRecordsResult.Success &&
-        load.records.isEmpty() &&
+        load is OxygenSaturationHomeSummaryResult.Success &&
+        load.latestDay == null &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
 // isBodyFatCardHidden()と同じ理由・同じ形（Blood GlucoseもWeight/BodyFat/SpO2と同じ「最新値＋前回比」
@@ -916,17 +919,18 @@ private fun LatestRecordDateText(time: Instant, zoneOffset: ZoneOffset?) {
     Text(text = stringResource(id = R.string.home_latest_record_date, formattedDate), style = MaterialTheme.typography.bodySmall)
 }
 
-// WBS 6.11（D-048）: HrvCardの見出し（latestDay.average）がどの日を集計した値かを示す。
-// LatestRecordDateText()と似た役割だが、個別レコードの記録日ではなく「複数レコードを平均した
-// 対象日」を示すため意味が異なり、専用の文言（home_hrv_summary_date）を使う。
+// WBS 6.11（D-048）、D-052: HrvCard・OxygenSaturationCardの見出し（latestDay.average）がどの日を
+// 集計した値かを示す。LatestRecordDateText()と似た役割だが、個別レコードの記録日ではなく「複数
+// レコードを平均した対象日」を示すため意味が異なり、専用の文言（home_hrv_summary_date、
+// home_oxygen_saturation_summary_date）を使う。
 @Composable
-private fun HrvSummaryDateText(date: LocalDate) {
+private fun SummaryDateText(date: LocalDate, @StringRes textRes: Int) {
     val locale = LocalLocale.current.platformLocale
     val formattedDate =
         remember(date, locale) {
             DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM).withLocale(locale).format(date)
         }
-    Text(text = stringResource(id = R.string.home_hrv_summary_date, formattedDate), style = MaterialTheme.typography.bodySmall)
+    Text(text = stringResource(id = textRes, formattedDate), style = MaterialTheme.typography.bodySmall)
 }
 
 @Composable
@@ -1220,7 +1224,7 @@ private fun HrvCard(
                         text = stringResource(id = R.string.home_hrv_value, String.format(locale, "%.2f", latestDay.average)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
-                    HrvSummaryDateText(date = latestDay.date)
+                    SummaryDateText(date = latestDay.date, textRes = R.string.home_hrv_summary_date)
                     Text(
                         text =
                             pluralStringResource(
@@ -1302,12 +1306,16 @@ private fun BodyFatCard(
     }
 }
 
-// BodyFatCard()と同じ形（SpO2もOxygenSaturationRecordと同じ単一時刻・単一値の構造のため）。
+// D-052: 当初はBodyFatCard()と同じ「最新値＋前回比」だったが、SpO2の実際の記録頻度（1分間隔の
+// 連続サンプル、約200件/日、lessons.md 6.30）では前回比が「直近1分の値とその1分前の値の差」という
+// 意味の薄い値になっていたため、HrvCard()と同じ「最新レコードがある日の平均＋前日比」（件数・最小〜
+// 最大も添える）に置き換えた。Percentage.valueは既に0〜100スケールのため、HrvCard()と違い単位変換は
+// 不要（ただし%の文言はhome_oxygen_saturation_valueと同様、リテラルの%を文言側で付ける）。
 @Composable
 private fun OxygenSaturationCard(
     permissionsCheckState: PermissionsCheckState,
     granted: Boolean?,
-    load: OxygenSaturationRecordsResult?,
+    load: OxygenSaturationHomeSummaryResult?,
     historyFeatureAvailable: Boolean?,
     showMetricsWithoutData: Boolean,
     onClick: () -> Unit,
@@ -1322,27 +1330,39 @@ private fun OxygenSaturationCard(
         when {
             granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
             load == null -> Text(text = stringResource(id = R.string.home_loading))
-            load is OxygenSaturationRecordsResult.Failure -> Text(text = stringResource(id = R.string.home_error))
-            load is OxygenSaturationRecordsResult.Success -> {
-                val records = load.records
-                val latest = records.firstOrNull()
-                if (latest == null) {
+            load is OxygenSaturationHomeSummaryResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            load is OxygenSaturationHomeSummaryResult.Success -> {
+                val latestDay = load.latestDay
+                if (latestDay == null) {
                     Text(text = stringResource(id = R.string.home_no_data))
                 } else {
                     Text(
-                        text = stringResource(id = R.string.home_oxygen_saturation_value, String.format(locale, "%.2f", latest.percentage.value)),
+                        text = stringResource(id = R.string.home_oxygen_saturation_value, String.format(locale, "%.2f", latestDay.average)),
                         style = MaterialTheme.typography.headlineSmall,
                     )
-                    LatestRecordDateText(time = latest.time, zoneOffset = latest.zoneOffset)
-                    val previous = records.getOrNull(1)
-                    if (previous != null) {
-                        val diffPercent = latest.percentage.value - previous.percentage.value
+                    SummaryDateText(date = latestDay.date, textRes = R.string.home_oxygen_saturation_summary_date)
+                    Text(
+                        text =
+                            pluralStringResource(
+                                id = R.plurals.home_oxygen_saturation_count_range,
+                                count = latestDay.count,
+                                latestDay.count,
+                                String.format(locale, "%.2f", latestDay.min),
+                                String.format(locale, "%.2f", latestDay.max),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    val previousDay = load.previousDay
+                    if (previousDay != null) {
+                        val diffPercent = latestDay.average - previousDay.average
                         Text(
                             text = stringResource(id = R.string.home_oxygen_saturation_delta, formatSignedPercent(diffPercent, locale)),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
+                // HrvCard()と同じ理由（期間タブに依存しないカードのため、DashboardPeriod.isHistoryLimited()
+                // では検知できない）。
                 if (load.historyLimited && historyFeatureAvailable != false) {
                     Text(text = stringResource(id = R.string.home_history_limited_notice), style = MaterialTheme.typography.bodySmall)
                 }

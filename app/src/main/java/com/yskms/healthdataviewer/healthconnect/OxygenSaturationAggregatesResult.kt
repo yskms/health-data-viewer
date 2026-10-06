@@ -9,11 +9,16 @@ import java.time.LocalDateTime
 //
 // periodStartはbucketの開始時刻（端末のタイムゾーンに沿った暦日・暦月単位、BodyFatAggregateBucketと
 // 同じ考え方）。average/min/maxはこのbucketに1件もレコードがなければnull（0で埋めない）。
+//
+// countは「最新レコードがある日の平均＋前日比」のホームカード（readOxygenSaturationHomeSummary()、
+// D-052）のために追加した、bucketに含まれるレコード件数。HrvAggregateBucketと同じ。Chart用の
+// 既存の呼び出し元（OxygenSaturationDetailScreen）は使わないフィールドが増えるだけで影響しない。
 data class OxygenSaturationAggregateBucket(
     val periodStart: LocalDateTime,
     val average: Double?,
     val min: Double?,
     val max: Double?,
+    val count: Int,
 )
 
 sealed interface OxygenSaturationAggregatesResult {

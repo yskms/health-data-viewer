@@ -1075,12 +1075,13 @@ class HealthConnectManager(context: Context) {
     // 公式の重複処理もない。requirements.md §22.2）のため、Records/Sources用の2関数はWeight用の関数を
     // そのまま踏襲する（Body Fat/HRVと同じ判断）。
     //
-    // ホームカードはfindLatestOxygenSaturationRecords()による「最新値＋前回比」。HRVが当初この方式を
-    // 採用し、実際の記録頻度（1日平均約57件のバースト）が前提と食い違ったため見直しが必要になった経緯
-    // （D-047→D-048）を踏まえ、実装前にPixel 11実機でSpO2の実際の記録頻度を確認してから方式を決める
-    // 方針を立てたが、この端末にはSpO2のレコードが1件も無く確認できなかった。低頻度想定（パルス
-    // オキシメーターでの散発測定）に基づきこの方式のまま暫定確定し、記録頻度は未確認のまま要検証として
-    // 残した（D-049、requirements.md §27）。
+    // ホームカードは当初findLatestOxygenSaturationRecords()による「最新値＋前回比」だった。HRVが当初
+    // この方式を採用し、実際の記録頻度（1日平均約57件のバースト）が前提と食い違ったため見直しが必要に
+    // なった経緯（D-047→D-048）を踏まえ、実装前にPixel 11実機でSpO2の実際の記録頻度を確認してから
+    // 方式を決める方針を立てたが、この端末にはSpO2のレコードが1件も無く確認できなかったため、低頻度
+    // 想定（パルスオキシメーターでの散発測定）で暫定確定していた（D-049）。その後Health Sync経由の
+    // 実データで1分間隔の連続サンプルと判明し（lessons.md 6.30）、HRVと同じ「最新レコードがある日の
+    // 平均＋前日比」（readOxygenSaturationHomeSummary()）に変更した（D-052）。
     fun oxygenSaturationRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<OxygenSaturationRecord>> {
         val now = Instant.now()
         val filter =
@@ -1134,7 +1135,10 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // ホーム画面のOxygen Saturationカード用。findLatestBodyFatRecords()と同じ形・同じ理由。
+    // D-052: ホームカードは「最新値＋前回比」から「最新レコードがある日の平均＋前日比」
+    // （readOxygenSaturationHomeSummary()）に変更したが、この関数自体は「最新レコードが何日か」を
+    // 特定する処理としてreadOxygenSaturationHomeSummary()から引き続き使われている（limit = 1で
+    // 呼ばれる）。findLatestHrvRecords()と同じ位置づけ。
     suspend fun findLatestOxygenSaturationRecords(limit: Int, historyPermissionGranted: Boolean): OxygenSaturationRecordsResult {
         suspend fun readLatest(filter: TimeRangeFilter): List<OxygenSaturationRecord> =
             client
@@ -1243,6 +1247,7 @@ class HealthConnectManager(context: Context) {
                     average = values.takeIf { it.isNotEmpty() }?.average(),
                     min = values.minOrNull(),
                     max = values.maxOrNull(),
+                    count = values.size,
                 )
             }
         }
@@ -1259,6 +1264,70 @@ class HealthConnectManager(context: Context) {
             is HistoryFallbackOutcome.Success ->
                 OxygenSaturationAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
             HistoryFallbackOutcome.Failure -> OxygenSaturationAggregatesResult.Failure
+        }
+    }
+
+    // D-052（ホームカード方式見直し）: findLatestOxygenSaturationRecords()が前提にしていた「最新値＋
+    // 前回比」パターンは、SpO2の実際の記録頻度（1分間隔の連続サンプル、約200件/日、lessons.md 6.30）
+    // では前回比が「直近1分の値とその1分前の値の差」という意味の薄い値になっていた。HRV
+    // （readHrvHomeSummary()、D-048）と同じ「最新レコードがある日の平均＋前日比」に置き換える
+    // （件数・最小〜最大も添える）。
+    //
+    // タイムゾーン対応・30日境界のクランプといった複雑なロジックはreadOxygenSaturationAggregates()が
+    // 既に持っているため複製しない。「最新レコードがある日の前日0時〜翌日0時」という2日分の範囲を
+    // bucket=1日でreadOxygenSaturationAggregates()に渡し、返ってきたbucketを使うだけで実装できる。
+    suspend fun readOxygenSaturationHomeSummary(historyPermissionGranted: Boolean): OxygenSaturationHomeSummaryResult {
+        val latestRecordsResult = findLatestOxygenSaturationRecords(limit = 1, historyPermissionGranted = historyPermissionGranted)
+        val latest: OxygenSaturationRecord
+        val recordsHistoryLimited: Boolean
+        when (latestRecordsResult) {
+            is OxygenSaturationRecordsResult.Success -> {
+                recordsHistoryLimited = latestRecordsResult.historyLimited
+                latest =
+                    latestRecordsResult.records.firstOrNull()
+                        ?: return OxygenSaturationHomeSummaryResult.Success(
+                            latestDay = null,
+                            previousDay = null,
+                            historyLimited = recordsHistoryLimited,
+                        )
+            }
+            OxygenSaturationRecordsResult.Failure -> return OxygenSaturationHomeSummaryResult.Failure
+        }
+
+        val latestDate = latest.time.atZone(latest.zoneOffset ?: ZoneId.systemDefault()).toLocalDate()
+        val timeRangeFilter = TimeRangeFilter.between(latestDate.minusDays(1).atStartOfDay(), latestDate.plusDays(1).atStartOfDay())
+        val aggregatesResult =
+            readOxygenSaturationAggregates(
+                timeRangeFilter = timeRangeFilter,
+                bucket = Period.ofDays(1),
+                historyPermissionGranted = historyPermissionGranted,
+            )
+
+        fun toSummary(date: LocalDate, bucket: OxygenSaturationAggregateBucket?): OxygenSaturationDailySummary? {
+            val average = bucket?.average ?: return null
+            val min = bucket.min ?: return null
+            val max = bucket.max ?: return null
+            return OxygenSaturationDailySummary(date = date, average = average, min = min, max = max, count = bucket.count)
+        }
+
+        // readHrvHomeSummary()と同じ理由・同じ形: bucketsを[前日, 当日]の2要素と決め打ちせず、
+        // periodStartの日付で一致するbucketを探す（readOxygenSaturationAggregates()が内部で
+        // SecurityExceptionにより直近30日のfallback範囲に切り替わるとbucket数が変わり、全く別の日の
+        // bucketを「最新日」「前日」として扱ってしまうため）。fallback範囲の始点が「30日前の翌日0時」に
+        // 切り上げられるため、最新日がちょうど30日前の日に当たると、実際にはレコードがあるのに
+        // latestDayがnull（＝「データなし」表示）になる狭いケースが残る点もreadHrvHomeSummary()と
+        // 同じ（履歴読み取り権限が無く、かつ最新記録がちょうど約30日前の場合に限られる）。
+        return when (aggregatesResult) {
+            is OxygenSaturationAggregatesResult.Success -> {
+                val latestBucket = aggregatesResult.buckets.find { it.periodStart.toLocalDate() == latestDate }
+                val previousBucket = aggregatesResult.buckets.find { it.periodStart.toLocalDate() == latestDate.minusDays(1) }
+                OxygenSaturationHomeSummaryResult.Success(
+                    latestDay = toSummary(latestDate, latestBucket),
+                    previousDay = toSummary(latestDate.minusDays(1), previousBucket),
+                    historyLimited = recordsHistoryLimited || aggregatesResult.historyLimited,
+                )
+            }
+            OxygenSaturationAggregatesResult.Failure -> OxygenSaturationHomeSummaryResult.Failure
         }
     }
 
