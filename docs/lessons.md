@@ -28,7 +28,7 @@
 ### 1.2 Health apps declaration はすべてのアプリで提出が必要
 
 -   **知見**: Google Playで公開するすべてのデベロッパーが対象で、クローズド・オープンテストを含むすべてのトラックに適用される（例外はシステムサービスとprivate appのみ）
--   **Viewerへの適用**: WBS 8.3で提出する。読み取るデータ型ごとに用途の説明が必要になる
+-   **Viewerへの適用**: WBS 7.3で提出する。読み取るデータ型ごとに用途の説明が必要になる
 -   **根拠**: [Google Play「Health apps declaration」](https://support.google.com/googleplay/android-developer/answer/14738291)（公式）
 -   **確認日**: 2026-09-24
 
@@ -49,7 +49,7 @@
     -   **公式ドキュメント（Get started）が示す構成**: Android 13以前向けに`androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE`を処理する専用Activity（例: `PermissionsRationaleActivity`）、Android 14以降向けに`android.intent.action.VIEW_PERMISSION_USAGE`（category `android.intent.category.HEALTH_PERMISSIONS`）を`android:permission="android.permission.START_VIEW_PERMISSION_USAGE"`で保護した`activity-alias`（`targetActivity`は同じ専用Activity）。この権限保護は、この起動経路をシステム（Health Connect）以外から呼ばせないためのもの
     -   **公式サンプル（[android/health-samples](https://github.com/android/health-samples)）の構成**: 上記を簡略化し、両方のintent-filterをLAUNCHER Activity（MainActivity）に直接重ねている。`activity-alias`も`android:permission`もない
     -   Viewerでは公式サンプルと同じ簡略構成をMainActivityに実装し、Android 14以降の実機（Android 17 / Health Connect Controller）で権限ダイアログが正しく開き、許可まで完了することを確認した（2026-09-29）。ただし、これは「公式ドキュメントの推奨構成が不要」という意味ではなく、**MainActivityがもともとLAUNCHERでexportedなため実害が小さいと判断し、保護なしの簡略構成を暫定的に選んだ**という位置づけ
--   **Viewerへの適用**: 現状（Activityが1つのみ、表示内容も仮のステータス画面）は公式サンプル同様の簡略構成で対応済み（WBS 1.3）。専用の説明Activityに分離するタイミング（実際のプライバシーポリシー文言を出すWBS 8.1、または画面数が増えたとき）で、公式ドキュメント通りのactivity-alias＋`START_VIEW_PERMISSION_USAGE`保護に切り替えるか再検討する
+-   **Viewerへの適用**: 現状（Activityが1つのみ、表示内容も仮のステータス画面）は公式サンプル同様の簡略構成で対応済み（WBS 1.3）。専用の説明Activityに分離するタイミング（実際のプライバシーポリシー文言を出すWBS 7.1、または画面数が増えたとき）で、公式ドキュメント通りのactivity-alias＋`START_VIEW_PERMISSION_USAGE`保護に切り替えるか再検討する
 -   **根拠**: 公式（Health Connect Get started。activity-alias＋permission保護の推奨構成）／公式（[android/health-samples](https://github.com/android/health-samples)。MainActivity直接宣言でも動く簡略構成）／実機確認（Viewer、Android 17 / Health Connect Controller、Android 14以降の`VIEW_PERMISSION_USAGE`経路のみ、2026-09-29）／要検証（Android 13以前の`ACTION_SHOW_PERMISSIONS_RATIONALE`経路、およびintent-filterを片方だけ宣言した場合の挙動。常に両方を宣言した状態でしかテストしていない。lessons.md 3.3の方針に沿ってPixel 3などでの確認が必要）
 -   **確認日**: 2026-09-29（初出2026-09-21から更新）
 

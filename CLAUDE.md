@@ -1,7 +1,7 @@
 # Health Data Viewer
 
 Health Connectに保存済みのデータを読み取り専用で可視化・検証するAndroidアプリ。
-現在はMVP実装フェーズ（WBS 6、[docs/wbs.md](docs/wbs.md)参照）。
+現在はリリース準備フェーズ（WBS 7、[docs/wbs.md](docs/wbs.md)参照）。MVP実装（WBS 6）は完了済み。広告・課金（収益化、WBS 9）は初回リリース後に対応する方針（D-053）
 
 -   要件・技術方針: [docs/requirements.md](docs/requirements.md)（第II部は「確定」と「PoCで確定する候補」を区別している）
 -   WBS・決定ログ: [docs/wbs.md](docs/wbs.md)。タスクの完了時に状態を更新し、方針を変えたら決定ログに追記する
