@@ -419,8 +419,8 @@ fun HomeScreen(
                 }
 
                 // Oxygen Saturation（SpO2）カード（WBS 6.10→D-052）: 当初はWeight/BodyFatと同じ
-                // 「最新値＋前回比」パターンを低頻度想定で暫定確定したが（D-049）、実データで1分間隔の
-                // 連続サンプルと判明し前回比の意味が薄かったため、HRVと同じ「最新レコードがある日の
+                // 「最新値＋前回比」パターンを低頻度想定で暫定確定したが（D-049）、実データで1分刻みの
+                // 連続区間が断続的に記録される形（約200件/日）と判明し前回比の意味が薄かったため、HRVと同じ「最新レコードがある日の
                 // 平均＋前日比」に置き換えた（readOxygenSaturationHomeSummary()参照）。
                 var oxygenSaturationLoad by remember { mutableStateOf<OxygenSaturationHomeSummaryResult?>(null) }
                 LaunchedEffect(oxygenSaturationGranted, historyPermissionGranted, resumeKey) {
@@ -429,8 +429,10 @@ fun HomeScreen(
                         healthConnectManager.readOxygenSaturationHomeSummary(historyPermissionGranted = historyPermissionGranted)
                 }
 
-                // Blood Glucoseカード（WBS 6.10、D-050）: Weight/BodyFat/SpO2と同じ「最新値＋前回比」
-                // パターン。採用経緯はHealthConnectManager.bloodGlucoseRecordsPagingSource()直前の
+                // Blood Glucoseカード（WBS 6.10、D-050）: Weight/BodyFatと同じ「最新値＋前回比」
+                // パターン（SpO2も当初は同じだったが、実データで高頻度と判明しD-052で変更した。Blood Glucoseも
+                // 実データが取れた時点で同じ見直しが必要になる可能性がある）。採用経緯は
+                // HealthConnectManager.bloodGlucoseRecordsPagingSource()直前の
                 // コメント参照（実機で記録頻度を確認できなかったため低頻度想定で暫定確定）。
                 var bloodGlucoseLoad by remember { mutableStateOf<BloodGlucoseRecordsResult?>(null) }
                 LaunchedEffect(bloodGlucoseGranted, historyPermissionGranted, resumeKey) {
@@ -836,8 +838,9 @@ private fun isOxygenSaturationCardHidden(
         load.latestDay == null &&
         !(load.historyLimited && historyFeatureAvailable != false)
 
-// isBodyFatCardHidden()と同じ理由・同じ形（Blood GlucoseもWeight/BodyFat/SpO2と同じ「最新値＋前回比」
-// パターンのため、D-050）。
+// isBodyFatCardHidden()と同じ理由・同じ形（Blood GlucoseもWeight/BodyFatと同じ「最新値＋前回比」
+// パターンのため、D-050。SpO2は当初同じ方式だったがD-052で変更したため、isOxygenSaturationCardHidden()は
+// isHrvCardHidden()と同じ形になっている）。
 private fun isBloodGlucoseCardHidden(
     granted: Boolean?,
     load: BloodGlucoseRecordsResult?,
@@ -1306,8 +1309,8 @@ private fun BodyFatCard(
     }
 }
 
-// D-052: 当初はBodyFatCard()と同じ「最新値＋前回比」だったが、SpO2の実際の記録頻度（1分間隔の
-// 連続サンプル、約200件/日、lessons.md 6.30）では前回比が「直近1分の値とその1分前の値の差」という
+// D-052: 当初はBodyFatCard()と同じ「最新値＋前回比」だったが、SpO2の実際の記録頻度（1分刻みの
+// 連続区間が断続的に記録される形、約200件/日、lessons.md 6.30）では前回比が「直近1分の値とその1分前の値の差」という
 // 意味の薄い値になっていたため、HrvCard()と同じ「最新レコードがある日の平均＋前日比」（件数・最小〜
 // 最大も添える）に置き換えた。Percentage.valueは既に0〜100スケールのため、HrvCard()と違い単位変換は
 // 不要（ただし%の文言はhome_oxygen_saturation_valueと同様、リテラルの%を文言側で付ける）。

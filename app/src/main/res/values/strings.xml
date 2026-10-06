@@ -65,7 +65,7 @@
     <string name="home_oxygen_saturation_title">Oxygen Saturation (SpO2)</string>
     <string name="home_oxygen_saturation_value">%1$s%%</string>
     <!-- D-052: changed from "latest value + delta" to "latest day's average + vs. previous day" (same as
-         HRV, D-048), because SpO2 turned out to be recorded as continuous 1-minute samples. -->
+         HRV, D-048), because SpO2 turned out to be recorded as runs of 1-minute samples, not isolated spot readings. -->
     <string name="home_oxygen_saturation_summary_date">Average for %1$s</string>
     <plurals name="home_oxygen_saturation_count_range">
         <item quantity="one">%1$d record, %2$s–%3$s%%</item>

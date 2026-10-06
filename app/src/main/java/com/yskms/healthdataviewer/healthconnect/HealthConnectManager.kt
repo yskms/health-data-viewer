@@ -1080,7 +1080,7 @@ class HealthConnectManager(context: Context) {
     // なった経緯（D-047→D-048）を踏まえ、実装前にPixel 11実機でSpO2の実際の記録頻度を確認してから
     // 方式を決める方針を立てたが、この端末にはSpO2のレコードが1件も無く確認できなかったため、低頻度
     // 想定（パルスオキシメーターでの散発測定）で暫定確定していた（D-049）。その後Health Sync経由の
-    // 実データで1分間隔の連続サンプルと判明し（lessons.md 6.30）、HRVと同じ「最新レコードがある日の
+    // 実データで1分刻みの連続区間が断続的に記録される形（約200件/日）と判明し（lessons.md 6.30）、HRVと同じ「最新レコードがある日の
     // 平均＋前日比」（readOxygenSaturationHomeSummary()）に変更した（D-052）。
     fun oxygenSaturationRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<OxygenSaturationRecord>> {
         val now = Instant.now()
@@ -1268,7 +1268,7 @@ class HealthConnectManager(context: Context) {
     }
 
     // D-052（ホームカード方式見直し）: findLatestOxygenSaturationRecords()が前提にしていた「最新値＋
-    // 前回比」パターンは、SpO2の実際の記録頻度（1分間隔の連続サンプル、約200件/日、lessons.md 6.30）
+    // 前回比」パターンは、SpO2の実際の記録頻度（1分刻みの連続区間が断続的に記録される形、約200件/日、lessons.md 6.30）
     // では前回比が「直近1分の値とその1分前の値の差」という意味の薄い値になっていた。HRV
     // （readHrvHomeSummary()、D-048）と同じ「最新レコードがある日の平均＋前日比」に置き換える
     // （件数・最小〜最大も添える）。
@@ -1341,9 +1341,12 @@ class HealthConnectManager(context: Context) {
     // 踏襲し、今回はlevelのみを表示する（D-050(1)）。
     //
     // ホームカードはfindLatestBloodGlucoseRecords()による「最新値＋前回比」。SpO2と同じく実装前に
-    // Pixel 11実機の記録頻度を確認できればそれに基づき方式を決める想定だったが、血圧・SpO2と同様に
-    // 実データが無く確認できなかったため、低頻度想定（自己測定の散発測定）に基づきこの方式のまま
+    // Pixel 11実機の記録頻度を確認できればそれに基づき方式を決める想定だったが、血圧・SpO2（当時）と
+    // 同様に実データが無く確認できなかったため、低頻度想定（自己測定の散発測定）に基づきこの方式のまま
     // 暫定確定し、記録頻度は未確認のまま要検証として残した（D-050、requirements.md §27）。
+    // なおSpO2は、その後実データで高頻度（1分刻みの連続区間）と判明して「最新レコードがある日の平均＋
+    // 前日比」に変更した（D-052）。Blood Glucoseも実データが取れた時点で同じ見直しが必要になる
+    // 可能性がある。
     fun bloodGlucoseRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<BloodGlucoseRecord>> {
         val now = Instant.now()
         val filter =
