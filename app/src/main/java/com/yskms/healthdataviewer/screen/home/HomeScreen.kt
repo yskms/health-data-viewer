@@ -420,8 +420,9 @@ fun HomeScreen(
 
                 // Oxygen Saturation（SpO2）カード（WBS 6.10→D-052）: 当初はWeight/BodyFatと同じ
                 // 「最新値＋前回比」パターンを低頻度想定で暫定確定したが（D-049）、実データで1分刻みの
-                // 連続区間が断続的に記録される形（約200件/日）と判明し前回比の意味が薄かったため、HRVと同じ「最新レコードがある日の
-                // 平均＋前日比」に置き換えた（readOxygenSaturationHomeSummary()参照）。
+                // 連続区間が断続的に記録される形（約200件/日）と判明し前回比の意味が薄かったため、
+                // HRVと同じ「最新レコードがある日の平均＋前日比」に置き換えた
+                // （readOxygenSaturationHomeSummary()参照）。
                 var oxygenSaturationLoad by remember { mutableStateOf<OxygenSaturationHomeSummaryResult?>(null) }
                 LaunchedEffect(oxygenSaturationGranted, historyPermissionGranted, resumeKey) {
                     if (oxygenSaturationGranted != true) return@LaunchedEffect
@@ -1310,10 +1311,11 @@ private fun BodyFatCard(
 }
 
 // D-052: 当初はBodyFatCard()と同じ「最新値＋前回比」だったが、SpO2の実際の記録頻度（1分刻みの
-// 連続区間が断続的に記録される形、約200件/日、lessons.md 6.30）では前回比が「直近1分の値とその1分前の値の差」という
-// 意味の薄い値になっていたため、HrvCard()と同じ「最新レコードがある日の平均＋前日比」（件数・最小〜
-// 最大も添える）に置き換えた。Percentage.valueは既に0〜100スケールのため、HrvCard()と違い単位変換は
-// 不要（ただし%の文言はhome_oxygen_saturation_valueと同様、リテラルの%を文言側で付ける）。
+// 連続区間が断続的に記録される形、約200件/日、lessons.md 6.30）では前回比が「直近1分の値と
+// その1分前の値の差」という意味の薄い値になっていたため、HrvCard()と同じ「最新レコードがある日の
+// 平均＋前日比」（件数・最小〜最大も添える）に置き換えた。Percentage.valueは既に0〜100スケール
+// のため、HrvCard()と違い単位変換は不要（ただし%の文言はhome_oxygen_saturation_valueと同様、
+// リテラルの%を文言側で付ける）。
 @Composable
 private fun OxygenSaturationCard(
     permissionsCheckState: PermissionsCheckState,

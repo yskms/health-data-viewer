@@ -62,8 +62,8 @@
     <string name="home_hrv_delta">前日比: %1$s ms</string>
     <string name="home_oxygen_saturation_title">血中酸素飽和度（SpO2）</string>
     <string name="home_oxygen_saturation_value">%1$s%%</string>
-    <!-- D-052: SpO2が1分刻みの連続区間として断続的に記録されると判明したため、HRV（D-048）と同じ「最新レコードがある日の
-         平均＋前日比」に変更した。 -->
+    <!-- D-052: SpO2が1分刻みの連続区間として断続的に記録されると判明したため、HRV（D-048）と
+         同じ「最新レコードがある日の平均＋前日比」に変更した。 -->
     <string name="home_oxygen_saturation_summary_date">%1$sの平均</string>
     <plurals name="home_oxygen_saturation_count_range">
         <item quantity="other">%1$d件・%2$s–%3$s%%</item>

@@ -1080,8 +1080,9 @@ class HealthConnectManager(context: Context) {
     // なった経緯（D-047→D-048）を踏まえ、実装前にPixel 11実機でSpO2の実際の記録頻度を確認してから
     // 方式を決める方針を立てたが、この端末にはSpO2のレコードが1件も無く確認できなかったため、低頻度
     // 想定（パルスオキシメーターでの散発測定）で暫定確定していた（D-049）。その後Health Sync経由の
-    // 実データで1分刻みの連続区間が断続的に記録される形（約200件/日）と判明し（lessons.md 6.30）、HRVと同じ「最新レコードがある日の
-    // 平均＋前日比」（readOxygenSaturationHomeSummary()）に変更した（D-052）。
+    // 実データで1分刻みの連続区間が断続的に記録される形（約200件/日）と判明し（lessons.md 6.30）、
+    // HRVと同じ「最新レコードがある日の平均＋前日比」（readOxygenSaturationHomeSummary()）に変更した
+    // （D-052）。
     fun oxygenSaturationRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<OxygenSaturationRecord>> {
         val now = Instant.now()
         val filter =
@@ -1268,9 +1269,9 @@ class HealthConnectManager(context: Context) {
     }
 
     // D-052（ホームカード方式見直し）: findLatestOxygenSaturationRecords()が前提にしていた「最新値＋
-    // 前回比」パターンは、SpO2の実際の記録頻度（1分刻みの連続区間が断続的に記録される形、約200件/日、lessons.md 6.30）
-    // では前回比が「直近1分の値とその1分前の値の差」という意味の薄い値になっていた。HRV
-    // （readHrvHomeSummary()、D-048）と同じ「最新レコードがある日の平均＋前日比」に置き換える
+    // 前回比」パターンは、SpO2の実際の記録頻度（1分刻みの連続区間が断続的に記録される形、約200件/日、
+    // lessons.md 6.30）では前回比が「直近1分の値とその1分前の値の差」という意味の薄い値になっていた。
+    // HRV（readHrvHomeSummary()、D-048）と同じ「最新レコードがある日の平均＋前日比」に置き換える
     // （件数・最小〜最大も添える）。
     //
     // タイムゾーン対応・30日境界のクランプといった複雑なロジックはreadOxygenSaturationAggregates()が
