@@ -2673,14 +2673,19 @@ class HealthConnectManager(context: Context) {
     // TotalCaloriesの事情（17万件規模でのALL期間の性能問題、lessons.md 6.26）はNutritionには
     // そのまま当てはまらない（あすけんの実データは860件規模、D-054）ため、理由を流用せず以下に書く。
     // (1) TotalCaloriesBurnedRecord.ENERGY_TOTALのnull非返却バグ（D-043所見）と同じ現象が
-    // NutritionRecord.ENERGY_TOTALにもあるかをPixel 11実機で確認した（2010年のレコード0件の期間を
-    // 一時的な診断コードで問い合わせ、nullが返ることを確認済み。readNutritionAggregateTotal()参照、
-    // D-054）ため、そもそもガードで防ぐべきバグが無い。(2) 仮にガードを入れても、「レコード自体は
+    // NutritionRecord.ENERGY_TOTALにもあるかをPixel 11実機で確認した。Custom期間（過去方向に制限の
+    // 無いCustomRangePicker）で2010/01/01〜01（レコード0件のはず）を指定したところ、折れ線ではなく
+    // detail_empty（「この期間にレコードがありません」）の空状態表示になった（bucketのtotalKilocalories
+    // がnullになりmapNotNullで除外されたことを意味する）ため、このAPI（aggregateGroupByPeriod()）でも
+    // バグは再現しないと確認できた（readNutritionAggregateTotal()のaggregate()側の確認はそちらのコメント
+    // 参照、D-054）。そもそもガードで防ぐべきバグが無い。(2) 仮にガードを入れても、「レコード自体は
     // あるがenergyフィールドだけ未設定の日」（あすけんが実際に書き込む例がある）は、hasAnyRecord()が
     // 「レコードあり」と判定するため対象にならない。この場合ENERGY_TOTALの合計は0.0になることを
     // Pixel 11実機のChart（2026-09-10が谷として描画され、Recordsタブで同日のレコードが実在し
-    // energyのみ未設定と確認）で確認済み。「記録が無い日」と「記録はあるがenergyが未設定の日」を
-    // 区別できない既知の限界として残る（要検証、requirements.md §27、D-054）。
+    // energyのみ未設定と確認）で確認済み。「記録が無い日」（null、空状態表示）と「記録はあるが
+    // energyが未設定の日」（0.0、「0 kcal」表示）は実際には区別できている。区別できないのは
+    // 「energyが未設定の日」と「実際にenergy=0.0と記録された日」（どちらも0 kcalになる）で、こちらが
+    // 既知の限界として残る（要検証、requirements.md §27、D-054）。
     suspend fun readNutritionAggregates(
         timeRangeFilter: TimeRangeFilter,
         bucket: Period,
@@ -2719,9 +2724,11 @@ class HealthConnectManager(context: Context) {
     }
 
     // ホーム画面の摂取カロリーカード用。readTotalCaloriesAggregateTotal()と異なり、hasAnyRecord()
-    // ガードは入れていない。readNutritionAggregates()のコメント参照——TotalCaloriesBurnedRecordと
-    // 同じnull非返却バグはPixel 11実機で再現しないことを確認済みで（D-054）、ガードで防ぐべき対象が
-    // 無い。「レコードはあるがenergyが未設定の日」が0kcalとして表示される限界も同じコメント参照。
+    // ガードは入れていない。2010年のレコード0件の期間をPixel 11実機で直接問い合わせ、
+    // TotalCaloriesBurnedRecordと同じnull非返却バグが無い（nullが返る）ことを確認済み（D-054）。
+    // 「レコードはあるがenergyが未設定の日」の挙動はreadNutritionAggregates()側（Chart）でのみ
+    // 確認済みで、こちら（aggregate()）では未確認（同じAggregateMetricのため同様と推定、詳細は
+    // readNutritionAggregates()のコメント参照）。
     suspend fun readNutritionAggregateTotal(timeRangeFilter: TimeRangeFilter): NutritionAggregateTotalResult =
         try {
             val result =
