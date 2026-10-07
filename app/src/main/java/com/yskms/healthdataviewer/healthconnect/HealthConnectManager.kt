@@ -2675,10 +2675,13 @@ class HealthConnectManager(context: Context) {
     // (1) TotalCaloriesBurnedRecord.ENERGY_TOTALのnull非返却バグ（D-043所見）と同じ現象が
     // NutritionRecord.ENERGY_TOTALにもあるかをPixel 11実機で確認した。Custom期間（過去方向に制限の
     // 無いCustomRangePicker）で2010/01/01〜01（レコード0件のはず）を指定したところ、折れ線ではなく
-    // detail_empty（「この期間にレコードがありません」）の空状態表示になった（bucketのtotalKilocalories
-    // がnullになりmapNotNullで除外されたことを意味する）ため、このAPI（aggregateGroupByPeriod()）でも
-    // バグは再現しないと確認できた（readNutritionAggregateTotal()のaggregate()側の確認はそちらのコメント
-    // 参照、D-054）。そもそもガードで防ぐべきバグが無い。(2) 仮にガードを入れても、「レコード自体は
+    // detail_empty（「この期間にレコードがありません」）の空状態表示になった（buckets自体が空リストだった
+    // か、bucketのtotalKilocaloriesがnullでmapNotNullにより全除外されたかは、この確認方法では切り分け
+    // られないが、いずれにせよTotalCaloriesのような非null値は返っていない。権限はREAD_HEALTH_DATA_
+    // HISTORY・READ_NUTRITIONとも許可済み——dumpsys packageでgranted=trueを確認——の状態で確認しており、
+    // 履歴権限なし時の空状態ショートカット、DetailGraphRange.ktではない）ため、このAPI
+    // （aggregateGroupByPeriod()）でもバグは再現しないと確認できた（readNutritionAggregateTotal()の
+    // aggregate()側の確認はそちらのコメント参照、D-054）。そもそもガードで防ぐべきバグが無い。(2) 仮にガードを入れても、「レコード自体は
     // あるがenergyフィールドだけ未設定の日」（あすけんが実際に書き込む例がある）は、hasAnyRecord()が
     // 「レコードあり」と判定するため対象にならない。この場合ENERGY_TOTALの合計は0.0になることを
     // Pixel 11実機のChart（2026-09-10が谷として描画され、Recordsタブで同日のレコードが実在し
