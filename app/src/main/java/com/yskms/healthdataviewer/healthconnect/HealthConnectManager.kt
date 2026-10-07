@@ -2669,9 +2669,18 @@ class HealthConnectManager(context: Context) {
         }
     }
 
-    // readTotalCaloriesAggregates()と同じ形。bucketごとのhasAnyRecord()ガードは同じ理由で入れない。
-    // NutritionはTotalCaloriesの17万件規模より記録頻度が低いと想定しているため性能問題は起きにくいと
-    // 見ているが、実機で確認していない（要検証）。
+    // readTotalCaloriesAggregates()と同じ形。bucketごとのhasAnyRecord()ガードは入れていない。
+    // TotalCaloriesの事情（17万件規模でのALL期間の性能問題、lessons.md 6.26）はNutritionには
+    // そのまま当てはまらない（あすけんの実データは860件規模、D-054）ため、理由を流用せず以下に書く。
+    // (1) TotalCaloriesBurnedRecord.ENERGY_TOTALのnull非返却バグ（D-043所見）と同じ現象が
+    // NutritionRecord.ENERGY_TOTALにもあるかをPixel 11実機で確認した（2010年のレコード0件の期間を
+    // 一時的な診断コードで問い合わせ、nullが返ることを確認済み。readNutritionAggregateTotal()参照、
+    // D-054）ため、そもそもガードで防ぐべきバグが無い。(2) 仮にガードを入れても、「レコード自体は
+    // あるがenergyフィールドだけ未設定の日」（あすけんが実際に書き込む例がある）は、hasAnyRecord()が
+    // 「レコードあり」と判定するため対象にならない。この場合ENERGY_TOTALの合計は0.0になることを
+    // Pixel 11実機のChart（2026-09-10が谷として描画され、Recordsタブで同日のレコードが実在し
+    // energyのみ未設定と確認）で確認済み。「記録が無い日」と「記録はあるがenergyが未設定の日」を
+    // 区別できない既知の限界として残る（要検証、requirements.md §27、D-054）。
     suspend fun readNutritionAggregates(
         timeRangeFilter: TimeRangeFilter,
         bucket: Period,
@@ -2710,10 +2719,9 @@ class HealthConnectManager(context: Context) {
     }
 
     // ホーム画面の摂取カロリーカード用。readTotalCaloriesAggregateTotal()と異なり、hasAnyRecord()
-    // ガードは**一旦入れていない**。TotalCaloriesBurnedRecord.ENERGY_TOTALのnull非返却バグ（D-043所見）
-    // はそのRecord型固有の確認済み事実で、NutritionRecord.ENERGY_TOTALに同じ前提を機械的に当てはめては
-    // いけない（CLAUDE.md「SDK調査で誤解しやすい点」）。Pixel 11実機でレコード0件の期間を指定して
-    // nullが返ることを確認してから、必要ならガードを追加する（D-054、要検証）。
+    // ガードは入れていない。readNutritionAggregates()のコメント参照——TotalCaloriesBurnedRecordと
+    // 同じnull非返却バグはPixel 11実機で再現しないことを確認済みで（D-054）、ガードで防ぐべき対象が
+    // 無い。「レコードはあるがenergyが未設定の日」が0kcalとして表示される限界も同じコメント参照。
     suspend fun readNutritionAggregateTotal(timeRangeFilter: TimeRangeFilter): NutritionAggregateTotalResult =
         try {
             val result =

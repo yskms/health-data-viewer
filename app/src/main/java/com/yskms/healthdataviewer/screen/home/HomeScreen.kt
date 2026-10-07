@@ -1659,9 +1659,14 @@ private fun ExerciseCard(
     }
 }
 
-// WBS 6.13（Nutrition追加、D-054）: TotalCaloriesCardと同じ形（期間合計の摂取カロリー）。
-// 「アクティブカロリー」「総消費カロリー」が消費側であるのと対比して、こちらは摂取側であることが
-// 分かるよう「摂取カロリー」という文言にしている。
+// WBS 6.13（Nutrition追加、D-054）: TotalCaloriesCardと同じ形（期間合計のエネルギー、kcal）。
+// タイトルは`home_nutrition_title`（「栄養」）で、SettingsScreenの権限行表示にも同じ文字列を再利用
+// している（Weight/Exercise等、既存の全データ型が「データ型名＝カード見出し＝権限行」の1文字列を
+// 共有する構成に合わせた。NUTRITION_READが実際には37項目全ての栄養素を対象とする権限のため、
+// 「摂取カロリー」のようなエネルギーに限定した文言にすると権限行の説明として不正確になる）。
+// 「アクティブカロリー」「総消費カロリー」（消費側）と並んだときの区別は、文言ではなく「栄養」という
+// 見出し自体とkcal単位の値で読み取ってもらう設計とした（要検証: 紛らわしさが実際に問題になった場合、
+// ホームカードとSettings行で表示文言を分ける案を再検討する）。
 @Composable
 private fun NutritionCard(
     permissionsCheckState: PermissionsCheckState,

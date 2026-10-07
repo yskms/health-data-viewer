@@ -171,8 +171,8 @@
     <!-- WBS 6.13 (Nutrition, D-054): NutritionRecord has 37 official AggregateMetrics (javap-verified), but only
          energy/protein/fat/carbohydrate/fiber are shown; see docs/wbs.md for the scope decision. -->
     <string name="detail_nutrition_title">Nutrition</string>
-    <string name="detail_nutrition_aggregation_total">Aggregation: %1$s total calories consumed in kcal (official Aggregate API; only energy, protein, fat, carbohydrate, and fiber are shown)</string>
-    <string name="detail_nutrition_aggregation_avg_per_day">Aggregation: %1$s average calories consumed per day in kcal (official Aggregate API; only energy, protein, fat, carbohydrate, and fiber are shown)</string>
+    <string name="detail_nutrition_aggregation_total">Aggregation: %1$s total calories consumed in kcal (official Aggregate API)</string>
+    <string name="detail_nutrition_aggregation_avg_per_day">Aggregation: %1$s average calories consumed per day in kcal (official Aggregate API)</string>
     <string name="detail_nutrition_record_header">%1$s – %2$s  %3$s</string>
     <string name="detail_nutrition_record_nutrients">%1$s kcal ・ Protein %2$s g ・ Fat %3$s g ・ Carbs %4$s g ・ Fiber %5$s g</string>
     <!-- WBS 6.3 (WBS 6.10 added Distance, Active Calories, Total Calories, Blood Pressure, Body Fat): Records tab (paged raw record list), shared across data types. -->

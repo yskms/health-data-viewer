@@ -167,8 +167,8 @@
     <!-- WBS 6.13（Nutrition追加、D-054）: NutritionRecordは公式AggregateMetricを37個持つ（javap確認）が、
          表示するのはエネルギー・タンパク質・脂質・炭水化物・食物繊維のみ。詳細はdocs/wbs.md参照。 -->
     <string name="detail_nutrition_title">栄養</string>
-    <string name="detail_nutrition_aggregation_total">集計方法: %1$s合計摂取カロリー（kcal、Health Connect公式Aggregate API。表示するのはエネルギー・タンパク質・脂質・炭水化物・食物繊維のみ）</string>
-    <string name="detail_nutrition_aggregation_avg_per_day">集計方法: %1$s平均摂取カロリー（1日あたり、kcal、Health Connect公式Aggregate API。表示するのはエネルギー・タンパク質・脂質・炭水化物・食物繊維のみ）</string>
+    <string name="detail_nutrition_aggregation_total">集計方法: %1$s合計摂取カロリー（kcal、Health Connect公式Aggregate API）</string>
+    <string name="detail_nutrition_aggregation_avg_per_day">集計方法: %1$s平均摂取カロリー（1日あたり、kcal、Health Connect公式Aggregate API）</string>
     <string name="detail_nutrition_record_header">%1$s – %2$s  %3$s</string>
     <string name="detail_nutrition_record_nutrients">%1$s kcal ・タンパク質 %2$s g ・脂質 %3$s g ・炭水化物 %4$s g ・食物繊維 %5$s g</string>
     <!-- WBS 6.3（WBS 6.10でDistance・Active Calories・Total Calories・Blood Pressure・Body Fatを追加）: Recordsタブ（ページング生レコード一覧）。各データ型で共通。 -->
