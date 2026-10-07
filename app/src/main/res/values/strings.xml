@@ -77,6 +77,9 @@
     <string name="home_blood_glucose_delta">vs. previous: %1$s mg/dL</string>
     <string name="home_exercise_title">Exercise</string>
     <string name="home_exercise_total_notice">Total for this period</string>
+    <!-- WBS 6.13 (Nutrition, D-054): only energy (kcal consumed) is shown on the home card; see detail_nutrition_aggregation_total. -->
+    <string name="home_nutrition_title">Nutrition</string>
+    <string name="home_nutrition_value">%1$s kcal</string>
     <string name="home_all_metrics_hidden_notice">All metrics are hidden by the “Show metrics with no data” setting.</string>
     <string name="poc_steps_open_button">PoC: Show steps comparison</string>
     <string name="poc_steps_title">Steps: Raw vs Aggregate (PoC)</string>
@@ -165,6 +168,13 @@
     <string name="detail_exercise_title">Exercise</string>
     <string name="detail_exercise_aggregation_total">Aggregation: %1$s total exercise duration (official Aggregate API)</string>
     <string name="detail_exercise_aggregation_avg_per_day">Aggregation: %1$s average exercise duration per day (official Aggregate API)</string>
+    <!-- WBS 6.13 (Nutrition, D-054): NutritionRecord has 37 official AggregateMetrics (javap-verified), but only
+         energy/protein/fat/carbohydrate/fiber are shown; see docs/wbs.md for the scope decision. -->
+    <string name="detail_nutrition_title">Nutrition</string>
+    <string name="detail_nutrition_aggregation_total">Aggregation: %1$s total calories consumed in kcal (official Aggregate API; only energy, protein, fat, carbohydrate, and fiber are shown)</string>
+    <string name="detail_nutrition_aggregation_avg_per_day">Aggregation: %1$s average calories consumed per day in kcal (official Aggregate API; only energy, protein, fat, carbohydrate, and fiber are shown)</string>
+    <string name="detail_nutrition_record_header">%1$s – %2$s  %3$s</string>
+    <string name="detail_nutrition_record_nutrients">%1$s kcal ・ Protein %2$s g ・ Fat %3$s g ・ Carbs %4$s g ・ Fiber %5$s g</string>
     <!-- WBS 6.3 (WBS 6.10 added Distance, Active Calories, Total Calories, Blood Pressure, Body Fat): Records tab (paged raw record list), shared across data types. -->
     <string name="detail_tab_chart">Chart</string>
     <string name="detail_tab_records">Records</string>
@@ -244,6 +254,12 @@
     <string name="exercise_type_weightlifting">Weightlifting</string>
     <string name="exercise_type_wheelchair">Wheelchair</string>
     <string name="exercise_type_yoga">Yoga</string>
+    <!-- WBS 6.13 (Nutrition, D-054): NutritionRecord.mealType labels (5 values, javap-verified). -->
+    <string name="meal_type_unknown">Unknown meal</string>
+    <string name="meal_type_breakfast">Breakfast</string>
+    <string name="meal_type_lunch">Lunch</string>
+    <string name="meal_type_dinner">Dinner</string>
+    <string name="meal_type_snack">Snack</string>
     <!-- WBS 6.4: Sources tab, shared across Weight/Steps/Heart rate/Sleep. -->
     <string name="detail_tab_sources">Sources</string>
     <string name="detail_sources_empty">No sources found in the readable range.</string>

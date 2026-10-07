@@ -74,6 +74,9 @@
     <string name="home_blood_glucose_delta">前回比: %1$s mg/dL</string>
     <string name="home_exercise_title">運動</string>
     <string name="home_exercise_total_notice">この期間の合計</string>
+    <!-- WBS 6.13（Nutrition追加、D-054）: ホーム画面カードはエネルギー（摂取カロリー）のみを表示する。detail_nutrition_aggregation_total参照。 -->
+    <string name="home_nutrition_title">栄養</string>
+    <string name="home_nutrition_value">%1$s kcal</string>
     <string name="home_all_metrics_hidden_notice">「データがない項目も表示する」の設定により、非表示にしています。</string>
     <string name="poc_steps_open_button">PoC: 歩数の比較を表示</string>
     <string name="poc_steps_title">歩数: RawとAggregateの比較（PoC）</string>
@@ -161,6 +164,13 @@
     <string name="detail_exercise_title">運動</string>
     <string name="detail_exercise_aggregation_total">集計方法: %1$s合計運動時間（Health Connect公式Aggregate API）</string>
     <string name="detail_exercise_aggregation_avg_per_day">集計方法: %1$s平均運動時間（1日あたり、Health Connect公式Aggregate API）</string>
+    <!-- WBS 6.13（Nutrition追加、D-054）: NutritionRecordは公式AggregateMetricを37個持つ（javap確認）が、
+         表示するのはエネルギー・タンパク質・脂質・炭水化物・食物繊維のみ。詳細はdocs/wbs.md参照。 -->
+    <string name="detail_nutrition_title">栄養</string>
+    <string name="detail_nutrition_aggregation_total">集計方法: %1$s合計摂取カロリー（kcal、Health Connect公式Aggregate API。表示するのはエネルギー・タンパク質・脂質・炭水化物・食物繊維のみ）</string>
+    <string name="detail_nutrition_aggregation_avg_per_day">集計方法: %1$s平均摂取カロリー（1日あたり、kcal、Health Connect公式Aggregate API。表示するのはエネルギー・タンパク質・脂質・炭水化物・食物繊維のみ）</string>
+    <string name="detail_nutrition_record_header">%1$s – %2$s  %3$s</string>
+    <string name="detail_nutrition_record_nutrients">%1$s kcal ・タンパク質 %2$s g ・脂質 %3$s g ・炭水化物 %4$s g ・食物繊維 %5$s g</string>
     <!-- WBS 6.3（WBS 6.10でDistance・Active Calories・Total Calories・Blood Pressure・Body Fatを追加）: Recordsタブ（ページング生レコード一覧）。各データ型で共通。 -->
     <string name="detail_tab_chart">グラフ</string>
     <string name="detail_tab_records">レコード</string>
@@ -240,6 +250,12 @@
     <string name="exercise_type_weightlifting">ウェイトリフティング</string>
     <string name="exercise_type_wheelchair">車いす</string>
     <string name="exercise_type_yoga">ヨガ</string>
+    <!-- WBS 6.13（Nutrition追加、D-054）: NutritionRecord.mealTypeの文言（5種類、javap確認）。 -->
+    <string name="meal_type_unknown">食事タイプ不明</string>
+    <string name="meal_type_breakfast">朝食</string>
+    <string name="meal_type_lunch">昼食</string>
+    <string name="meal_type_dinner">夕食</string>
+    <string name="meal_type_snack">軽食</string>
     <!-- WBS 6.4: Sourcesタブ。Weight/Steps/Heart rate/Sleepで共通。 -->
     <string name="detail_tab_sources">データソース</string>
     <string name="detail_sources_empty">読み取れる範囲にソースがありません。</string>

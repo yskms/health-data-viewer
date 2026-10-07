@@ -49,3 +49,9 @@ val BloodGlucoseAccent = Color(0xFF827717)
 // 差が約23度ずつとこちらより狭く、どちらを優先すべきかは実機の見た目で判断する方が確実なため、
 // 今回は変更を見送り指摘として記録するに留めた（要実機確認）。
 val ExerciseAccent = Color(0xFF1B8A3D)
+// WBS 6.13（Nutrition追加、D-054）: 既存14色全てのHSL色相を計算し直した結果、BloodGlucoseAccent
+// （色相約54°、オリーブ）とStepsAccent（色相約101°）の間に約47度の最大の空きがあったため、その中央
+// 付近の黄緑（色相約77°）を選んだ（両隣との差はおよそ23度ずつ。他の既存色同士の差は8〜24度程度の
+// ものが多いため、この差はその範囲内で平均的）。Steps/Exerciseの緑系統とは色相・明度ともに離れている
+// （Nutrition L≈0.32 vs Steps L≈0.27・Exercise L≈0.32だが色相は61度差）。
+val NutritionAccent = Color(0xFF6A8B18)

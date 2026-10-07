@@ -9,6 +9,7 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.RestingHeartRateRecord
 import androidx.health.connect.client.records.SleepSessionRecord
@@ -59,5 +60,7 @@ object HealthConnectPermissions {
     // 文字列定数は存在しない。PERMISSION_WRITE_EXERCISE_ROUTEはあるが書き込み用で別物）。
     // 本アプリはルート表示機能自体を実装しないため、READ_EXERCISEのみ追加する。
     val EXERCISE_READ: String = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+    // WBS 6.13（Nutrition追加、D-054）: 優先度Bから引き上げて対応。
+    val NUTRITION_READ: String = HealthPermission.getReadPermission(NutritionRecord::class)
     const val HISTORY_READ: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY
 }

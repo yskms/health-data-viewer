@@ -27,6 +27,7 @@ import com.yskms.healthdataviewer.screen.detail.DistanceDetailScreen
 import com.yskms.healthdataviewer.screen.detail.ExerciseDetailScreen
 import com.yskms.healthdataviewer.screen.detail.HeartRateDetailScreen
 import com.yskms.healthdataviewer.screen.detail.HrvDetailScreen
+import com.yskms.healthdataviewer.screen.detail.NutritionDetailScreen
 import com.yskms.healthdataviewer.screen.detail.OxygenSaturationDetailScreen
 import com.yskms.healthdataviewer.screen.detail.RestingHeartRateDetailScreen
 import com.yskms.healthdataviewer.screen.detail.SleepDetailScreen
@@ -83,6 +84,7 @@ private const val ROUTE_HRV_DETAIL = "hrv_detail"
 private const val ROUTE_OXYGEN_SATURATION_DETAIL = "oxygen_saturation_detail"
 private const val ROUTE_BLOOD_GLUCOSE_DETAIL = "blood_glucose_detail"
 private const val ROUTE_EXERCISE_DETAIL = "exercise_detail"
+private const val ROUTE_NUTRITION_DETAIL = "nutrition_detail"
 private const val ROUTE_SETTINGS = "settings"
 
 // カードの連続タップや「戻る」の連打への対策（レビュー指摘）。現在の画面（backstack先頭）が
@@ -174,6 +176,10 @@ private fun MainNavHost(
                 onOpenExerciseGraph = { historyPermissionGranted ->
                     historyPermissionGrantedSnapshot = historyPermissionGranted
                     navController.navigateOnce(ROUTE_EXERCISE_DETAIL)
+                },
+                onOpenNutrition = { historyPermissionGranted ->
+                    historyPermissionGrantedSnapshot = historyPermissionGranted
+                    navController.navigateOnce(ROUTE_NUTRITION_DETAIL)
                 },
                 onOpenSettings = { navController.navigateOnce(ROUTE_SETTINGS) },
             )
@@ -278,6 +284,13 @@ private fun MainNavHost(
         }
         composable(ROUTE_EXERCISE_DETAIL) {
             ExerciseDetailScreen(
+                healthConnectManager = healthConnectManager,
+                historyPermissionGranted = historyPermissionGrantedSnapshot,
+                onBack = { navController.popBackStackOnce() },
+            )
+        }
+        composable(ROUTE_NUTRITION_DETAIL) {
+            NutritionDetailScreen(
                 healthConnectManager = healthConnectManager,
                 historyPermissionGranted = historyPermissionGrantedSnapshot,
                 onBack = { navController.popBackStackOnce() },

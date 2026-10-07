@@ -16,6 +16,7 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.OxygenSaturationRecord
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.RestingHeartRateRecord
@@ -2603,6 +2604,132 @@ class HealthConnectManager(context: Context) {
             ExerciseAggregateTotalResult.Failure
         } catch (e: SecurityException) {
             ExerciseAggregateTotalResult.Failure
+        }
+
+    // WBS 6.13（D-054、優先度Bから引き上げ）: Nutritionを追加。あすけん等の食事記録アプリが
+    // Health Connectへ書き込む栄養データ（requirements.md §16）を表示したいという利用ニーズを
+    // 受けて、リリース前に対応した。NutritionRecordはTotalCaloriesBurnedRecordと同じIntervalRecord
+    // だが、公式AggregateMetricをエネルギー含め37個持つ（javap逆コンパイルで確認。既存の優先度A
+    // データ型の大半が1〜3個であるのに対して一桁多い）。このアプリではエネルギー・タンパク質・脂質・
+    // 炭水化物・食物繊維の5項目のみを表示し、残り（カルシウム・鉄・各種ビタミン等32項目）は対象外とした
+    // （D-054、表示範囲を絞った理由はdocs/wbs.md参照）。
+    //
+    // ホーム画面カード・Chartで使うのはENERGY_TOTAL（Total Caloriesと同じAggregateMetric<Energy>）
+    // のみで、readTotalCaloriesAggregates()/readTotalCaloriesAggregateTotal()と同じ形をそのまま踏襲する。
+    fun nutritionRecordsPagingSource(historyPermissionGranted: Boolean): PagingSource<Int, PagedRecord<NutritionRecord>> {
+        val now = Instant.now()
+        val filter =
+            if (historyPermissionGranted) {
+                TimeRangeFilter.before(now)
+            } else {
+                TimeRangeFilter.between(now.minus(HISTORY_FALLBACK_DAYS, ChronoUnit.DAYS), now)
+            }
+        return HealthRecordsPagingSource { pageToken, pageSize ->
+            val response =
+                client.readRecords(
+                    ReadRecordsRequest(
+                        recordType = NutritionRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = false,
+                        pageSize = pageSize,
+                        pageToken = pageToken,
+                    ),
+                )
+            HealthRecordsPage(records = response.records, nextPageToken = response.pageToken?.ifEmpty { null })
+        }
+    }
+
+    // findOldestTotalCaloriesRecordTime()と同じ形。
+    suspend fun findOldestNutritionRecordTime(historyPermissionGranted: Boolean): OldestRecordResult {
+        suspend fun readOldest(filter: TimeRangeFilter): Instant? =
+            client
+                .readRecords(
+                    ReadRecordsRequest(
+                        recordType = NutritionRecord::class,
+                        timeRangeFilter = filter,
+                        ascendingOrder = true,
+                        pageSize = 1,
+                    ),
+                ).records
+                .firstOrNull()
+                ?.startTime
+
+        val primaryFilter = if (historyPermissionGranted) TimeRangeFilter.before(Instant.now()) else recentRangeFilter()
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = primaryFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilter(),
+                    read = ::readOldest,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> OldestRecordResult.Success(time = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> OldestRecordResult.Failure
+        }
+    }
+
+    // readTotalCaloriesAggregates()と同じ形。bucketごとのhasAnyRecord()ガードは同じ理由で入れない。
+    // NutritionはTotalCaloriesの17万件規模より記録頻度が低いと想定しているため性能問題は起きにくいと
+    // 見ているが、実機で確認していない（要検証）。
+    suspend fun readNutritionAggregates(
+        timeRangeFilter: TimeRangeFilter,
+        bucket: Period,
+        historyPermissionGranted: Boolean,
+    ): NutritionAggregatesResult {
+        suspend fun readAggregates(filter: TimeRangeFilter) =
+            client.aggregateGroupByPeriod(
+                AggregateGroupByPeriodRequest(
+                    metrics = setOf(NutritionRecord.ENERGY_TOTAL),
+                    timeRangeFilter = filter,
+                    timeRangeSlicer = bucket,
+                ),
+            )
+
+        suspend fun toBuckets(filter: TimeRangeFilter) =
+            readAggregates(filter).map { grouped ->
+                NutritionAggregateBucket(
+                    periodStart = grouped.startTime,
+                    periodEnd = grouped.endTime,
+                    totalKilocalories = grouped.result[NutritionRecord.ENERGY_TOTAL]?.inKilocalories,
+                )
+            }
+
+        return when (
+            val outcome =
+                readWithHistoryFallback(
+                    primaryFilter = timeRangeFilter,
+                    primaryHistoryLimited = !historyPermissionGranted,
+                    fallbackFilter = recentRangeFilterLocal(),
+                    read = ::toBuckets,
+                )
+        ) {
+            is HistoryFallbackOutcome.Success -> NutritionAggregatesResult.Success(buckets = outcome.value, historyLimited = outcome.historyLimited)
+            HistoryFallbackOutcome.Failure -> NutritionAggregatesResult.Failure
+        }
+    }
+
+    // ホーム画面の摂取カロリーカード用。readTotalCaloriesAggregateTotal()と異なり、hasAnyRecord()
+    // ガードは**一旦入れていない**。TotalCaloriesBurnedRecord.ENERGY_TOTALのnull非返却バグ（D-043所見）
+    // はそのRecord型固有の確認済み事実で、NutritionRecord.ENERGY_TOTALに同じ前提を機械的に当てはめては
+    // いけない（CLAUDE.md「SDK調査で誤解しやすい点」）。Pixel 11実機でレコード0件の期間を指定して
+    // nullが返ることを確認してから、必要ならガードを追加する（D-054、要検証）。
+    suspend fun readNutritionAggregateTotal(timeRangeFilter: TimeRangeFilter): NutritionAggregateTotalResult =
+        try {
+            val result =
+                client.aggregate(
+                    AggregateRequest(
+                        metrics = setOf(NutritionRecord.ENERGY_TOTAL),
+                        timeRangeFilter = timeRangeFilter,
+                    ),
+                )
+            NutritionAggregateTotalResult.Success(totalKilocalories = result[NutritionRecord.ENERGY_TOTAL]?.inKilocalories)
+        } catch (e: RemoteException) {
+            NutritionAggregateTotalResult.Failure
+        } catch (e: IOException) {
+            NutritionAggregateTotalResult.Failure
+        } catch (e: SecurityException) {
+            NutritionAggregateTotalResult.Failure
         }
 
     // WBS 6.4（WBS 6.10でDistance・Active Calories・Total Calories、Resting Heart Rateも追加）:

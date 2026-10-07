@@ -223,6 +223,11 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                     permissionsCheckState = permissionsCheckState,
                     permission = HealthConnectPermissions.EXERCISE_READ,
                 )
+                PermissionStatusRow(
+                    title = stringResource(id = R.string.home_nutrition_title),
+                    permissionsCheckState = permissionsCheckState,
+                    permission = HealthConnectPermissions.NUTRITION_READ,
+                )
                 if (historyFeatureAvailable == false) {
                     Text(text = stringResource(id = R.string.health_connect_history_not_supported), style = MaterialTheme.typography.bodySmall)
                 } else {
@@ -251,6 +256,7 @@ private fun PermissionsSection(healthConnectManager: HealthConnectManager) {
                                 add(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                                 add(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
                                 add(HealthConnectPermissions.EXERCISE_READ)
+                                add(HealthConnectPermissions.NUTRITION_READ)
                                 if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                             }
                         requestPermissions.launch(permissions)

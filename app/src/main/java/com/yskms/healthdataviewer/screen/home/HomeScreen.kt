@@ -55,6 +55,7 @@ import com.yskms.healthdataviewer.healthconnect.HealthConnectPermissions
 import com.yskms.healthdataviewer.healthconnect.HeartRateAggregateSummaryResult
 import com.yskms.healthdataviewer.healthconnect.HrvDailySummary
 import com.yskms.healthdataviewer.healthconnect.HrvHomeSummaryResult
+import com.yskms.healthdataviewer.healthconnect.NutritionAggregateTotalResult
 import com.yskms.healthdataviewer.healthconnect.OxygenSaturationHomeSummaryResult
 import com.yskms.healthdataviewer.healthconnect.PermissionsCheckState
 import com.yskms.healthdataviewer.healthconnect.RestingHeartRateRecordsResult
@@ -74,6 +75,7 @@ import com.yskms.healthdataviewer.ui.theme.DistanceAccent
 import com.yskms.healthdataviewer.ui.theme.ExerciseAccent
 import com.yskms.healthdataviewer.ui.theme.HeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.HrvAccent
+import com.yskms.healthdataviewer.ui.theme.NutritionAccent
 import com.yskms.healthdataviewer.ui.theme.OxygenSaturationAccent
 import com.yskms.healthdataviewer.ui.theme.RestingHeartRateAccent
 import com.yskms.healthdataviewer.ui.theme.SleepAccent
@@ -169,6 +171,9 @@ private data class TotalCaloriesCardLoad(val period: DashboardPeriod, val result
 // 理由はExerciseAggregateTotalResult.kt参照）。
 private data class ExerciseCardLoad(val period: DashboardPeriod, val result: ExerciseAggregateTotalResult?)
 
+// WBS 6.13（Nutrition追加、D-054）: TotalCaloriesCardLoadと同じ形（期間合計）。
+private data class NutritionCardLoad(val period: DashboardPeriod, val result: NutritionAggregateTotalResult?)
+
 private data class HeartRateCardLoad(val period: DashboardPeriod, val result: HeartRateAggregateSummaryResult?)
 
 // 週/月/年タブは「期間合計 ÷ 経過日数」の単純な1日あたり平均（記録のない日も分母に含む近似。
@@ -202,6 +207,7 @@ fun HomeScreen(
     onOpenOxygenSaturationGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenBloodGlucoseGraph: (historyPermissionGranted: Boolean) -> Unit,
     onOpenExerciseGraph: (historyPermissionGranted: Boolean) -> Unit,
+    onOpenNutrition: (historyPermissionGranted: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -285,6 +291,7 @@ fun HomeScreen(
                 val oxygenSaturationGranted = permissionsCheckState.isGranted(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                 val bloodGlucoseGranted = permissionsCheckState.isGranted(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
                 val exerciseGranted = permissionsCheckState.isGranted(HealthConnectPermissions.EXERCISE_READ)
+                val nutritionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.NUTRITION_READ)
                 val historyPermissionGranted = permissionsCheckState.isGranted(HealthConnectPermissions.HISTORY_READ) == true
 
                 if (listOf(
@@ -302,6 +309,7 @@ fun HomeScreen(
                         oxygenSaturationGranted,
                         bloodGlucoseGranted,
                         exerciseGranted,
+                        nutritionGranted,
                     ).any { it == false }
                 ) {
                     PermissionBanner(
@@ -322,6 +330,7 @@ fun HomeScreen(
                                     add(HealthConnectPermissions.OXYGEN_SATURATION_READ)
                                     add(HealthConnectPermissions.BLOOD_GLUCOSE_READ)
                                     add(HealthConnectPermissions.EXERCISE_READ)
+                                    add(HealthConnectPermissions.NUTRITION_READ)
                                     if (historyFeatureAvailable == true) add(HealthConnectPermissions.HISTORY_READ)
                                 }
                             requestPermissions.launch(permissions)
@@ -536,6 +545,15 @@ fun HomeScreen(
                         ExerciseCardLoad(period = selectedPeriod, result = healthConnectManager.readExerciseAggregateTotal(filter))
                 }
 
+                // Nutritionカード（WBS 6.13、D-054）: TotalCalories/Exerciseと同じ「期間合計」パターン。
+                var nutritionLoad by remember { mutableStateOf<NutritionCardLoad?>(null) }
+                LaunchedEffect(selectedPeriod, nutritionGranted, historyPermissionGranted, resumeKey) {
+                    if (nutritionGranted != true) return@LaunchedEffect
+                    val filter = selectedPeriod.timeRangeFilter(Instant.now(), historyPermissionGranted)
+                    nutritionLoad =
+                        NutritionCardLoad(period = selectedPeriod, result = healthConnectManager.readNutritionAggregateTotal(filter))
+                }
+
                 // period違いの結果を弾くガード（Steps/HeartRate/Sleep/Distance/Calories共通）。各Cardの描画と
                 // 「表示指標」での非表示判定（isXxxCardHidden()）の両方がこれを使うため、親で
                 // 一度だけ計算する（コードレビュー指摘: 全カードが非表示になった場合に理由が
@@ -547,6 +565,7 @@ fun HomeScreen(
                 val activeCaloriesResult = if (activeCaloriesLoad?.period == selectedPeriod) activeCaloriesLoad?.result else null
                 val totalCaloriesResult = if (totalCaloriesLoad?.period == selectedPeriod) totalCaloriesLoad?.result else null
                 val exerciseResult = if (exerciseLoad?.period == selectedPeriod) exerciseLoad?.result else null
+                val nutritionResult = if (nutritionLoad?.period == selectedPeriod) nutritionLoad?.result else null
                 val showMetricsWithoutData = settings.showMetricsWithoutData
 
                 val allCardsHidden =
@@ -579,7 +598,8 @@ fun HomeScreen(
                             historyFeatureAvailable,
                             showMetricsWithoutData,
                         ) &&
-                        isExerciseCardHidden(exerciseGranted, exerciseResult, showMetricsWithoutData)
+                        isExerciseCardHidden(exerciseGranted, exerciseResult, showMetricsWithoutData) &&
+                        isNutritionCardHidden(nutritionGranted, nutritionResult, showMetricsWithoutData)
 
                 if (allCardsHidden) {
                     Text(text = stringResource(id = R.string.home_all_metrics_hidden_notice), style = MaterialTheme.typography.bodySmall)
@@ -689,6 +709,13 @@ fun HomeScreen(
                     currentResult = exerciseResult,
                     showMetricsWithoutData = showMetricsWithoutData,
                     onClick = { onOpenExerciseGraph(historyPermissionGranted) },
+                )
+                NutritionCard(
+                    permissionsCheckState = permissionsCheckState,
+                    granted = nutritionGranted,
+                    currentResult = nutritionResult,
+                    showMetricsWithoutData = showMetricsWithoutData,
+                    onClick = { onOpenNutrition(historyPermissionGranted) },
                 )
             }
         }
@@ -904,6 +931,17 @@ private fun isTotalCaloriesCardHidden(
     !showMetricsWithoutData &&
         granted == true &&
         currentResult is TotalCaloriesAggregateTotalResult.Success &&
+        currentResult.totalKilocalories == null
+
+// WBS 6.13（Nutrition追加、D-054）: isTotalCaloriesCardHiddenと同じ形。
+private fun isNutritionCardHidden(
+    granted: Boolean?,
+    currentResult: NutritionAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+): Boolean =
+    !showMetricsWithoutData &&
+        granted == true &&
+        currentResult is NutritionAggregateTotalResult.Success &&
         currentResult.totalKilocalories == null
 
 // WeightCard/RestingHeartRateCard共通（コードレビュー指摘への対応）: 「最新値＋前回比」カードは
@@ -1615,6 +1653,44 @@ private fun ExerciseCard(
                     // ホームカードは常に合計のため無条件で表示する）。
                     Text(text = formatSleepDuration(total), style = MaterialTheme.typography.headlineSmall)
                     Text(text = stringResource(id = R.string.home_exercise_total_notice), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+// WBS 6.13（Nutrition追加、D-054）: TotalCaloriesCardと同じ形（期間合計の摂取カロリー）。
+// 「アクティブカロリー」「総消費カロリー」が消費側であるのと対比して、こちらは摂取側であることが
+// 分かるよう「摂取カロリー」という文言にしている。
+@Composable
+private fun NutritionCard(
+    permissionsCheckState: PermissionsCheckState,
+    granted: Boolean?,
+    currentResult: NutritionAggregateTotalResult?,
+    showMetricsWithoutData: Boolean,
+    onClick: () -> Unit,
+) {
+    if (isNutritionCardHidden(granted, currentResult, showMetricsWithoutData)) return
+    val locale = LocalLocale.current.platformLocale
+    val numberFormat = remember(locale) { NumberFormat.getIntegerInstance(locale) }
+    MetricCardContainer(
+        title = stringResource(id = R.string.home_nutrition_title),
+        accentColor = NutritionAccent,
+        onClick = if (granted == true) onClick else null,
+    ) {
+        when {
+            granted != true -> PermissionNotGrantedOrLoadingText(permissionsCheckState, granted)
+            currentResult == null -> Text(text = stringResource(id = R.string.home_loading))
+            currentResult is NutritionAggregateTotalResult.Failure -> Text(text = stringResource(id = R.string.home_error))
+            currentResult is NutritionAggregateTotalResult.Success -> {
+                val total = currentResult.totalKilocalories
+                if (total == null) {
+                    Text(text = stringResource(id = R.string.home_no_data))
+                } else {
+                    Text(
+                        text = stringResource(id = R.string.home_nutrition_value, numberFormat.format(total)),
+                        style = MaterialTheme.typography.headlineSmall,
+                    )
                 }
             }
         }
